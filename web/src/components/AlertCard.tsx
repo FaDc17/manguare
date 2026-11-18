@@ -15,7 +15,12 @@ export function AlertCard({
   const Icon = meta.icon;
 
   return (
-    <button type="button" className="alert-card" onClick={() => onOpen(alert.id)}>
+    <button
+      type="button"
+      className="alert-card"
+      data-testid={`alert-${alert.id}`}
+      onClick={() => onOpen(alert.id)}
+    >
       <span className={`type-tile type-tile--${meta.tone}`}>
         <Icon size={23} aria-hidden="true" />
       </span>

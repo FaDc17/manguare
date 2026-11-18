@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Ban,
   Check,
   CheckCircle2,
   Clock3,
@@ -59,10 +60,12 @@ export function AlertDetailScreen({
     syncNow,
     settings,
     markSms,
+    cancelAlert,
     showToast,
   } = useApp();
   const [showCoords, setShowCoords] = useState(false);
   const [smsOpen, setSmsOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const alert = alerts.find((item) => item.id === id);
 
   const smsBody = useMemo(() => (alert ? buildSmsBody(alert) : ''), [alert]);
@@ -133,7 +136,7 @@ export function AlertDetailScreen({
         </span>
         <div className="status-hero-copy">
           <span className="status-kicker">Estado actual</span>
-          <h1>{STATE_LABEL[alert.state]}</h1>
+          <h1 data-testid="alert-state">{STATE_LABEL[alert.state]}</h1>
           <p>{STATE_DESCRIPTION[alert.state]}</p>
         </div>
         <span className={`status-orb status-orb--${alert.state}`} aria-hidden="true">
@@ -204,6 +207,15 @@ export function AlertDetailScreen({
       </section>
 
       {!isReceived ? (
+        alert.state === 'canceled' ? (
+          <div className="banner banner-warn">
+            <X size={19} aria-hidden="true" />
+            <div>
+              <strong>Alerta anulada en este teléfono</strong>
+              <p>No se envió a la red de salud. Puedes crear una alerta nueva si la necesitas.</p>
+            </div>
+          </div>
+        ) : (
         <section className="card sms-card">
           <div className="sms-head">
             <span className="sms-icon">
@@ -227,6 +239,7 @@ export function AlertDetailScreen({
             <MessageSquareText size={18} aria-hidden="true" /> Avisar por SMS
           </button>
         </section>
+        )
       ) : (
         <div className="banner banner-ok">
           <ShieldCheck size={19} aria-hidden="true" />
@@ -344,6 +357,7 @@ export function AlertDetailScreen({
         <button
           type="button"
           className="btn btn-secondary"
+          data-testid="refresh-status"
           onClick={() => void syncNow(true)}
           disabled={syncing}
         >
@@ -353,7 +367,44 @@ export function AlertDetailScreen({
         <button type="button" className="btn btn-ghost" onClick={onHistory}>
           Ver todas las alertas
         </button>
+        {isPending && !alert.serverReceivedAt ? (
+          <button type="button" className="btn btn-danger-ghost" onClick={() => setCancelOpen(true)}>
+            <Ban size={17} aria-hidden="true" /> Anular alerta
+          </button>
+        ) : null}
       </div>
+
+      <Sheet open={cancelOpen} title="Anular alerta" onClose={() => setCancelOpen(false)}>
+        <p className="sheet-intro">
+          Esta alerta todavía no salió del teléfono. Si la anulas, se quedará en el historial como
+          anulada y no se enviará a la red de salud.
+        </p>
+        <div className="notice-box">
+          <strong>No se puede deshacer</strong>
+          <p>Si la emergencia sigue, crea una alerta nueva en lugar de esperar.</p>
+        </div>
+        <div className="sheet-actions">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setCancelOpen(false)}
+          >
+            Conservar alerta
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={() => {
+              void cancelAlert(alert.id).then((ok) => {
+                setCancelOpen(false);
+                if (ok) onHistory();
+              });
+            }}
+          >
+            <Ban size={18} aria-hidden="true" /> Sí, anular
+          </button>
+        </div>
+      </Sheet>
 
       <Sheet open={smsOpen} title="Avisar por SMS" onClose={() => setSmsOpen(false)}>
         <p className="sheet-intro">

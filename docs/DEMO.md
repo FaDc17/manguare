@@ -23,6 +23,8 @@ Objetivo: mostrar un solo recorrido completo:
 2. Abre dos ventanas:
    - Laptop: <http://localhost:8787/panel> (panel, a pantalla completa).
    - Teléfono o ventana móvil: <http://localhost:8787> (app).
+   Si arrancaste con `MANGUARE_PANEL_PASSWORD`, inicia sesión en el panel antes de
+   empezar (usuario `salud`). Déjalo ya abierto para no perder tiempo en vivo.
 3. Deja la app en **Inicio** y el panel en **Todas**.
 4. Comprueba que el panel dice **En vivo** y que el teléfono muestra señal.
 5. Plan B: si la red del lugar falla, usa **Ajustes → Simular sin conexión** en
@@ -72,8 +74,8 @@ Señala la app: botón grande de emergencia, indicador de conexión y pendientes
 1. Desactiva el modo avión o el interruptor de simulación.
 2. Espera unos segundos (o toca **Actualizar estado**).
 
-> "La cola reintenta sola cada 20 segundos. El identificador es único: aunque se
-> envíe dos veces, no se duplica la alerta."
+> "La cola reintenta sola: rápido al principio y luego cada pocos minutos. El
+> identificador es único: aunque se envíe dos veces, no se duplica la alerta."
 
 3. El estado cambia a **Enviada**.
 

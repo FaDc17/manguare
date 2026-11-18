@@ -183,6 +183,7 @@ export function NewAlertScreen({
                 <button
                   key={item}
                   type="button"
+                  data-testid={`type-${item}`}
                   className={`type-card ${type === item ? 'is-selected' : ''} ${
                     item === 'otro' ? 'type-card--wide' : ''
                   }`}
@@ -361,7 +362,7 @@ export function NewAlertScreen({
             />
           </label>
 
-          <button type="submit" className="btn btn-primary btn-lg btn-block">
+          <button type="submit" className="btn btn-primary btn-lg btn-block" data-testid="continue-button">
             Continuar <ChevronRight size={19} aria-hidden="true" />
           </button>
           <p className="wizard-note">
@@ -428,6 +429,7 @@ export function NewAlertScreen({
 
           <button
             type="button"
+            data-testid="submit-alert"
             className={`btn btn-lg btn-block ${online ? 'btn-danger' : 'btn-primary'}`}
             onClick={() => void submit()}
             disabled={submitting}

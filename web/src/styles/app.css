@@ -1075,6 +1075,27 @@
   color: var(--ink);
 }
 
+.btn-danger-ghost {
+  background: transparent;
+  border-color: color-mix(in srgb, var(--clay-600) 35%, transparent);
+  color: var(--clay-700);
+}
+
+.btn-danger-ghost:hover {
+  background: color-mix(in srgb, var(--clay-600) 9%, transparent);
+  color: var(--clay-700);
+}
+
+.sheet-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.sheet-actions .btn {
+  flex: 1;
+}
+
 .btn-lg {
   min-height: 52px;
   padding: 14px 20px;
@@ -2379,6 +2400,11 @@
   width: 126px;
   font-family: var(--font-mono);
   font-size: 10.5px;
+}
+
+.setting-row .setting-input--block {
+  width: calc(100% - 48px);
+  margin: 9px 0 1px 48px;
 }
 
 .setting-row--stack .audio-btn {

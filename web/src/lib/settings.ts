@@ -4,6 +4,8 @@ export interface Settings {
   language: Language;
   community: string;
   deviceName: string;
+  healthPost: string;
+  healthPhone: string;
   smsNumber: string;
   simulateOffline: boolean;
 }
@@ -46,6 +48,8 @@ export const DEFAULT_SETTINGS: Settings = {
   language: 'es',
   community: '',
   deviceName: 'Celular de la comunidad',
+  healthPost: '',
+  healthPhone: '',
   smsNumber: DEFAULT_SMS,
   simulateOffline: false,
 };
@@ -67,6 +71,10 @@ export function loadSettings(): Settings {
         typeof parsed.deviceName === 'string' && parsed.deviceName.trim()
           ? parsed.deviceName
           : DEFAULT_SETTINGS.deviceName,
+      healthPost:
+        typeof parsed.healthPost === 'string' ? parsed.healthPost : DEFAULT_SETTINGS.healthPost,
+      healthPhone:
+        typeof parsed.healthPhone === 'string' ? parsed.healthPhone : DEFAULT_SETTINGS.healthPhone,
       smsNumber:
         typeof parsed.smsNumber === 'string' ? parsed.smsNumber : DEFAULT_SETTINGS.smsNumber,
       simulateOffline:

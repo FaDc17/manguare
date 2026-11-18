@@ -31,6 +31,8 @@ export interface AlertRecord {
   state: AlertState;
   attempts: number;
   lastAttemptAt?: string;
+  /** Marca de tiempo del próximo reintento automático (política de espera progresiva). */
+  nextAttemptAt?: string;
   lastError?: string;
   serverReceivedAt?: string;
   acknowledgedAt?: string;
@@ -60,6 +62,8 @@ export interface ServerAlert {
   clientCreatedAt: string;
   serverReceivedAt: string;
   acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  events?: Array<{ type: string; at: string; by?: string }>;
 }
 
 export interface SyncResult {

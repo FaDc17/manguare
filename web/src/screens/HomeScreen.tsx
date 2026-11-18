@@ -59,7 +59,7 @@ export function HomeScreen({
           si sigue pendiente.
         </p>
 
-        <button type="button" className="sos-button" onClick={onNew}>
+        <button type="button" className="sos-button" data-testid="sos-button" onClick={onNew}>
           <span className="sos-ring sos-ring-1" aria-hidden="true" />
           <span className="sos-ring sos-ring-2" aria-hidden="true" />
           <span className="sos-inner">

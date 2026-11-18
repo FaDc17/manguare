@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHandler } from './app.js';
+import { createAuth } from './auth.js';
 import { AlertStore } from './store.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -15,7 +16,20 @@ const dataFile = process.env.MANGUARE_DATA_FILE ?? path.join(root, 'server', 'da
 const staticDir = process.env.MANGUARE_STATIC_DIR ?? path.join(root, 'web', 'dist');
 
 const store = new AlertStore(dataFile);
-const server = http.createServer(createHandler({ store, staticDir }));
+const panelPassword = process.env.MANGUARE_PANEL_PASSWORD ?? '';
+const sessionHours = Number(process.env.MANGUARE_SESSION_HOURS ?? 12);
+const auth = createAuth({
+  enabled: Boolean(panelPassword),
+  password: panelPassword,
+  user: process.env.MANGUARE_PANEL_USER ?? 'salud',
+  secret: process.env.MANGUARE_SESSION_SECRET
+    ? Buffer.from(process.env.MANGUARE_SESSION_SECRET)
+    : undefined,
+  ttlMs:
+    (Number.isFinite(sessionHours) && sessionHours > 0 ? sessionHours : 12) * 60 * 60 * 1000,
+  secureCookies: process.env.MANGUARE_SECURE_COOKIES === '1',
+});
+const server = http.createServer(createHandler({ store, staticDir, auth }));
 
 function lanAddresses() {
   const addresses = [];
@@ -37,6 +51,11 @@ server.listen(port, host, () => {
   }
   console.log(`  Datos:  ${dataFile}`);
   console.log(`  Web:    ${staticDir}`);
+  console.log(
+    auth.enabled
+      ? `  Panel:  protegido con usuario "${process.env.MANGUARE_PANEL_USER ?? 'salud'}"`
+      : '  Panel:  SIN contraseña (modo demostración). Define MANGUARE_PANEL_PASSWORD.',
+  );
   if (!fs.existsSync(path.join(staticDir, 'index.html'))) {
     console.log('');
     console.log('  Aviso: no se encontró la web compilada. Ejecuta "npm run build" antes de usar');

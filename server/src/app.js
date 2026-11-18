@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createRateLimiter } from './auth.js';
 
 const TYPES = new Set(['enfermedad', 'accidente', 'mordedura', 'parto', 'otro']);
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
@@ -50,7 +51,7 @@ class HttpError extends Error {
   }
 }
 
-function sendJson(res, status, body) {
+function sendJson(res, status, body, headers = {}) {
   if (res.writableEnded) return;
   const payload = JSON.stringify(body);
   res.writeHead(status, {
@@ -58,6 +59,7 @@ function sendJson(res, status, body) {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Content-Length': Buffer.byteLength(payload),
+    ...headers,
   });
   res.end(payload);
 }
@@ -233,7 +235,24 @@ async function serveStatic(req, res, pathname, staticDir) {
   res.end(content);
 }
 
-export function createHandler({ store, staticDir, now = () => new Date().toISOString() }) {
+export function createHandler({ store, staticDir, now = () => new Date().toISOString(), auth = null }) {
+  const alertLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 120 });
+  const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8 });
+
+  function clientIp(req) {
+    if (process.env.MANGUARE_TRUST_PROXY === '1') {
+      const forwarded = req.headers['x-forwarded-for'];
+      if (typeof forwarded === 'string' && forwarded.trim()) {
+        return forwarded.split(',')[0].trim();
+      }
+    }
+    return req.socket.remoteAddress ?? 'desconocida';
+  }
+
+  function sessionFor(req) {
+    return auth?.enabled ? auth.session(req) : null;
+  }
+
   return async function handler(req, res) {
     const started = Date.now();
     try {
@@ -260,13 +279,94 @@ export function createHandler({ store, staticDir, now = () => new Date().toISOSt
         return;
       }
 
+      if (pathname === '/api/panel/session') {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        const session = sessionFor(req);
+        sendJson(res, 200, {
+          authRequired: Boolean(auth?.enabled),
+          authenticated: auth?.enabled ? Boolean(session) : true,
+          ...(session?.user ? { user: session.user } : {}),
+        });
+        return;
+      }
+
+      if (pathname === '/api/panel/login') {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        if (!auth?.enabled) {
+          sendJson(res, 200, { authenticated: true, authRequired: false });
+          return;
+        }
+        const loginKey = `login:${clientIp(req)}`;
+        const limit = loginLimiter(loginKey);
+        if (!limit.allowed) {
+          sendJson(
+            res,
+            429,
+            { error: 'too_many_attempts' },
+            { 'Retry-After': String(limit.retryAfter) },
+          );
+          return;
+        }
+        const body = await readJsonBody(req);
+        const username = body && typeof body.user === 'string' ? body.user.slice(0, 80) : '';
+        const password = body && typeof body.password === 'string' ? body.password.slice(0, 200) : '';
+        const session = auth.login(username, password);
+        if (!session) {
+          sendJson(res, 401, { error: 'invalid_credentials' });
+          return;
+        }
+        loginLimiter.reset(loginKey);
+        sendJson(
+          res,
+          200,
+          { authenticated: true, user: session.user },
+          { 'Set-Cookie': session.cookie },
+        );
+        return;
+      }
+
+      if (pathname === '/api/panel/logout') {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        const cookie = auth?.enabled ? auth.logout(req) : '';
+        sendJson(
+          res,
+          200,
+          { authenticated: false },
+          cookie ? { 'Set-Cookie': cookie } : {},
+        );
+        return;
+      }
+
       if (pathname === '/api/alerts') {
         if (req.method === 'GET') {
+          if (auth?.enabled && !sessionFor(req)) {
+            sendJson(res, 401, { error: 'authentication_required' });
+            return;
+          }
           const alerts = await store.list();
           sendJson(res, 200, { alerts });
           return;
         }
         if (req.method === 'POST') {
+          const limit = alertLimiter(`alerts:${clientIp(req)}`);
+          if (!limit.allowed) {
+            sendJson(
+              res,
+              429,
+              { error: 'too_many_requests' },
+              { 'Retry-After': String(limit.retryAfter) },
+            );
+            return;
+          }
           const body = await readJsonBody(req);
           const alert = toAlert(body, now);
           const existing = await store.get(alert.id);
@@ -290,12 +390,17 @@ export function createHandler({ store, staticDir, now = () => new Date().toISOSt
             sendJson(res, 405, { error: 'method_not_allowed' });
             return;
           }
+          const session = sessionFor(req);
+          if (auth?.enabled && !session) {
+            sendJson(res, 401, { error: 'authentication_required' });
+            return;
+          }
           const existing = await store.get(id);
           if (!existing) {
             sendJson(res, 404, { error: 'not_found' });
             return;
           }
-          const updated = await store.acknowledge(id, now());
+          const updated = await store.acknowledge(id, now(), session?.user ?? 'demostración');
           sendJson(res, 200, { alert: updated });
           return;
         }

@@ -1,4 +1,5 @@
 import { getAllAlerts, putAlert } from './db';
+import { isAttemptDue, nextAttemptAt } from './retry';
 import type {
   AlertDraft,
   AlertRecord,
@@ -14,6 +15,15 @@ const STATE_RANK: Record<AlertState, number> = {
   received: 2,
   canceled: 3,
 };
+
+class HttpError extends Error {
+  status: number;
+
+  constructor(status: number, detail: string) {
+    super(`HTTP ${status}${detail ? ` (${detail})` : ''}`);
+    this.status = status;
+  }
+}
 
 export function newAlertId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -70,7 +80,11 @@ function sortAlerts(alerts: AlertRecord[]): AlertRecord[] {
   return [...alerts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
-function mergeServerState(
+/**
+ * Combina el estado del servidor con el local sin retroceder nunca.
+ * Exportada para las pruebas del núcleo offline.
+ */
+export function mergeServerState(
   local: AlertRecord,
   server: ServerAlert,
   fallbackState: AlertState,
@@ -97,6 +111,7 @@ function mergeServerState(
     acknowledgedAt: server.acknowledgedAt,
     updatedAt: nowIso(),
     lastError: undefined,
+    nextAttemptAt: undefined,
   };
 }
 
@@ -113,11 +128,11 @@ async function postAlert(alert: AlertRecord): Promise<ServerAlert> {
     let detail = '';
     try {
       const body = (await response.json()) as { error?: string };
-      detail = body.error ? ` (${body.error})` : '';
+      detail = body.error ?? '';
     } catch {
       // respuesta sin JSON
     }
-    throw new Error(`HTTP ${response.status}${detail}`);
+    throw new HttpError(response.status, detail);
   }
 
   const data = (await response.json()) as { alert?: ServerAlert };
@@ -125,8 +140,13 @@ async function postAlert(alert: AlertRecord): Promise<ServerAlert> {
   return data.alert;
 }
 
-async function doFlush(): Promise<SyncResult> {
-  const pending = sortAlerts((await getAllAlerts()).filter((a) => a.state === 'pending'));
+async function doFlush(force: boolean): Promise<SyncResult> {
+  const now = Date.now();
+  const pending = sortAlerts(
+    (await getAllAlerts()).filter(
+      (alert) => alert.state === 'pending' && (force || isAttemptDue(alert, now)),
+    ),
+  );
   let sent = 0;
   let failed = 0;
 
@@ -140,14 +160,17 @@ async function doFlush(): Promise<SyncResult> {
         attempts: alert.attempts + 1,
         lastAttemptAt: attemptedAt,
         lastError: undefined,
+        nextAttemptAt: undefined,
       });
       sent += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
+      const attempts = alert.attempts + 1;
       await putAlert({
         ...alert,
-        attempts: alert.attempts + 1,
+        attempts,
         lastAttemptAt: attemptedAt,
+        nextAttemptAt: nextAttemptAt(attempts),
         lastError: message,
         updatedAt: nowIso(),
       });
@@ -163,47 +186,72 @@ let activeFlush: Promise<SyncResult> | null = null;
 /**
  * Envía las alertas pendientes. Es idempotente: el id se genera una sola vez y
  * el servidor devuelve la alerta existente si se reintenta.
+ *
+ * `force` ignora la espera progresiva; se usa al recuperar conexión o cuando la
+ * persona pide un intento manual.
  */
-export function flushQueue(): Promise<SyncResult> {
+export function flushQueue(force = false): Promise<SyncResult> {
   if (!activeFlush) {
-    activeFlush = doFlush().finally(() => {
+    activeFlush = doFlush(force).finally(() => {
       activeFlush = null;
     });
   }
   return activeFlush;
 }
 
-/**
- * Trae el estado confirmado desde el servidor (por ejemplo, si la red de salud
- * ya marcó una alerta como recibida).
- */
-export async function pullStatuses(): Promise<number> {
-  const response = await fetch(`${API}/alerts`, {
+/** Quita la espera pendiente para que el próximo ciclo intente de inmediato. */
+export async function resumePendingNow(): Promise<void> {
+  const alerts = await getAllAlerts();
+  await Promise.all(
+    alerts
+      .filter((alert) => alert.state === 'pending' && alert.nextAttemptAt)
+      .map((alert) => putAlert({ ...alert, nextAttemptAt: undefined })),
+  );
+}
+
+async function getServerAlert(id: string): Promise<ServerAlert | null> {
+  const response = await fetch(`${API}/alerts/${encodeURIComponent(id)}`, {
     cache: 'no-store',
     signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined,
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (response.status === 404) return null;
+  if (!response.ok) throw new HttpError(response.status, '');
+  const data = (await response.json()) as { alert?: ServerAlert };
+  return data.alert ?? null;
+}
 
-  const data = (await response.json()) as { alerts?: ServerAlert[] };
-  const serverAlerts = data.alerts ?? [];
-  const byId = new Map(serverAlerts.map((alert) => [alert.id, alert]));
-  const localAlerts = await getAllAlerts();
+/**
+ * Trae el estado confirmado desde el servidor consultando solo las alertas de
+ * este teléfono. No descarga la lista completa de la red de salud: es más
+ * liviano y no expone alertas de otras comunidades.
+ */
+export async function pullStatuses(): Promise<number> {
+  const localAlerts = (await getAllAlerts()).filter(
+    (alert) =>
+      alert.state !== 'received' &&
+      alert.state !== 'canceled' &&
+      Boolean(alert.serverReceivedAt),
+  );
 
   let updated = 0;
   for (const local of localAlerts) {
-    const server = byId.get(local.id);
-    if (!server) continue;
-    const merged = mergeServerState(local, server, 'sent');
-    if (merged !== local) {
-      await putAlert(merged);
-      updated += 1;
+    try {
+      const server = await getServerAlert(local.id);
+      if (!server) continue;
+      const merged = mergeServerState(local, server, 'sent');
+      if (merged !== local) {
+        await putAlert(merged);
+        updated += 1;
+      }
+    } catch {
+      // Se reintentará en el próximo ciclo; una alerta no bloquea a las demás.
     }
   }
   return updated;
 }
 
-export async function syncAll(): Promise<SyncResult & { updated: number }> {
-  const result = await flushQueue();
+export async function syncAll(force = false): Promise<SyncResult & { updated: number }> {
+  const result = await flushQueue(force);
   let updated = 0;
   try {
     updated = await pullStatuses();
@@ -211,6 +259,24 @@ export async function syncAll(): Promise<SyncResult & { updated: number }> {
     // Sin conexión estable: se reintentará en el próximo ciclo.
   }
   return { ...result, updated };
+}
+
+/**
+ * Anula una alerta que todavía no salió del teléfono. Si ya llegó al servidor
+ * no se puede retirar: la interfaz no ofrece esta acción en ese caso.
+ */
+export async function cancelAlert(id: string): Promise<AlertRecord | null> {
+  const alerts = await getAllAlerts();
+  const alert = alerts.find((item) => item.id === id);
+  if (!alert || alert.state !== 'pending' || alert.serverReceivedAt) return null;
+  const canceled: AlertRecord = {
+    ...alert,
+    state: 'canceled',
+    nextAttemptAt: undefined,
+    updatedAt: nowIso(),
+  };
+  await putAlert(canceled);
+  return canceled;
 }
 
 export async function markSmsOpened(id: string): Promise<void> {

@@ -8,7 +8,8 @@ local, se envía sola al recuperar conexión (**Enviada**) y la red de salud la
 confirma desde un panel web (**Recibida**).
 
 > Estado: MVP de demostración. No reemplaza a los canales de emergencia ni a la
-> radio de salud. El panel no tiene autenticación y no debe exponerse a internet.
+> radio de salud. El panel puede protegerse con una contraseña; sin configurarla
+> queda abierto y no debe exponerse a internet.
 
 ## ¿Por qué Manguaré?
 
@@ -68,6 +69,29 @@ npm run dev
 El servidor imprime las direcciones de la red local al arrancar. Se puede cambiar
 el puerto con `PORT=9000 npm start`.
 
+### Panel protegido con contraseña
+
+Para una demo compartida o un piloto, arranca con una contraseña:
+
+```bash
+MANGUARE_PANEL_PASSWORD='una-clave-larga' \
+MANGUARE_SESSION_SECRET="$(openssl rand -base64 48)" \
+npm start
+```
+
+El panel pide usuario (`salud` por defecto) y contraseña. Sin esa variable el
+panel queda en modo demostración, abierto, y el servidor lo advierte al arrancar.
+
+### Docker
+
+```bash
+cp .env.example .env    # cambia la contraseña y el secreto
+docker compose up -d --build
+```
+
+Los datos quedan en el volumen `manguare-data`. La guía completa está en
+[`docs/OPERACION.md`](docs/OPERACION.md).
+
 ### Variables de entorno
 
 | Variable | Por defecto | Uso |
@@ -77,6 +101,12 @@ el puerto con `PORT=9000 npm start`.
 | `MANGUARE_DATA_FILE` | `server/data/alerts.json` | Archivo de alertas |
 | `MANGUARE_STATIC_DIR` | `web/dist` | Web compilada |
 | `MANGUARE_LOG` | activo | `MANGUARE_LOG=0` silencia el log por petición |
+| `MANGUARE_PANEL_PASSWORD` | vacío | Si se define, el panel exige login |
+| `MANGUARE_PANEL_USER` | `salud` | Usuario del panel |
+| `MANGUARE_SESSION_SECRET` | aleatorio | Fija un secreto para conservar sesiones al reiniciar |
+| `MANGUARE_SESSION_HOURS` | `12` | Duración de la sesión del panel |
+| `MANGUARE_SECURE_COOKIES` | `0` | `1` para cookie `Secure` detrás de HTTPS |
+| `MANGUARE_TRUST_PROXY` | `0` | `1` para leer `X-Forwarded-For` de un proxy de confianza |
 | `VITE_SMS_NUMBER` | `+51999999999` | Número de respaldo SMS (se fija al compilar) |
 
 ## Probar el modo sin conexión
@@ -87,8 +117,9 @@ el puerto con `PORT=9000 npm start`.
 3. Para una prueba real, usa el modo avión del navegador (DevTools → Network →
    Offline) o el modo avión del teléfono. La cola vive en IndexedDB y sobrevive
    a cerrar la app.
-4. Al recuperar la señal, la app reintenta sola cada 20 s y también al volver a
-   primer plano. El envío es idempotente por `id`: repetir no duplica alertas.
+4. Al recuperar la señal, la app reintenta sola con espera progresiva (15 s, 45 s,
+   2 min y luego cada 5 min) y también al volver a primer plano o al recuperar
+   conexión. El envío es idempotente por `id`: repetir no duplica alertas.
 
 ### Instalar en el teléfono
 
@@ -104,9 +135,14 @@ abierta, pero no se instala ni recarga sin red. Para la demo final usa HTTPS
 contacto, ubicación aproximada si hubo consentimiento, y el botón **Marcar
 recibida**. Se actualiza cada 5 segundos y suena al llegar una alerta nueva.
 
+Con `MANGUARE_PANEL_PASSWORD` definida, el panel pide login y usa una cookie de
+sesión `HttpOnly`; la confirmación queda auditada con el usuario. Sin esa
+variable, el panel queda abierto para la demo.
+
 Limitaciones del prototipo:
 
-- Sin autenticación ni roles. No publicar el panel en internet.
+- Un solo usuario, sin roles ni cuentas por turno. No publicar el panel sin
+  contraseña.
 - No hay notificaciones push ni asignación de responsables.
 - El SMS de respaldo abre la app de mensajes con el texto preparado; **no
   confirma la entrega** y usa un número de prueba editable en Ajustes.
@@ -122,7 +158,15 @@ JSON con escritura atómica.
 | `GET` | `/api/alerts` | Lista de alertas |
 | `POST` | `/api/alerts` | Crea una alerta (idempotente por `id`) |
 | `GET` | `/api/alerts/:id` | Consulta una alerta y su estado |
-| `POST` | `/api/alerts/:id/received` | Marca como recibida (idempotente) |
+| `POST` | `/api/alerts/:id/received` | Marca como recibida (idempotente; requiere sesión si el panel está protegido) |
+| `GET` | `/api/panel/session` | Estado de la sesión del panel |
+| `POST` | `/api/panel/login` | Inicia sesión con usuario y contraseña |
+| `POST` | `/api/panel/logout` | Cierra la sesión |
+
+La creación de alertas es pública para que el teléfono pueda enviar sin una cuenta
+(con límite de 120 por 10 minutos por IP). La lista completa y la confirmación
+requieren sesión cuando `MANGUARE_PANEL_PASSWORD` está definida. El teléfono
+consulta solo sus propias alertas por `id`, sin descargar la lista de la red.
 
 Ejemplo de creación:
 
@@ -148,14 +192,20 @@ La ubicación solo se guarda si `consentLocation` es `true`.
 ```
 web/                 App React + Vite + TypeScript (PWA)
   src/screens/       Inicio, nueva alerta, detalle, historial, ajustes
-  src/lib/           Cola IndexedDB, sincronización, GPS/foto/SMS, tipos
-  src/panel/         Panel web de la red de salud
+  src/lib/           Cola IndexedDB, reintentos, sincronización, GPS/foto/SMS
+  src/panel/         Panel web de la red de salud (login incluido)
   src/sw.ts          Service worker (precaché + Background Sync)
+  test/              Pruebas de la cola offline
 server/              API Node sin dependencias
-  src/               Rutas, validación, persistencia JSON
+  src/               Rutas, validación, autenticación, persistencia JSON
   scripts/seed.js    Alertas de demostración
-  test/              Pruebas de API
+  test/              Pruebas de API y de sesión
+scripts/e2e.mjs      Recorrido completo con Chromium
 docs/DEMO.md         Guion de demostración
+docs/OPERACION.md    Despliegue, seguridad, respaldos y protocolo
+docs/PRUEBAS.md      Verificación de fases 1-3 y prueba en Android
+Dockerfile           Imagen de producción
+docker-compose.yml   Despliegue con volumen persistente
 ```
 
 ## Scripts
@@ -166,9 +216,10 @@ docs/DEMO.md         Guion de demostración
 | `npm run build` | Compila app, panel y service worker |
 | `npm start` | Sirve la web compilada y la API |
 | `npm run seed` | Carga 3 alertas de ejemplo idempotentes |
-| `npm test` | Pruebas de la API |
+| `npm test` | Pruebas de API y de la cola offline |
+| `npm run test:e2e` | Recorrido completo con Chromium (requiere build) |
 | `npm run typecheck` | TypeScript sin emitir |
-| `npm run check` | Typecheck + tests + build |
+| `npm run check` | Typecheck + pruebas + build |
 
 Para reiniciar la demo: detén el servidor, borra `server/data/alerts.json`,
 arráncalo de nuevo y ejecuta `npm run seed`.
@@ -178,13 +229,17 @@ arráncalo de nuevo y ejecuta `npm run seed`.
 - Se recoge la ubicación solo con consentimiento explícito y se muestra de forma
   aproximada. No se publica la ubicación exacta de comunidades.
 - La foto es opcional, se comprime en el teléfono y se envía solo con la alerta.
-- El panel debe tratarse como información sensible: acceso restringido y
-  conexión segura antes de cualquier uso real.
+- El panel debe tratarse como información sensible: usa
+  `MANGUARE_PANEL_PASSWORD` y HTTPS antes de cualquier uso real. Sin contraseña
+  queda en modo demostración y el servidor lo advierte.
+- La sesión del panel vive en memoria: un reinicio cierra las sesiones. No hay
+  roles ni historial de auditoría independiente de la alerta.
 - Awajún y Shawi aparecen como **Pendiente**: no se inventan traducciones ni
   voces sintéticas. Los textos y audios deben ser validados/grabados por
   hablantes de las comunidades.
 - No se ha probado en Android de gama baja ni con la app cerrada durante horas;
-  el sistema puede limitar la sincronización en segundo plano.
+  el sistema puede limitar la sincronización en segundo plano. El protocolo de
+  prueba está en [`docs/PRUEBAS.md`](docs/PRUEBAS.md).
 - El SMS es un respaldo de demostración, no un canal confirmado.
 
 ## Contexto del proyecto

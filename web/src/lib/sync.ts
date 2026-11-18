@@ -30,10 +30,12 @@ export async function requestBackgroundSync(): Promise<void> {
   }
 }
 
-export async function runSync(): Promise<{ sent: number; failed: number; updated: number } | null> {
+export async function runSync(
+  force = false,
+): Promise<{ sent: number; failed: number; updated: number } | null> {
   if (!isEffectivelyOnline()) return null;
   try {
-    const result = await syncAll();
+    const result = await syncAll(force);
     notifyQueueChanged();
     return result;
   } catch {

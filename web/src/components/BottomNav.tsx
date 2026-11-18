@@ -27,6 +27,7 @@ export function BottomNav({
       <button
         type="button"
         className={`nav-item ${active === 'history' ? 'is-active' : ''}`}
+        data-testid="nav-history"
         onClick={() => onChange('history')}
         aria-current={active === 'history' ? 'page' : undefined}
       >

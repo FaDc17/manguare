@@ -9,7 +9,12 @@ import {
   type ReactNode,
 } from 'react';
 import { clearAlerts } from '../lib/db';
-import { markSmsOpened, listAlertsSorted, createLocalAlert } from '../lib/queue-core';
+import {
+  cancelAlert as cancelLocalAlert,
+  createLocalAlert,
+  listAlertsSorted,
+  markSmsOpened,
+} from '../lib/queue-core';
 import {
   isEffectivelyOnline,
   notifyQueueChanged,
@@ -44,6 +49,7 @@ interface AppContextValue {
   dismissToast: () => void;
   refresh: () => Promise<void>;
   createAlert: (draft: AlertDraft) => Promise<AlertRecord>;
+  cancelAlert: (id: string) => Promise<boolean>;
   syncNow: (manual?: boolean) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => void;
   markSms: (id: string) => Promise<void>;
@@ -106,7 +112,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       syncingRef.current = true;
       setSyncing(true);
       try {
-        const result = await runSync();
+        const result = await runSync(manual);
         await refresh();
         if (manual) {
           if (!result) {
@@ -142,7 +148,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         void (async () => {
           setSyncing(true);
           try {
-            await runSync();
+            await runSync(true);
             await refresh();
           } finally {
             setSyncing(false);
@@ -152,6 +158,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return alert;
     },
     [refresh],
+  );
+
+  const cancelAlert = useCallback(
+    async (id: string) => {
+      try {
+        const canceled = await cancelLocalAlert(id);
+        await refresh();
+        notifyQueueChanged();
+        if (!canceled) {
+          showToast('La alerta ya salió del teléfono y no se puede anular.', 'warn');
+          return false;
+        }
+        showToast('Alerta anulada. No se enviará.', 'ok');
+        return true;
+      } catch {
+        showToast('No se pudo anular la alerta.', 'error');
+        return false;
+      }
+    },
+    [refresh, showToast],
   );
 
   const updateSettings = useCallback((patch: Partial<Settings>) => {
@@ -180,19 +206,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     showToast('Se borraron las alertas de este teléfono.', 'ok');
   }, [refresh, showToast]);
 
+  const pendingCount = alerts.filter((alert) => alert.state === 'pending').length;
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
+  // Pide al navegador que no borre la cola por falta de espacio. En Android de
+  // gama baja el almacenamiento puede estar muy ajustado.
   useEffect(() => {
-    const update = () => setRealOnline(navigator.onLine);
+    const storage = navigator.storage;
+    if (!storage?.persist || !storage.persisted) return;
+    void storage
+      .persisted()
+      .then((already) => (already ? true : storage.persist()))
+      .catch(() => false);
+  }, []);
+
+  useEffect(() => {
+    const update = () => {
+      const next = navigator.onLine;
+      setRealOnline(next);
+      if (next) {
+        // Al volver la señal no esperamos la pausa progresiva.
+        void syncNow(true);
+      }
+    };
     window.addEventListener('online', update);
     window.addEventListener('offline', update);
     return () => {
       window.removeEventListener('online', update);
       window.removeEventListener('offline', update);
     };
-  }, []);
+  }, [syncNow]);
 
   useEffect(() => {
     const onQueueChanged = () => {
@@ -234,7 +280,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     void tick();
-    const interval = window.setInterval(() => void tick(), 20_000);
+    // Con alertas pendientes se reintenta seguido; sin pendientes basta una
+    // consulta lenta para detectar confirmaciones de la red de salud.
+    const intervalMs = pendingCount > 0 ? 20_000 : 120_000;
+    const interval = window.setInterval(() => void tick(), intervalMs);
     const onVisible = () => {
       if (document.visibilityState === 'visible') void tick();
     };
@@ -245,7 +294,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [online, refresh]);
+  }, [online, refresh, pendingCount]);
 
   const value = useMemo<AppContextValue>(
     () => ({
@@ -260,6 +309,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dismissToast,
       refresh,
       createAlert,
+      cancelAlert,
       syncNow,
       updateSettings,
       markSms,
@@ -277,6 +327,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dismissToast,
       refresh,
       createAlert,
+      cancelAlert,
       syncNow,
       updateSettings,
       markSms,

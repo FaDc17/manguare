@@ -58,12 +58,25 @@ export class AlertStore {
     return { alert, created: true };
   }
 
-  async acknowledge(id, acknowledgedAt) {
+  async acknowledge(id, acknowledgedAt, actor) {
     await this.ready;
     const existing = this.alerts.get(id);
     if (!existing) return null;
     if (existing.acknowledgedAt) return existing;
-    const updated = { ...existing, acknowledgedAt };
+    const events = Array.isArray(existing.events) ? existing.events : [];
+    const updated = {
+      ...existing,
+      acknowledgedAt,
+      ...(actor ? { acknowledgedBy: actor } : {}),
+      events: [
+        ...events,
+        {
+          type: 'received',
+          at: acknowledgedAt,
+          ...(actor ? { by: actor } : {}),
+        },
+      ],
+    };
     this.alerts.set(id, updated);
     await this.#persist();
     return updated;

@@ -5,7 +5,9 @@ import {
   Globe2,
   Info,
   Languages,
+  MapPin,
   MessageSquareText,
+  Phone,
   RefreshCw,
   ShieldCheck,
   Smartphone,
@@ -118,8 +120,45 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       </section>
 
       <section className="settings-group" aria-labelledby="settings-sms">
-        <h2 id="settings-sms">Respaldo por SMS</h2>
+        <h2 id="settings-sms">Contacto y respaldo</h2>
         <div className="settings-card">
+          <label className="setting-row setting-row--stack">
+            <span className="setting-stack-head">
+              <span className="setting-icon">
+                <MapPin size={20} aria-hidden="true" />
+              </span>
+              <span className="setting-main">
+                <span className="setting-label">Puesto de salud</span>
+                <span className="setting-sub">Se muestra en Números de ayuda, sin conexión</span>
+              </span>
+            </span>
+            <input
+              type="text"
+              className="setting-input setting-input--block"
+              value={settings.healthPost}
+              placeholder="Ej. Puesto de salud Nueva Esperanza"
+              maxLength={80}
+              onChange={(event) => updateSettings({ healthPost: event.target.value })}
+            />
+          </label>
+
+          <label className="setting-row">
+            <span className="setting-icon">
+              <Phone size={20} aria-hidden="true" />
+            </span>
+            <span className="setting-main">
+              <span className="setting-label">Teléfono del puesto</span>
+              <span className="setting-sub">Opcional; se puede llamar si hay señal</span>
+            </span>
+            <input
+              type="tel"
+              className="setting-input setting-input--tel"
+              value={settings.healthPhone}
+              placeholder="+51 999 999 999"
+              onChange={(event) => updateSettings({ healthPhone: event.target.value })}
+            />
+          </label>
+
           <label className="setting-row">
             <span className="setting-icon">
               <MessageSquareText size={20} aria-hidden="true" />
@@ -198,7 +237,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <span className="setting-sub">
                 {online
                   ? pending > 0
-                    ? `${pending} alerta${pending === 1 ? '' : 's'} en cola. Se reintenta cada 20 s.`
+                    ? `${pending} alerta${pending === 1 ? '' : 's'} en cola. Se reintenta con espera progresiva.`
                     : 'Todo al día.'
                   : 'Sin conexión: las alertas esperan en el teléfono.'}
               </span>

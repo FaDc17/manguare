@@ -89,7 +89,7 @@ syncTarget.addEventListener('sync', (event) => {
   if (event.tag !== 'manguare-alerts') return;
   event.waitUntil(
     (async () => {
-      const result = await syncAll();
+      const result = await syncAll(true);
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       clients.forEach((client) => client.postMessage({ type: 'manguare:sync-done', result }));
       if (result.failed > 0) {

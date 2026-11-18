@@ -14,7 +14,10 @@
     "build": "vite build --config web/vite.config.ts",
     "start": "node server/src/index.js",
     "seed": "node server/scripts/seed.js",
-    "test": "node --test server/test/*.test.js",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "node --test server/test/*.test.js",
+    "test:web": "tsx --test web/test/*.test.ts",
+    "test:e2e": "node scripts/e2e.mjs",
     "typecheck": "tsc -p web/tsconfig.json --noEmit",
     "check": "npm run typecheck && npm test && npm run build"
   },
@@ -29,6 +32,9 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.3.0",
     "concurrently": "^9.2.1",
+    "fake-indexeddb": "^6.2.8",
+    "puppeteer-core": "^25.18.1",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^8.3.8",
     "vite-plugin-pwa": "^2.0.0"

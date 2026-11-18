@@ -10,11 +10,15 @@ import {
   ExternalLink,
   Image as ImageIcon,
   Inbox,
+  KeyRound,
   LoaderCircle,
+  LogIn,
+  LogOut,
   MapPin,
   RefreshCw,
   ShieldCheck,
   TriangleAlert,
+  UserRound,
   X,
 } from 'lucide-react';
 import { BrandMark } from '../components/BrandMark';
@@ -120,6 +124,7 @@ function AlertRow({
           <button
             type="button"
             className="panel-ack"
+            data-testid={`ack-${alert.id}`}
             onClick={() => onAck(alert.id)}
             disabled={acking}
           >
@@ -242,7 +247,9 @@ function AlertModal({
                 <dt>Confirmada por la red</dt>
                 <dd>
                   {alert.acknowledgedAt
-                    ? formatDateTime(alert.acknowledgedAt)
+                    ? `${formatDateTime(alert.acknowledgedAt)}${
+                        alert.acknowledgedBy ? ` · ${alert.acknowledgedBy}` : ''
+                      }`
                     : 'Todavía no confirmada'}
                 </dd>
               </div>
@@ -302,6 +309,109 @@ function AlertModal({
   );
 }
 
+interface PanelSessionState {
+  authRequired: boolean;
+  authenticated: boolean;
+  user?: string;
+}
+
+function PanelLogin({
+  busy,
+  error,
+  onLogin,
+}: {
+  busy: boolean;
+  error: string | null;
+  onLogin: (user: string, password: string) => void;
+}) {
+  const [user, setUser] = useState('salud');
+  const [password, setPassword] = useState('');
+
+  return (
+    <div className="panel-page panel-login-page">
+      <main className="panel-login">
+        <div className="panel-login-brand">
+          <BrandMark size={52} />
+          <div>
+            <span className="panel-brand-name">Manguaré</span>
+            <span className="panel-brand-sub">Panel de la red de salud</span>
+          </div>
+        </div>
+
+        <div className="panel-login-card">
+          <span className="panel-login-icon">
+            <KeyRound size={24} aria-hidden="true" />
+          </span>
+          <h1>Acceso restringido</h1>
+          <p>
+            Este panel muestra ubicaciones y datos personales. Ingresa con la cuenta de la red de
+            salud para ver y confirmar alertas.
+          </p>
+
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (busy) return;
+              onLogin(user, password);
+            }}
+          >
+            <label>
+              <span>Usuario</span>
+              <span className="panel-login-input">
+                <UserRound size={17} aria-hidden="true" />
+                <input
+                  name="user"
+                  data-testid="login-user"
+                  autoComplete="username"
+                  value={user}
+                  onChange={(event) => setUser(event.target.value)}
+                  required
+                />
+              </span>
+            </label>
+            <label>
+              <span>Contraseña</span>
+              <span className="panel-login-input">
+                <KeyRound size={17} aria-hidden="true" />
+                <input
+                  name="password"
+                  data-testid="login-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                  autoFocus
+                />
+              </span>
+            </label>
+
+            {error ? (
+              <p className="panel-login-error" role="alert">
+                <TriangleAlert size={16} aria-hidden="true" /> {error}
+              </p>
+            ) : null}
+
+            <button type="submit" className="panel-login-submit" data-testid="login-submit" disabled={busy}>
+              {busy ? (
+                <LoaderCircle size={18} className="spin" aria-hidden="true" />
+              ) : (
+                <LogIn size={18} aria-hidden="true" />
+              )}
+              {busy ? 'Ingresando…' : 'Ingresar al panel'}
+            </button>
+          </form>
+
+          <p className="panel-login-foot">
+            <ShieldCheck size={15} aria-hidden="true" /> La sesión dura 12 horas. Si no conoces la
+            contraseña, pídela al responsable del piloto.
+          </p>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export function PanelApp() {
   const [alerts, setAlerts] = useState<ServerAlert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -312,6 +422,9 @@ export function PanelApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [acking, setAcking] = useState<string | null>(null);
   const [toast, setToast] = useState<PanelToastState | null>(null);
+  const [session, setSession] = useState<PanelSessionState | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [loggingIn, setLoggingIn] = useState(false);
   const [soundOn, setSoundOn] = useState(() => {
     try {
       return localStorage.getItem('manguare.panel.sound') === '1';
@@ -329,12 +442,41 @@ export function PanelApp() {
     soundRef.current = soundOn;
   }, [soundOn]);
 
+  useEffect(() => {
+    let disposed = false;
+    void (async () => {
+      try {
+        const response = await fetch('/api/panel/session', { cache: 'no-store' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = (await response.json()) as PanelSessionState;
+        if (!disposed) setSession(data);
+      } catch {
+        if (!disposed) {
+          setSession({ authRequired: false, authenticated: true });
+          setError('No se puede conectar con el servidor de alertas.');
+        }
+      }
+    })();
+    return () => {
+      disposed = true;
+    };
+  }, []);
+
   const load = useCallback(async (indicator = false) => {
     if (inFlight.current) return;
     inFlight.current = true;
     if (indicator) setRefreshing(true);
     try {
       const response = await fetch('/api/alerts', { cache: 'no-store' });
+      if (response.status === 401) {
+        setSession((current) => ({
+          authRequired: true,
+          authenticated: false,
+          ...(current?.user ? { user: current.user } : {}),
+        }));
+        setAlerts([]);
+        return;
+      }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as { alerts?: ServerAlert[] };
       const list = data.alerts ?? [];
@@ -355,7 +497,10 @@ export function PanelApp() {
     }
   }, []);
 
+  const authenticated = session?.authenticated === true;
+
   useEffect(() => {
+    if (!authenticated) return;
     void load();
     const interval = window.setInterval(() => {
       if (document.visibilityState === 'visible') void load();
@@ -371,7 +516,7 @@ export function PanelApp() {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', onFocus);
     };
-  }, [load]);
+  }, [load, authenticated]);
 
   useEffect(() => {
     if (!toast) return;
@@ -401,6 +546,10 @@ export function PanelApp() {
       const response = await fetch(`/api/alerts/${encodeURIComponent(id)}/received`, {
         method: 'POST',
       });
+      if (response.status === 401) {
+        setSession({ authRequired: true, authenticated: false });
+        return;
+      }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as { alert?: ServerAlert };
       if (!data.alert) throw new Error('Respuesta incompleta');
@@ -417,6 +566,50 @@ export function PanelApp() {
     } finally {
       setAcking(null);
     }
+  };
+
+  const handleLogin = async (user: string, password: string) => {
+    setLoggingIn(true);
+    setSessionError(null);
+    try {
+      const response = await fetch('/api/panel/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user, password }),
+      });
+      const data = (await response.json().catch(() => ({}))) as {
+        user?: string;
+        error?: string;
+      };
+      if (!response.ok) {
+        setSessionError(
+          response.status === 429
+            ? 'Demasiados intentos. Espera unos minutos antes de volver a probar.'
+            : 'Usuario o contraseña incorrectos.',
+        );
+        return;
+      }
+      setSession({ authRequired: true, authenticated: true, user: data.user ?? user });
+      setLoading(true);
+      setError(null);
+    } catch {
+      setSessionError('No se pudo conectar con el servidor. Revisa la red.');
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/panel/logout', { method: 'POST' });
+    } catch {
+      // Aunque falle la petición, se oculta la información en esta pantalla.
+    }
+    setSession({ authRequired: true, authenticated: false });
+    setAlerts([]);
+    knownIds.current = new Set();
+    hasLoadedOnce.current = false;
+    setLastUpdated(null);
   };
 
   const toggleSound = () => {
@@ -445,6 +638,24 @@ export function PanelApp() {
     { id: 'pending', label: 'Por confirmar', count: pending.length },
     { id: 'received', label: 'Recibidas', count: received.length },
   ];
+
+  if (!session) {
+    return (
+      <div className="panel-page panel-login-page">
+        <main className="panel-login">
+          <div className="panel-login-loading">
+            <LoaderCircle size={22} className="spin" aria-hidden="true" /> Comprobando sesión…
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (session.authRequired && !session.authenticated) {
+    return (
+      <PanelLogin busy={loggingIn} error={sessionError} onLogin={(user, pass) => void handleLogin(user, pass)} />
+    );
+  }
 
   return (
     <div className="panel-page">
@@ -480,6 +691,17 @@ export function PanelApp() {
             <RefreshCw size={17} className={refreshing ? 'spin' : ''} aria-hidden="true" />
             <span>Actualizar</span>
           </button>
+          {session.authRequired ? (
+            <button
+              type="button"
+              className="panel-top-btn"
+              onClick={() => void handleLogout()}
+              title={`Cerrar sesión de ${session.user ?? 'la red de salud'}`}
+            >
+              <LogOut size={17} aria-hidden="true" />
+              <span>Salir</span>
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -591,6 +813,12 @@ export function PanelApp() {
         </section>
 
         <footer className="panel-foot">
+          {!session.authRequired ? (
+            <p className="panel-demo-warning">
+              <TriangleAlert size={15} aria-hidden="true" /> Panel sin contraseña (modo
+              demostración). Define MANGUARE_PANEL_PASSWORD antes de exponerlo.
+            </p>
+          ) : null}
           <p>
             <ShieldCheck size={15} aria-hidden="true" /> Prototipo Manguaré MVP · Las alertas de
             demostración usan el equipo “Celular de la comunidad”.
