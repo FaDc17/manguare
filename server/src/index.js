@@ -18,6 +18,9 @@ const staticDir = process.env.MANGUARE_STATIC_DIR ?? path.join(root, 'web', 'dis
 const store = new AlertStore(dataFile);
 const panelPassword = process.env.MANGUARE_PANEL_PASSWORD ?? '';
 const sessionHours = Number(process.env.MANGUARE_SESSION_HOURS ?? 12);
+const rawAckMinutes = process.env.MANGUARE_ACK_MINUTES;
+const ackMinutes = rawAckMinutes === undefined || rawAckMinutes === '' ? 10 : Number(rawAckMinutes);
+const escalationPhone = process.env.MANGUARE_ESCALATION_PHONE ?? '';
 const auth = createAuth({
   enabled: Boolean(panelPassword),
   password: panelPassword,
@@ -29,7 +32,9 @@ const auth = createAuth({
     (Number.isFinite(sessionHours) && sessionHours > 0 ? sessionHours : 12) * 60 * 60 * 1000,
   secureCookies: process.env.MANGUARE_SECURE_COOKIES === '1',
 });
-const server = http.createServer(createHandler({ store, staticDir, auth }));
+const server = http.createServer(
+  createHandler({ store, staticDir, auth, ackMinutes, escalationPhone }),
+);
 
 function lanAddresses() {
   const addresses = [];
@@ -55,6 +60,10 @@ server.listen(port, host, () => {
     auth.enabled
       ? `  Panel:  protegido con usuario "${process.env.MANGUARE_PANEL_USER ?? 'salud'}"`
       : '  Panel:  SIN contraseña (modo demostración). Define MANGUARE_PANEL_PASSWORD.',
+  );
+  console.log(
+    `  Acuse:  ${Number.isFinite(ackMinutes) && ackMinutes >= 0 ? ackMinutes : 10} min · ` +
+      `Escalamiento: ${escalationPhone || 'sin número configurado'}`,
   );
   if (!fs.existsSync(path.join(staticDir, 'index.html'))) {
     console.log('');

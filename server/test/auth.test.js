@@ -81,10 +81,10 @@ test('el panel exige sesión para listar y confirmar alertas', async () => {
   assert.equal(ack.status, 401);
 
   const session = await (await fetch(`${base}/api/panel/session`)).json();
-  assert.deepEqual(session, {
-    authRequired: true,
-    authenticated: false,
-  });
+  assert.equal(session.authRequired, true);
+  assert.equal(session.authenticated, false);
+  assert.equal(session.config.ackMinutes, 10);
+  assert.equal(session.config.escalationPhone, '');
 });
 
 test('rechaza credenciales incorrectas y acepta las correctas con cookie segura', async () => {
@@ -128,6 +128,25 @@ test('la confirmación queda auditada con el usuario de la sesión', async () =>
   const second = (await again.json()).alert;
   assert.equal(second.acknowledgedAt, alert.acknowledgedAt);
   assert.equal(second.events.length, alert.events.length);
+
+  const response = await fetch(`${base}/api/alerts/auth-alert-0001/responses`, {
+    method: 'POST',
+    headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: 'acudir_posta' }),
+  });
+  assert.equal(response.status, 200);
+  const withResponse = (await response.json()).alert;
+  assert.equal(withResponse.responses.length, 1);
+  assert.equal(withResponse.responses[0].code, 'acudir_posta');
+});
+
+test('las respuestas de la red requieren sesión', async () => {
+  const response = await fetch(`${base}/api/alerts/auth-alert-0001/responses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: 'en_camino' }),
+  });
+  assert.equal(response.status, 401);
 });
 
 test('cerrar sesión invalida la cookie', async () => {

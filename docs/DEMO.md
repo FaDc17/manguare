@@ -20,6 +20,8 @@ Objetivo: mostrar un solo recorrido completo:
    ```
 
    `npm run seed` es idempotente y necesita el servidor encendido.
+   Si quieres mostrar el **plazo vencido** en vivo, arranca con
+   `MANGUARE_ACK_MINUTES=1 npm start`.
 2. Accesos de demo de la app:
    - Usuario: `992066275` · PIN `123456` (Juan).
    - Admin: `987654321` · PIN `123456` (enlaza al panel).
@@ -84,16 +86,19 @@ Señala la app: botón grande de emergencia, indicador de conexión y pendientes
 
 ### 1:50–2:30 · Panel de la red de salud (40 s)
 
-1. Pasa al panel. La alerta aparece como **Nueva** / **Por confirmar**.
+1. Pasa al panel. La alerta aparece como **Nueva** / **En plazo**.
 2. Abre **Ver detalle** y muestra la nota, la comunidad y la ubicación aproximada.
 3. Toca **Marcar recibida**.
+4. Envía una respuesta rápida: **“Ambulancia o brigada en camino”**.
 
-> "Acá termina la ambigüedad: la red de salud confirma que recibió la alerta."
+> "Acá termina la ambigüedad: la red confirma que recibió la alerta y además le
+> dice a la comunidad qué está pasando. Si no confirma en el plazo, el panel la
+> marca como vencida y permite escalar por SMS."
 
 ### 2:30–3:00 · Cierre (30 s)
 
 1. Vuelve al teléfono y toca **Actualizar estado**.
-2. Muestra **Recibida** y el recorrido completo.
+2. Muestra **Recibida**, la respuesta de la red y el recorrido completo.
 
 > "El MVP demuestra el ciclo completo sin inventar cobertura: guardar sin señal,
 > enviar al recuperarla y confirmar la recepción. Lo siguiente es validarlo con

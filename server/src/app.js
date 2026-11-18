@@ -3,8 +3,10 @@ import path from 'node:path';
 import { createRateLimiter } from './auth.js';
 
 const TYPES = new Set(['enfermedad', 'accidente', 'mordedura', 'parto', 'otro']);
+const RESPONSE_CODES = new Set(['en_camino', 'acudir_posta', 'sin_medico', 'otra']);
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const MAX_PHOTO_CHARS = 2_500_000;
+const DEFAULT_ACK_MINUTES = 10;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -144,7 +146,7 @@ function readPhoto(value) {
   return value;
 }
 
-function toAlert(body, now) {
+function toAlert(body, now, ackMinutes) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new HttpError(400, 'invalid_body');
   }
@@ -157,6 +159,8 @@ function toAlert(body, now) {
   }
   const createdAt = new Date(body.clientCreatedAt ?? Date.now());
   const consentLocation = Boolean(body.consentLocation);
+  const serverReceivedAt = now();
+  const minutes = Number.isFinite(ackMinutes) && ackMinutes >= 0 ? ackMinutes : DEFAULT_ACK_MINUTES;
   const alert = {
     id,
     type: body.type,
@@ -167,9 +171,10 @@ function toAlert(body, now) {
     reporterPhone: readString(body.reporterPhone, 30, 'reporterPhone') || undefined,
     consentLocation,
     clientCreatedAt: Number.isNaN(createdAt.getTime())
-      ? now()
+      ? serverReceivedAt
       : createdAt.toISOString(),
-    serverReceivedAt: now(),
+    serverReceivedAt,
+    ackDeadlineAt: new Date(Date.parse(serverReceivedAt) + minutes * 60_000).toISOString(),
   };
   if (consentLocation) {
     const location = readLocation(body.location);
@@ -237,9 +242,18 @@ async function serveStatic(req, res, pathname, staticDir) {
   res.end(content);
 }
 
-export function createHandler({ store, staticDir, now = () => new Date().toISOString(), auth = null }) {
+export function createHandler({
+  store,
+  staticDir,
+  now = () => new Date().toISOString(),
+  auth = null,
+  ackMinutes = DEFAULT_ACK_MINUTES,
+  escalationPhone = '',
+}) {
   const alertLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 120 });
   const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8 });
+  const effectiveAckMinutes =
+    Number.isFinite(ackMinutes) && ackMinutes >= 0 ? ackMinutes : DEFAULT_ACK_MINUTES;
 
   function clientIp(req) {
     if (process.env.MANGUARE_TRUST_PROXY === '1') {
@@ -291,6 +305,10 @@ export function createHandler({ store, staticDir, now = () => new Date().toISOSt
           authRequired: Boolean(auth?.enabled),
           authenticated: auth?.enabled ? Boolean(session) : true,
           ...(session?.user ? { user: session.user } : {}),
+          config: {
+            ackMinutes: effectiveAckMinutes,
+            escalationPhone,
+          },
         });
         return;
       }
@@ -354,6 +372,7 @@ export function createHandler({ store, staticDir, now = () => new Date().toISOSt
             sendJson(res, 401, { error: 'authentication_required' });
             return;
           }
+          await store.escalateOverdue(now());
           const alerts = await store.list();
           sendJson(res, 200, { alerts });
           return;
@@ -370,7 +389,7 @@ export function createHandler({ store, staticDir, now = () => new Date().toISOSt
             return;
           }
           const body = await readJsonBody(req);
-          const alert = toAlert(body, now);
+          const alert = toAlert(body, now, effectiveAckMinutes);
           const existing = await store.get(alert.id);
           if (existing) {
             sendJson(res, 200, { alert: existing });
@@ -384,10 +403,11 @@ export function createHandler({ store, staticDir, now = () => new Date().toISOSt
         return;
       }
 
-      const match = pathname.match(/^\/api\/alerts\/([^/]+)(\/received)?$/);
+      const match = pathname.match(/^\/api\/alerts\/([^/]+)(\/(received|escalate|responses))?$/);
       if (match) {
         const id = match[1];
-        if (match[2]) {
+        const action = match[2];
+        if (action) {
           if (req.method !== 'POST') {
             sendJson(res, 405, { error: 'method_not_allowed' });
             return;
@@ -402,11 +422,43 @@ export function createHandler({ store, staticDir, now = () => new Date().toISOSt
             sendJson(res, 404, { error: 'not_found' });
             return;
           }
-          const updated = await store.acknowledge(id, now(), session?.user ?? 'demostración');
+          const actor = session?.user ?? 'demostración';
+
+          if (action === '/received') {
+            const updated = await store.acknowledge(id, now(), actor);
+            sendJson(res, 200, { alert: updated });
+            return;
+          }
+
+          if (action === '/escalate') {
+            const body = await readJsonBody(req);
+            const channel =
+              body && typeof body.channel === 'string' ? body.channel.slice(0, 20) : 'manual';
+            if (!['sms', 'llamada', 'manual'].includes(channel)) {
+              throw new HttpError(400, 'invalid_channel');
+            }
+            const updated = await store.escalate(id, now(), actor, channel);
+            sendJson(res, 200, { alert: updated });
+            return;
+          }
+
+          // action === '/responses'
+          const body = await readJsonBody(req);
+          const code = body && typeof body.code === 'string' ? body.code : '';
+          if (!RESPONSE_CODES.has(code)) {
+            throw new HttpError(400, 'invalid_response_code');
+          }
+          const message = readString(body.message, 300, 'message');
+          if (code === 'otra' && !message) {
+            throw new HttpError(400, 'message_required');
+          }
+          const updated = await store.respond(id, { code, message }, now(), actor);
           sendJson(res, 200, { alert: updated });
           return;
         }
+
         if (req.method === 'GET') {
+          await store.escalateOverdue(now());
           const alert = await store.get(id);
           if (!alert) {
             sendJson(res, 404, { error: 'not_found' });

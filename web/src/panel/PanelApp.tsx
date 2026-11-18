@@ -15,6 +15,7 @@ import {
   LogIn,
   LogOut,
   MapPin,
+  MessageSquareText,
   RefreshCw,
   ShieldCheck,
   TriangleAlert,
@@ -24,9 +25,10 @@ import {
 import { BrandMark } from '../components/BrandMark';
 import { EMERGENCY_META } from '../lib/emergency';
 import { formatDateTime, formatRelative, formatTime, shortId } from '../lib/format';
+import { RESPONSE_OPTIONS, responseText } from '../lib/sla';
 import type { ServerAlert } from '../lib/types';
 
-type PanelFilter = 'all' | 'pending' | 'received';
+type PanelFilter = 'all' | 'pending' | 'overdue' | 'received';
 
 interface PanelToastState {
   message: string;
@@ -62,12 +64,44 @@ function playChime(): void {
   }
 }
 
+function isServerOverdue(alert: ServerAlert, now: number = Date.now()): boolean {
+  if (alert.acknowledgedAt || !alert.ackDeadlineAt) return false;
+  const deadline = Date.parse(alert.ackDeadlineAt);
+  return !Number.isNaN(deadline) && deadline <= now;
+}
+
+function escalationBody(alert: ServerAlert): string {
+  const meta = EMERGENCY_META[alert.type];
+  const deadline = alert.ackDeadlineAt
+    ? new Intl.DateTimeFormat('es-PE', { hour: '2-digit', minute: '2-digit' }).format(
+        new Date(alert.ackDeadlineAt),
+      )
+    : 'sin plazo';
+  return [
+    'MANGUARE ESCALAMIENTO',
+    meta.label,
+    alert.community || 'comunidad no indicada',
+    `Ref ${shortId(alert.id)}`,
+    `Plazo venció ${deadline}`,
+  ].join(' | ');
+}
+
 function PanelStatus({ alert }: { alert: ServerAlert }) {
-  return alert.acknowledgedAt ? (
-    <span className="panel-status is-received">
-      <CheckCircle2 size={14} aria-hidden="true" /> Recibida
-    </span>
-  ) : (
+  if (alert.acknowledgedAt) {
+    return (
+      <span className="panel-status is-received">
+        <CheckCircle2 size={14} aria-hidden="true" /> Recibida
+      </span>
+    );
+  }
+  if (isServerOverdue(alert)) {
+    return (
+      <span className="panel-status is-overdue">
+        <TriangleAlert size={14} aria-hidden="true" /> Vencida
+      </span>
+    );
+  }
+  return (
     <span className="panel-status is-pending">
       <Clock3 size={14} aria-hidden="true" /> Por confirmar
     </span>
@@ -89,7 +123,11 @@ function AlertRow({
   const Icon = meta.icon;
 
   return (
-    <article className={`panel-row ${alert.acknowledgedAt ? 'is-received' : 'is-unconfirmed'}`}>
+    <article
+      className={`panel-row ${alert.acknowledgedAt ? 'is-received' : 'is-unconfirmed'} ${
+        isServerOverdue(alert) ? 'is-overdue' : ''
+      }`}
+    >
       <span className={`type-tile type-tile--${meta.tone}`}>
         <Icon size={23} aria-hidden="true" />
       </span>
@@ -110,6 +148,18 @@ function AlertRow({
           {alert.photo ? (
             <span>
               <ImageIcon size={13} aria-hidden="true" /> Foto
+            </span>
+          ) : null}
+          {!alert.acknowledgedAt && alert.ackDeadlineAt ? (
+            <span className={isServerOverdue(alert) ? 'panel-late' : ''}>
+              {isServerOverdue(alert)
+                ? `Vencida ${formatRelative(alert.ackDeadlineAt)}`
+                : `Plazo ${formatTime(alert.ackDeadlineAt)}`}
+            </span>
+          ) : null}
+          {alert.responses?.length ? (
+            <span className="panel-response-flag">
+              <MessageSquareText size={13} aria-hidden="true" /> Respuesta
             </span>
           ) : null}
           <span className="mono">Ref {shortId(alert.id)}</span>
@@ -148,14 +198,27 @@ function AlertRow({
 function AlertModal({
   alert,
   acking,
+  responding,
+  escalationPhone,
   onClose,
   onAck,
+  onRespond,
+  onEscalate,
 }: {
   alert: ServerAlert | null;
   acking: boolean;
+  responding: string | null;
+  escalationPhone: string;
   onClose: () => void;
   onAck: (id: string) => void;
+  onRespond: (id: string, code: string, message: string) => void;
+  onEscalate: (id: string, channel: string) => void;
 }) {
+  const [custom, setCustom] = useState('');
+  useEffect(() => {
+    setCustom('');
+  }, [alert?.id]);
+
   useEffect(() => {
     if (!alert) return;
     const onKey = (event: KeyboardEvent) => {
@@ -175,6 +238,11 @@ function AlertModal({
   const mapUrl = alert.location
     ? `https://www.openstreetmap.org/?mlat=${alert.location.lat}&mlon=${alert.location.lng}#map=15/${alert.location.lat}/${alert.location.lng}`
     : null;
+  const overdue = isServerOverdue(alert);
+  const cleanPhone = escalationPhone.replace(/[^\d+*#]/g, '');
+  const smsUrl = cleanPhone
+    ? `sms:${cleanPhone}?&body=${encodeURIComponent(escalationBody(alert))}`
+    : 'tel:106';
 
   return createPortal(
     <div
@@ -263,6 +331,29 @@ function AlertModal({
                 </dd>
               </div>
               <div>
+                <dt>Plazo de acuse</dt>
+                <dd>
+                  {alert.ackDeadlineAt ? (
+                    <span className={overdue ? 'panel-late' : ''}>
+                      {formatDateTime(alert.ackDeadlineAt)}
+                      {overdue ? ' · vencido' : ''}
+                    </span>
+                  ) : (
+                    'Sin plazo definido'
+                  )}
+                </dd>
+              </div>
+              <div>
+                <dt>Escalamiento</dt>
+                <dd>
+                  {alert.escalatedAt
+                    ? `${formatDateTime(alert.escalatedAt)}${
+                        alert.escalationCount ? ` · ${alert.escalationCount} veces` : ''
+                      }`
+                    : 'No escalada'}
+                </dd>
+              </div>
+              <div>
                 <dt>Enviada desde el teléfono</dt>
                 <dd>{formatDateTime(alert.clientCreatedAt)}</dd>
               </div>
@@ -275,6 +366,72 @@ function AlertModal({
                 <dd className="mono">{alert.id}</dd>
               </div>
             </dl>
+
+            <div className="panel-responses">
+              <h3>Respuesta a la comunidad</h3>
+              {alert.responses?.length ? (
+                <ul className="panel-response-list">
+                  {alert.responses.map((response) => (
+                    <li key={`${response.at}-${response.code}`}>
+                      <MessageSquareText size={14} aria-hidden="true" />
+                      <span>
+                        <strong>{responseText(response)}</strong>
+                        <small>
+                          {formatDateTime(response.at)}
+                          {response.by ? ` · ${response.by}` : ''}
+                        </small>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="panel-response-empty">
+                  Todavía no se envió una indicación. Responder también confirma la recepción.
+                </p>
+              )}
+
+              <div className="panel-response-grid">
+                {RESPONSE_OPTIONS.filter((option) => option.code !== 'otra').map((option) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    className="panel-response-btn"
+                    data-testid={`respond-${option.code}`}
+                    onClick={() => onRespond(alert.id, option.code, '')}
+                    disabled={responding !== null}
+                  >
+                    {responding === option.code ? (
+                      <LoaderCircle size={15} className="spin" aria-hidden="true" />
+                    ) : (
+                      <MessageSquareText size={15} aria-hidden="true" />
+                    )}
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+
+              <form
+                className="panel-response-custom"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const message = custom.trim();
+                  if (!message) return;
+                  onRespond(alert.id, 'otra', message);
+                  setCustom('');
+                }}
+              >
+                <input
+                  type="text"
+                  value={custom}
+                  maxLength={300}
+                  placeholder="Otra indicación para la comunidad"
+                  onChange={(event) => setCustom(event.target.value)}
+                />
+                <button type="submit" disabled={responding !== null || !custom.trim()}>
+                  Enviar
+                </button>
+              </form>
+            </div>
           </div>
           {alert.photo ? (
             <div className="panel-modal-photo">
@@ -291,6 +448,25 @@ function AlertModal({
             <ShieldCheck size={15} aria-hidden="true" /> La ubicación es un dato personal: compártela
             solo con el personal que responde.
           </p>
+          {overdue ? (
+            <div className="panel-escalate">
+              <strong>
+                <TriangleAlert size={15} aria-hidden="true" /> Plazo vencido sin confirmación
+              </strong>
+              <a
+                href={smsUrl}
+                onClick={() => onEscalate(alert.id, cleanPhone ? 'sms' : 'llamada')}
+              >
+                <MessageSquareText size={15} aria-hidden="true" />
+                {cleanPhone ? 'Abrir SMS de escalamiento' : 'Llamar al 106'}
+              </a>
+              <span>
+                {alert.escalatedAt
+                  ? `Escalada ${formatRelative(alert.escalatedAt)}`
+                  : 'El escalamiento quedará registrado.'}
+              </span>
+            </div>
+          ) : null}
           <div>
             {!alert.acknowledgedAt ? (
               <button
@@ -322,6 +498,10 @@ interface PanelSessionState {
   authRequired: boolean;
   authenticated: boolean;
   user?: string;
+  config?: {
+    ackMinutes: number;
+    escalationPhone: string;
+  };
 }
 
 function PanelLogin({
@@ -430,6 +610,7 @@ export function PanelApp() {
   const [filter, setFilter] = useState<PanelFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [acking, setAcking] = useState<string | null>(null);
+  const [responding, setResponding] = useState<string | null>(null);
   const [toast, setToast] = useState<PanelToastState | null>(null);
   const [session, setSession] = useState<PanelSessionState | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -443,6 +624,7 @@ export function PanelApp() {
   });
 
   const knownIds = useRef<Set<string>>(new Set());
+  const knownOverdue = useRef<Set<string>>(new Set());
   const hasLoadedOnce = useRef(false);
   const inFlight = useRef(false);
   const soundRef = useRef(soundOn);
@@ -490,10 +672,13 @@ export function PanelApp() {
       const data = (await response.json()) as { alerts?: ServerAlert[] };
       const list = data.alerts ?? [];
       const fresh = list.filter((alert) => !knownIds.current.has(alert.id));
+      const overdueIds = new Set(list.filter((alert) => isServerOverdue(alert)).map((alert) => alert.id));
+      const newOverdue = [...overdueIds].some((id) => !knownOverdue.current.has(id));
       const hadLoaded = hasLoadedOnce.current;
       knownIds.current = new Set(list.map((alert) => alert.id));
+      knownOverdue.current = overdueIds;
       hasLoadedOnce.current = true;
-      if (hadLoaded && fresh.length > 0 && soundRef.current) playChime();
+      if (hadLoaded && (fresh.length > 0 || newOverdue) && soundRef.current) playChime();
       setAlerts(list);
       setError(null);
       setLastUpdated(new Date());
@@ -534,9 +719,23 @@ export function PanelApp() {
   }, [toast]);
 
   const pending = alerts.filter((alert) => !alert.acknowledgedAt);
+  const overdue = alerts.filter((alert) => isServerOverdue(alert));
+  const awaiting = pending.filter((alert) => !isServerOverdue(alert));
   const received = alerts.filter((alert) => Boolean(alert.acknowledgedAt));
+  const ordered = [...alerts].sort((a, b) => {
+    const aLate = isServerOverdue(a) ? 1 : 0;
+    const bLate = isServerOverdue(b) ? 1 : 0;
+    if (aLate !== bLate) return bLate - aLate;
+    return String(b.serverReceivedAt).localeCompare(String(a.serverReceivedAt));
+  });
   const filtered =
-    filter === 'pending' ? pending : filter === 'received' ? received : alerts;
+    filter === 'pending'
+      ? awaiting
+      : filter === 'overdue'
+        ? overdue
+        : filter === 'received'
+          ? received
+          : ordered;
   const selected = alerts.find((alert) => alert.id === selectedId) ?? null;
 
   useEffect(() => {
@@ -574,6 +773,56 @@ export function PanelApp() {
       });
     } finally {
       setAcking(null);
+    }
+  };
+
+  const respond = async (id: string, code: string, message: string) => {
+    setResponding(code);
+    try {
+      const response = await fetch(`/api/alerts/${encodeURIComponent(id)}/responses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, ...(message ? { message } : {}) }),
+      });
+      if (response.status === 401) {
+        setSession({ authRequired: true, authenticated: false });
+        return;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as { alert?: ServerAlert };
+      if (!data.alert) throw new Error('Respuesta incompleta');
+      setAlerts((current) =>
+        current.map((alert) => (alert.id === id ? (data.alert as ServerAlert) : alert)),
+      );
+      setLastUpdated(new Date());
+      setToast({ message: 'Respuesta enviada y alerta confirmada.', tone: 'ok' });
+    } catch {
+      setToast({ message: 'No se pudo enviar la respuesta a la comunidad.', tone: 'error' });
+    } finally {
+      setResponding(null);
+    }
+  };
+
+  const escalate = async (id: string, channel: string) => {
+    try {
+      const response = await fetch(`/api/alerts/${encodeURIComponent(id)}/escalate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel }),
+      });
+      if (response.status === 401) {
+        setSession({ authRequired: true, authenticated: false });
+        return;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as { alert?: ServerAlert };
+      if (!data.alert) throw new Error('Respuesta incompleta');
+      setAlerts((current) =>
+        current.map((alert) => (alert.id === id ? (data.alert as ServerAlert) : alert)),
+      );
+      setToast({ message: 'Escalamiento registrado.', tone: 'ok' });
+    } catch {
+      setToast({ message: 'No se pudo registrar el escalamiento.', tone: 'error' });
     }
   };
 
@@ -644,7 +893,8 @@ export function PanelApp() {
 
   const filters: Array<{ id: PanelFilter; label: string; count: number }> = [
     { id: 'all', label: 'Todas', count: alerts.length },
-    { id: 'pending', label: 'Por confirmar', count: pending.length },
+    { id: 'pending', label: 'En plazo', count: awaiting.length },
+    { id: 'overdue', label: 'Vencidas', count: overdue.length },
     { id: 'received', label: 'Recibidas', count: received.length },
   ];
 
@@ -720,8 +970,8 @@ export function PanelApp() {
             <p className="panel-kicker">Red de salud · Amazonía</p>
             <h1>Alertas de emergencia</h1>
             <p className="panel-lead">
-              Las alertas llegan cuando el teléfono recupera conexión. Confirma cada una para avisar
-              al remitente que la red de salud la recibió.
+              Las alertas llegan cuando el teléfono recupera conexión. Confirma antes del plazo; si
+              vence, el panel la marca como vencida y permite escalar por SMS o llamada.
             </p>
           </div>
           <div className="panel-updated">
@@ -733,9 +983,14 @@ export function PanelApp() {
 
         <section className="panel-stats" aria-label="Resumen de alertas">
           <div className="panel-stat panel-stat--amber">
-            <span className="panel-stat-label">Por confirmar</span>
-            <strong>{pending.length}</strong>
-            <span className="panel-stat-hint">Esperando respuesta de la red</span>
+            <span className="panel-stat-label">En plazo</span>
+            <strong>{awaiting.length}</strong>
+            <span className="panel-stat-hint">Esperando confirmación</span>
+          </div>
+          <div className="panel-stat panel-stat--red">
+            <span className="panel-stat-label">Vencidas</span>
+            <strong>{overdue.length}</strong>
+            <span className="panel-stat-hint">Sin confirmar en el plazo</span>
           </div>
           <div className="panel-stat panel-stat--green">
             <span className="panel-stat-label">Recibidas</span>
@@ -808,10 +1063,12 @@ export function PanelApp() {
               </span>
               <h2>
                 {filter === 'pending'
-                  ? 'No hay alertas por confirmar'
-                  : filter === 'received'
-                    ? 'Todavía no se confirmó ninguna alerta'
-                    : 'No hay alertas recibidas'}
+                  ? 'No hay alertas en plazo'
+                  : filter === 'overdue'
+                    ? 'No hay alertas vencidas'
+                    : filter === 'received'
+                      ? 'Todavía no se confirmó ninguna alerta'
+                      : 'No hay alertas recibidas'}
               </h2>
               <p>
                 Cuando una comunidad envíe una emergencia y el teléfono recupere conexión, la alerta
@@ -829,8 +1086,8 @@ export function PanelApp() {
             </p>
           ) : null}
           <p>
-            <ShieldCheck size={15} aria-hidden="true" /> Prototipo Manguaré MVP · Las alertas de
-            demostración usan el equipo “Celular de la comunidad”.
+            <ShieldCheck size={15} aria-hidden="true" /> Prototipo Manguaré MVP · Datos de
+            demostración del piloto.
           </p>
           <p>
             <MapPin size={15} aria-hidden="true" /> La ubicación exacta solo debe compartirse con el
@@ -842,8 +1099,12 @@ export function PanelApp() {
       <AlertModal
         alert={selected}
         acking={selected ? acking === selected.id : false}
+        responding={responding}
+        escalationPhone={session.config?.escalationPhone ?? ''}
         onClose={() => setSelectedId(null)}
         onAck={(id) => void acknowledge(id)}
+        onRespond={(id, code, message) => void respond(id, code, message)}
+        onEscalate={(id, channel) => void escalate(id, channel)}
       />
 
       {toast ? (

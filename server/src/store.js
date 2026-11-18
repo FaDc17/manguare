@@ -1,6 +1,13 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
+const MAX_EVENTS = 50;
+const MAX_RESPONSES = 20;
+
+function appendEvent(events, event) {
+  return [...(Array.isArray(events) ? events : []), event].slice(-MAX_EVENTS);
+}
+
 /**
  * Almacén mínimo de alertas respaldado por un archivo JSON.
  * Suficiente para el MVP y para que el panel sobreviva a reinicios.
@@ -63,19 +70,120 @@ export class AlertStore {
     const existing = this.alerts.get(id);
     if (!existing) return null;
     if (existing.acknowledgedAt) return existing;
-    const events = Array.isArray(existing.events) ? existing.events : [];
     const updated = {
       ...existing,
       acknowledgedAt,
       ...(actor ? { acknowledgedBy: actor } : {}),
-      events: [
-        ...events,
-        {
-          type: 'received',
-          at: acknowledgedAt,
-          ...(actor ? { by: actor } : {}),
-        },
-      ],
+      events: appendEvent(existing.events, {
+        type: 'received',
+        at: acknowledgedAt,
+        ...(actor ? { by: actor } : {}),
+      }),
+    };
+    this.alerts.set(id, updated);
+    await this.#persist();
+    return updated;
+  }
+
+  /**
+   * Marca como escaladas las alertas que pasaron su plazo sin confirmación.
+   * No envía SMS: deja la alerta lista para que el panel avise por el canal
+   * acordado. Devuelve cuántas cambiaron.
+   */
+  async escalateOverdue(at) {
+    await this.ready;
+    const now = Date.parse(at);
+    if (Number.isNaN(now)) return 0;
+
+    let changed = 0;
+    for (const [id, alert] of this.alerts) {
+      if (alert.acknowledgedAt || alert.escalatedAt || !alert.ackDeadlineAt) continue;
+      const deadline = Date.parse(alert.ackDeadlineAt);
+      if (Number.isNaN(deadline) || deadline > now) continue;
+      const updated = {
+        ...alert,
+        escalatedAt: at,
+        escalationCount: (alert.escalationCount ?? 0) + 1,
+        events: appendEvent(alert.events, {
+          type: 'escalated',
+          at,
+          reason: 'deadline',
+        }),
+      };
+      this.alerts.set(id, updated);
+      changed += 1;
+    }
+    if (changed > 0) await this.#persist();
+    return changed;
+  }
+
+  /** Registra un escalamiento manual (por ejemplo, abrir el SMS de respaldo). */
+  async escalate(id, at, actor, channel = 'manual') {
+    await this.ready;
+    const existing = this.alerts.get(id);
+    if (!existing) return null;
+    if (existing.acknowledgedAt) return existing;
+
+    const updated = {
+      ...existing,
+      escalatedAt: existing.escalatedAt ?? at,
+      escalationCount: (existing.escalationCount ?? 0) + 1,
+      lastEscalationChannel: channel,
+      events: appendEvent(existing.events, {
+        type: 'escalated',
+        at,
+        channel,
+        ...(actor ? { by: actor } : {}),
+      }),
+    };
+    this.alerts.set(id, updated);
+    await this.#persist();
+    return updated;
+  }
+
+  /**
+   * Guarda una respuesta de la red de salud. Responder implica haber recibido
+   * la alerta, así que también la confirma si todavía no estaba confirmada.
+   */
+  async respond(id, { code, message }, at, actor) {
+    await this.ready;
+    const existing = this.alerts.get(id);
+    if (!existing) return null;
+
+    let events = Array.isArray(existing.events) ? existing.events : [];
+    let acknowledgedAt = existing.acknowledgedAt;
+    let acknowledgedBy = existing.acknowledgedBy;
+
+    if (!acknowledgedAt) {
+      acknowledgedAt = at;
+      acknowledgedBy = actor;
+      events = appendEvent(events, {
+        type: 'received',
+        at,
+        ...(actor ? { by: actor } : {}),
+        auto: true,
+      });
+    }
+
+    const response = {
+      code,
+      at,
+      ...(message ? { message } : {}),
+      ...(actor ? { by: actor } : {}),
+    };
+    events = appendEvent(events, {
+      type: 'response',
+      code,
+      at,
+      ...(actor ? { by: actor } : {}),
+    });
+
+    const updated = {
+      ...existing,
+      acknowledgedAt,
+      ...(acknowledgedBy ? { acknowledgedBy } : {}),
+      responses: [...(existing.responses ?? []), response].slice(-MAX_RESPONSES),
+      events,
     };
     this.alerts.set(id, updated);
     await this.#persist();

@@ -3641,3 +3641,137 @@
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* ------------------------------------------------------------------ */
+/* Plazo de confirmación y respuesta de la red                        */
+/* ------------------------------------------------------------------ */
+
+.confirmation-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 18px 12px;
+  padding: 11px 12px;
+  border: 1px solid #ecd6a2;
+  border-radius: var(--radius);
+  background: var(--amber-50);
+}
+
+.confirmation-card.is-overdue {
+  border-color: #e7b7a8;
+  background: var(--clay-50);
+}
+
+.confirmation-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--amber-100);
+  color: var(--amber-700);
+}
+
+.confirmation-card.is-overdue .confirmation-icon {
+  background: var(--clay-100);
+  color: var(--clay-800);
+}
+
+.confirmation-copy {
+  display: grid;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.confirmation-copy strong {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.confirmation-copy span {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+}
+
+.confirmation-card .text-btn {
+  flex: none;
+}
+
+.alert-flag--overdue {
+  color: var(--clay-800);
+  font-weight: 800;
+}
+
+.response-card {
+  margin-top: 0;
+}
+
+.response-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.response-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  border-radius: 11px;
+  background: var(--green-50);
+  color: var(--green-800);
+}
+
+.response-head > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.response-kicker {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--green-700);
+}
+
+.response-head strong {
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.response-meta {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.response-history {
+  display: grid;
+  gap: 6px;
+  margin: 11px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.response-history li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10.5px;
+  color: var(--ink-soft);
+}
+
+.response-history time {
+  flex: none;
+  font-size: 9.5px;
+  color: var(--muted);
+}

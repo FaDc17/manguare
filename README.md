@@ -23,6 +23,9 @@ número y PIN, perfil de la comunidad, el catálogo **Conecta Amazonía** y cent
 de apoyo de demostración. El acceso con PIN es **solo de demostración**: no es
 autenticación real ni protege datos.
 
+El panel de la red añade un **plazo de acuse**, alertas **vencidas**, escalamiento
+por SMS y **respuestas rápidas** que el teléfono recibe al sincronizar.
+
 El nombre es una referencia cultural, no una apropiación: antes de usar la marca
 en un piloto real, debe validarse con las comunidades y, si corresponde, contar
 con su autorización.
@@ -117,6 +120,8 @@ Los datos quedan en el volumen `manguare-data`. La guía completa está en
 | `MANGUARE_PANEL_USER` | `salud` | Usuario del panel |
 | `MANGUARE_SESSION_SECRET` | aleatorio | Fija un secreto para conservar sesiones al reiniciar |
 | `MANGUARE_SESSION_HOURS` | `12` | Duración de la sesión del panel |
+| `MANGUARE_ACK_MINUTES` | `10` | Plazo para que la red confirme una alerta |
+| `MANGUARE_ESCALATION_PHONE` | vacío | Número para el SMS de escalamiento del panel |
 | `MANGUARE_SECURE_COOKIES` | `0` | `1` para cookie `Secure` detrás de HTTPS |
 | `MANGUARE_TRUST_PROXY` | `0` | `1` para leer `X-Forwarded-For` de un proxy de confianza |
 | `VITE_SMS_NUMBER` | `+51999999999` | Número de respaldo SMS (se fija al compilar) |
@@ -143,9 +148,18 @@ abierta, pero no se instala ni recarga sin red. Para la demo final usa HTTPS
 
 ## Panel de la red de salud
 
-`/panel` muestra alertas, filtros (Todas / Por confirmar / Recibidas), datos de
-contacto, ubicación aproximada si hubo consentimiento, y el botón **Marcar
-recibida**. Se actualiza cada 5 segundos y suena al llegar una alerta nueva.
+`/panel` muestra alertas, filtros (Todas / En plazo / Vencidas / Recibidas),
+datos de contacto, ubicación aproximada si hubo consentimiento, y el botón
+**Marcar recibida**. Se actualiza cada 5 segundos y suena al llegar una alerta
+nueva o al vencer un plazo.
+
+Cada alerta tiene un **plazo de acuse** (`MANGUARE_ACK_MINUTES`, 10 por defecto).
+Si la red no confirma a tiempo, la alerta pasa a **Vencida**, se registra el
+escalamiento y el panel ofrece un **SMS de escalamiento** al número configurado
+en `MANGUARE_ESCALATION_PHONE` (o llamar al 106). La red también puede enviar
+**respuestas rápidas** a la comunidad: “ambulancia en camino”, “acude a la posta”,
+“coordinar traslado” u otra indicación. El teléfono las recibe en la siguiente
+sincronización.
 
 Con `MANGUARE_PANEL_PASSWORD` definida, el panel pide login y usa una cookie de
 sesión `HttpOnly`; la confirmación queda auditada con el usuario. Sin esa
@@ -171,7 +185,9 @@ JSON con escritura atómica.
 | `POST` | `/api/alerts` | Crea una alerta (idempotente por `id`) |
 | `GET` | `/api/alerts/:id` | Consulta una alerta y su estado |
 | `POST` | `/api/alerts/:id/received` | Marca como recibida (idempotente; requiere sesión si el panel está protegido) |
-| `GET` | `/api/panel/session` | Estado de la sesión del panel |
+| `POST` | `/api/alerts/:id/escalate` | Registra un escalamiento manual (`sms`, `llamada` o `manual`) |
+| `POST` | `/api/alerts/:id/responses` | Guarda una respuesta de la red y confirma la recepción |
+| `GET` | `/api/panel/session` | Estado de la sesión, plazo de acuse y teléfono de escalamiento |
 | `POST` | `/api/panel/login` | Inicia sesión con usuario y contraseña |
 | `POST` | `/api/panel/logout` | Cierra la sesión |
 

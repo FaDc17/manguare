@@ -11,6 +11,8 @@ services:
       # Fija un secreto largo para que las sesiones sobrevivan a reinicios.
       MANGUARE_SESSION_SECRET: ${MANGUARE_SESSION_SECRET:-}
       MANGUARE_SESSION_HOURS: ${MANGUARE_SESSION_HOURS:-12}
+      MANGUARE_ACK_MINUTES: ${MANGUARE_ACK_MINUTES:-10}
+      MANGUARE_ESCALATION_PHONE: ${MANGUARE_ESCALATION_PHONE:-}
       # Actívalos si publicas detrás de HTTPS y un proxy inverso.
       MANGUARE_SECURE_COOKIES: ${MANGUARE_SECURE_COOKIES:-0}
       MANGUARE_TRUST_PROXY: ${MANGUARE_TRUST_PROXY:-0}

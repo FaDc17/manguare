@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  TriangleAlert,
   WifiOff,
   X,
 } from 'lucide-react';
@@ -30,6 +31,7 @@ import {
   STATE_LABEL,
 } from '../lib/format';
 import { copyText, buildSmsBody, smsHref } from '../lib/sms';
+import { deadlineText, isOverdue, responseText } from '../lib/sla';
 import type { AlertState } from '../lib/types';
 
 const STATE_ICON = {
@@ -98,6 +100,10 @@ export function AlertDetailScreen({
   const StateIcon = STATE_ICON[alert.state as AlertState];
   const isPending = alert.state === 'pending';
   const isReceived = alert.state === 'received';
+  const overdue = isOverdue(alert);
+  const deadline = deadlineText(alert);
+  const latestResponse = alert.responses?.at(-1);
+  const awaitingConfirmation = alert.state === 'sent' && !alert.acknowledgedAt;
 
   const steps = [
     {
@@ -155,6 +161,30 @@ export function AlertDetailScreen({
               {online
                 ? 'La app reintenta automáticamente. También puedes forzar un intento ahora.'
                 : 'No hay conexión. La alerta se enviará sola cuando vuelva la señal.'}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
+      {awaitingConfirmation ? (
+        <div className={`banner ${overdue ? 'banner-warn' : 'banner-info'}`}>
+          {overdue ? (
+            <TriangleAlert size={19} aria-hidden="true" />
+          ) : (
+            <Clock3 size={19} aria-hidden="true" />
+          )}
+          <div>
+            <strong>
+              {overdue
+                ? 'Plazo de confirmación vencido'
+                : `La red tiene hasta ${deadline ?? 'su plazo'} para confirmar`}
+            </strong>
+            <p>
+              {overdue
+                ? `La red no confirmó en el plazo. ${
+                    alert.escalatedAt ? 'La alerta fue escalada. ' : ''
+                  }Puedes avisar por SMS o llamar al 106 mientras sigues esperando.`
+                : 'Si no confirma a tiempo, la alerta se marca como vencida y el panel puede escalarla.'}
             </p>
           </div>
         </div>
@@ -253,6 +283,37 @@ export function AlertDetailScreen({
           </div>
         </div>
       )}
+
+      {latestResponse ? (
+        <section className="card response-card">
+          <div className="response-head">
+            <span className="response-icon">
+              <MessageSquareText size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <span className="response-kicker">Respuesta de la red de salud</span>
+              <strong>{responseText(latestResponse)}</strong>
+              <span className="response-meta">
+                {formatDateTime(latestResponse.at)}
+                {latestResponse.by ? ` · ${latestResponse.by}` : ''}
+              </span>
+            </div>
+          </div>
+          {alert.responses && alert.responses.length > 1 ? (
+            <ol className="response-history">
+              {alert.responses
+                .slice(0, -1)
+                .reverse()
+                .map((response) => (
+                  <li key={`${response.at}-${response.code}`}>
+                    <span>{responseText(response)}</span>
+                    <time dateTime={response.at}>{formatRelative(response.at)}</time>
+                  </li>
+                ))}
+            </ol>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className="card">
         <h2 className="card-title">Datos de la alerta</h2>

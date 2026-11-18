@@ -52,7 +52,7 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
   pendientes, y nada mientras la pestaña está oculta.
 - Prueba E2E con Chromium: CPU 4× más lenta, red lenta, modo offline, recarga,
   sincronización, login del panel, confirmación y vuelta a `Recibida`.
-- Carga inicial con login medida: **872 ms** con CPU 4×; **0 solicitudes API en
+- Carga inicial con login medida: **866 ms** con CPU 4×; **0 solicitudes API en
   3.5 s** con la cola vacía.
 - `Dockerfile`, `docker-compose.yml`, `.env.example` y CI de GitHub Actions
   (checks, E2E y build de imagen).
@@ -72,6 +72,19 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
 - El acceso es **solo de demostración**: credenciales en el cliente, sin
   autenticación real. No confundir con la contraseña del panel, que sí vive en el
   servidor.
+
+### Plazo de acuse, escalamiento y respuesta (2026-11-18)
+- Cada alerta recibe un `ackDeadlineAt` configurable (`MANGUARE_ACK_MINUTES`, 10
+  min por defecto).
+- Si la red no confirma, el servidor la marca como **vencida** y registra el
+  escalamiento; el panel la ordena primero y la muestra con filtro propio.
+- El panel ofrece el **SMS de escalamiento** (`MANGUARE_ESCALATION_PHONE`) o
+  llamada al 106. No hay gateway automático: el SMS se abre en el teléfono del
+  operador y no confirma entrega.
+- La red puede enviar **respuestas rápidas** (“en camino”, “acude a la posta”,
+  “coordinar traslado” u otra). Responder confirma la recepción.
+- El teléfono muestra el plazo, la alerta vencida y la respuesta de la red; el
+  panel guarda `events[]`, `responses[]` y quién respondió.
 
 ### Decisiones tomadas
 - PWA en lugar de app nativa: instala desde el navegador y permite iterar rápido.
@@ -103,6 +116,9 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
   catálogo, centros y alertas ambientales son estáticos y no vienen de la nube.
 - El login con PIN puede ser una barrera en una emergencia real. Antes del piloto
   hay que definir si se permite un modo invitado o una sesión persistente.
+- El escalamiento por SMS abre la app de mensajes del operador; no hay gateway
+  automático ni confirmación de entrega. Para un piloto hay que integrar un
+  proveedor de SMS o un módem GSM.
 - Los datos de `server/data/alerts.json` son de demostración.
 
 ### Cómo ejecutar
@@ -129,7 +145,7 @@ docker compose up -d --build
 Verificación:
 
 ```bash
-npm run check      # typecheck + 22 pruebas + build
+npm run check      # typecheck + 31 pruebas + build
 npm run test:e2e   # recorrido completo con Chromium
 ```
 

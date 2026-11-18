@@ -1,6 +1,7 @@
-import { ChevronRight, Image as ImageIcon, MapPin } from 'lucide-react';
+import { ChevronRight, Image as ImageIcon, MapPin, TriangleAlert } from 'lucide-react';
 import { EMERGENCY_META } from '../lib/emergency';
 import { formatRelative } from '../lib/format';
+import { isOverdue } from '../lib/sla';
 import type { AlertRecord } from '../lib/types';
 import { StatusChip } from './StatusChip';
 
@@ -39,6 +40,11 @@ export function AlertCard({
           {alert.photo ? (
             <span className="alert-flag">
               <ImageIcon size={12} aria-hidden="true" /> Foto
+            </span>
+          ) : null}
+          {isOverdue(alert) ? (
+            <span className="alert-flag alert-flag--overdue">
+              <TriangleAlert size={12} aria-hidden="true" /> Plazo vencido
             </span>
           ) : null}
         </span>

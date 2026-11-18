@@ -19,6 +19,7 @@ import { useSession } from '../app/SessionContext';
 import { AlertCard } from '../components/AlertCard';
 import { EmptyState } from '../components/EmptyState';
 import { canSpeak, speakSpanish } from '../lib/audio';
+import { isOverdue } from '../lib/sla';
 import { LANGUAGES } from '../lib/settings';
 import { formatPhone, roleLabel } from '../lib/session';
 
@@ -44,6 +45,8 @@ export function HomeScreen({
   const { alerts, online, syncing, settings, syncNow, showToast } = useApp();
   const { session } = useSession();
   const pending = alerts.filter((alert) => alert.state === 'pending');
+  const awaiting = alerts.filter((alert) => alert.state === 'sent' && !alert.acknowledgedAt);
+  const overdue = awaiting.some((alert) => isOverdue(alert));
   const recent = alerts.slice(0, 2);
   const language = LANGUAGES.find((item) => item.id === settings.language);
 
@@ -150,6 +153,35 @@ export function HomeScreen({
                 Ver <ChevronRight size={14} aria-hidden="true" />
               </>
             )}
+          </button>
+        </div>
+      ) : null}
+
+      {awaiting.length > 0 ? (
+        <div className={`confirmation-card ${overdue ? 'is-overdue' : ''}`}>
+          <span className="confirmation-icon">
+            {overdue ? (
+              <TriangleAlert size={21} aria-hidden="true" />
+            ) : (
+              <Clock3 size={21} aria-hidden="true" />
+            )}
+          </span>
+          <div className="confirmation-copy">
+            <strong>
+              {overdue
+                ? 'La red no confirmó en el plazo'
+                : awaiting.length === 1
+                  ? '1 alerta esperando confirmación'
+                  : `${awaiting.length} alertas esperando confirmación`}
+            </strong>
+            <span>
+              {overdue
+                ? 'Puedes avisar por SMS o llamar al 106. La alerta sigue registrada.'
+                : 'La red de salud todavía no confirma que la recibió.'}
+            </span>
+          </div>
+          <button type="button" className="text-btn" onClick={onHistory}>
+            Ver <ChevronRight size={14} aria-hidden="true" />
           </button>
         </div>
       ) : null}

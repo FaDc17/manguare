@@ -192,16 +192,40 @@ async function main() {
     );
     results.panelConfirmed = true;
 
-    // 5. El teléfono recibe la confirmación.
+    // La red deja una indicación para la comunidad.
+    await panel.click('.panel-detail');
+    await panel.waitForSelector('[data-testid="respond-en_camino"]', { timeout: 5000 });
+    await panel.click('[data-testid="respond-en_camino"]');
+    await panel.waitForFunction(
+      () => document.body.textContent?.includes('Ambulancia o brigada en camino'),
+      { timeout: 10000 },
+    );
+    results.panelResponse = true;
+
+    // 5. El teléfono recibe la confirmación y la respuesta.
     await app.bringToFront();
+    await app.waitForFunction(
+      () => {
+        const button = document.querySelector('[data-testid="refresh-status"]');
+        return button instanceof HTMLButtonElement && !button.disabled;
+      },
+      { timeout: 15000 },
+    );
     await app.click('[data-testid="refresh-status"]');
     await app.waitForFunction(
       () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Recibida',
-      { timeout: 30000 },
+      { timeout: 45000 },
     );
+    await app.waitForFunction(
+      () => document.body.textContent?.includes('Ambulancia o brigada en camino'),
+      { timeout: 10000 },
+    );
+    results.appResponse = true;
     results.receivedState = 'Recibida';
 
     // 6. Sin pendientes, no debe consultar cada 20 s (batería/datos).
+    // Deja terminar cualquier sincronización en curso antes de medir.
+    await new Promise((resolve) => setTimeout(resolve, 6000));
     let apiRequests = 0;
     const countRequest = (request) => {
       if (request.url().includes('/api/')) apiRequests += 1;

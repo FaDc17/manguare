@@ -67,6 +67,8 @@ docker run -d --name manguare -p 8787:8787 \
 | `MANGUARE_PANEL_USER` | `salud` | Usuario del panel |
 | `MANGUARE_SESSION_SECRET` | aleatorio por arranque | Firma/deriva las sesiones; fíjalo en producción |
 | `MANGUARE_SESSION_HOURS` | `12` | Duración de la sesión |
+| `MANGUARE_ACK_MINUTES` | `10` | Plazo para que la red confirme una alerta |
+| `MANGUARE_ESCALATION_PHONE` | vacío | Número que recibe el SMS de escalamiento |
 | `MANGUARE_SECURE_COOKIES` | `0` | `1` para cookie `Secure` detrás de HTTPS |
 | `MANGUARE_TRUST_PROXY` | `0` | `1` para leer `X-Forwarded-For` del proxy |
 | `VITE_SMS_NUMBER` | `+51999999999` | Número de respaldo SMS (se fija al compilar) |
@@ -149,13 +151,18 @@ Manguaré no reemplaza a la radio ni al SAMU. Antes de usarlo con una comunidad,
 la red de salud debe acordar y escribir:
 
 1. Quién revisa el panel y en qué horario.
-2. En cuánto tiempo se confirma una alerta.
-3. Qué se hace si nadie confirma (escalamiento por radio, teléfono o visita).
-4. Qué hacer si la alerta llega horas después.
-5. Cómo se avisa a la comunidad que la alerta fue recibida.
-6. Quién puede ver ubicación y fotos, y por cuánto tiempo.
+2. En cuánto tiempo se confirma una alerta (hoy 10 min por defecto).
+3. Qué se hace si nadie confirma: el panel la marca **Vencida** y muestra el SMS
+   de escalamiento al número configurado.
+4. Qué significan las respuestas rápidas (“en camino”, “acude a la posta”,
+   “coordinar traslado”) y quién puede enviarlas.
+5. Qué hacer si la alerta llega horas después.
+6. Cómo se avisa a la comunidad que la alerta fue recibida.
+7. Quién puede ver ubicación y fotos, y por cuánto tiempo.
 
 Sin ese protocolo, una alerta confirmada en el panel puede dar falsa seguridad.
+El SMS de escalamiento se abre en la app de mensajes del operador: no hay envío
+automático ni confirmación de entrega.
 
 ## 7. Diagnóstico rápido
 
@@ -164,7 +171,9 @@ Sin ese protocolo, una alerta confirmada en el panel puede dar falsa seguridad.
 | El panel responde 401 | Inicia sesión; la sesión pudo expirar |
 | El panel no acepta la contraseña | Revisa `MANGUARE_PANEL_PASSWORD` y reinicia |
 | El teléfono queda en Pendiente | ¿Hay red? ¿El servidor responde `/api/health`? |
-| El teléfono no ve la confirmación | Toca **Actualizar estado**; la app consulta sola cada 2 min sin pendientes y cada 20 s con pendientes |
+| El teléfono no ve la confirmación | Toca **Actualizar estado**; la app consulta sola cada 20 s con pendientes y cada 2 min sin pendientes |
+| Una alerta aparece Vencida | La red no confirmó antes de `MANGUARE_ACK_MINUTES`; usa el SMS de escalamiento o llama al 106 |
+| No aparece el SMS de escalamiento | Define `MANGUARE_ESCALATION_PHONE` y reinicia el servidor |
 | El panel está vacío | `npm run seed` con el servidor encendido |
 | El servidor no arranca | Puerto ocupado (`PORT=9000 npm start`) o datos corruptos (ver arriba) |
 | La PWA no se instala | Necesita `localhost` o HTTPS |
@@ -176,7 +185,8 @@ Sin ese protocolo, una alerta confirmada en el panel puede dar falsa seguridad.
 - Fotos en base64 dentro del JSON: archivo pesado y reescritura completa.
 - Sesiones en memoria: un reinicio cierra todas las sesiones.
 - Sin notificaciones push: el panel suena solo si está abierto.
-- El SMS abre la app de mensajes y no confirma entrega.
+- El SMS abre la app de mensajes y no confirma entrega; el escalamiento tampoco
+  se envía solo.
 - Sin asignación de responsables ni historial de auditoría fuera de la alerta.
 - El service worker y el Background Sync dependen de Android/Chrome; falta la
   prueba en equipos físicos de gama baja (ver `docs/PRUEBAS.md`).

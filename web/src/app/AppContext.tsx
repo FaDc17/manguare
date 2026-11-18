@@ -206,7 +206,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     showToast('Se borraron las alertas de este teléfono.', 'ok');
   }, [refresh, showToast]);
 
-  const pendingCount = alerts.filter((alert) => alert.state === 'pending').length;
+  const activeCount = alerts.filter((alert) => {
+    if (alert.state === 'pending' || alert.state === 'sent') return true;
+    if (alert.state !== 'received' || !alert.acknowledgedAt) return false;
+    if (alert.responses?.length) return false;
+    const acked = Date.parse(alert.acknowledgedAt);
+    return !Number.isNaN(acked) && Date.now() - acked < 10 * 60_000;
+  }).length;
 
   useEffect(() => {
     void refresh();
@@ -272,17 +278,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await runSync();
         if (!disposed) await refresh();
       } finally {
-        if (!disposed) {
-          syncingRef.current = false;
-          setSyncing(false);
-        }
+        // Aunque el efecto se haya reiniciado, hay que liberar el candado:
+        // si no, la app deja de reintentar y el botón queda deshabilitado.
+        syncingRef.current = false;
+        setSyncing(false);
       }
     };
 
     void tick();
     // Con alertas pendientes se reintenta seguido; sin pendientes basta una
     // consulta lenta para detectar confirmaciones de la red de salud.
-    const intervalMs = pendingCount > 0 ? 20_000 : 120_000;
+    const intervalMs = activeCount > 0 ? 20_000 : 120_000;
     const interval = window.setInterval(() => void tick(), intervalMs);
     const onVisible = () => {
       if (document.visibilityState === 'visible') void tick();
@@ -294,7 +300,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.clearInterval(interval);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [online, refresh, pendingCount]);
+  }, [online, refresh, activeCount]);
 
   const value = useMemo<AppContextValue>(
     () => ({

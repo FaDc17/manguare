@@ -14,23 +14,25 @@ npm run test:e2e    # recorrido completo con Chromium (requiere build)
 Resultado de `npm run check`:
 
 - TypeScript sin errores.
-- 13 pruebas de API/servidor.
-- 9 pruebas de la cola offline y del acceso demo.
+- 20 pruebas de API/servidor.
+- 11 pruebas de la cola offline, acceso demo y plazos.
 - Build de app, panel y service worker correcto.
 
 Resultado de `npm run test:e2e`:
 
 ```json
 {
-  "loginMs": 862,
+  "loginMs": 854,
   "greeting": "Hola, Juan · Miembro de la comunidad · 992 066 275",
-  "loadMs": 872,
-  "navigation": { "domContentLoaded": 598, "load": 599 },
+  "loadMs": 866,
+  "navigation": { "domContentLoaded": 602, "load": 604 },
   "offlineState": "Pendiente",
   "persistedAfterReload": true,
   "onlineState": "Enviada",
   "panelReporter": true,
   "panelConfirmed": true,
+  "panelResponse": true,
+  "appResponse": true,
   "receivedState": "Recibida",
   "idleApiRequestsIn3s": 0,
   "communityData": true,
@@ -70,6 +72,23 @@ hardware real.
 | La app no descarga toda la lista | Consulta `GET /api/alerts/:id` solo para sus alertas | OK |
 | SMS de respaldo | Abre la app de mensajes con texto y número | Prototipo; no confirma entrega |
 
+### Plazo de acuse, escalamiento y respuesta
+
+| Qué se verifica | Cómo | Resultado |
+| --- | --- | --- |
+| Plazo configurable | `ackDeadlineAt` = recepción + `MANGUARE_ACK_MINUTES` | OK (prueba de servidor) |
+| Vencimiento automático | Al consultar después del plazo, `escalatedAt` y evento `escalated` | OK |
+| Confirmada no vence | Una alerta confirmada no se marca vencida | OK |
+| Respuesta confirma | `POST /responses` guarda la indicación y confirma si faltaba | OK |
+| Respuestas inválidas | Código desconocido o “otra” sin texto → 400 | OK |
+| Escalamiento manual | `POST /escalate` registra canal `sms` y contador | OK |
+| Auth del panel | Respuestas y escalamiento sin sesión → 401 | OK |
+| Teléfono recibe la respuesta | El panel responde “ambulancia en camino” y la app la muestra | OK (E2E) |
+
+> El SMS de escalamiento se abre en la app de mensajes del operador. El servidor
+> no envía SMS ni confirma entrega; para el piloto hace falta un gateway o módem.
+
+
 ## 4. Integración del prototipo de Figma
 
 | Qué se verifica | Cómo | Resultado |
@@ -89,7 +108,7 @@ hardware real.
 
 ### Automatizado
 
-- CPU 4× más lenta + red lenta: carga inicial + login **872 ms**.
+- CPU 4× más lenta + red lenta: carga inicial + login **866 ms**.
 - Cola vacía: **0 solicitudes API en 3.5 s** (antes se consultaba cada 20 s).
 - Con pendientes: reintento cada 20 s; sin pendientes: cada 2 min.
 - Cortes de red simulados con Chromium (`Network.emulateNetworkConditions`).

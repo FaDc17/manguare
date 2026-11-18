@@ -104,7 +104,11 @@ export function mergeServerState(
   const changed =
     nextState !== local.state ||
     server.serverReceivedAt !== local.serverReceivedAt ||
-    server.acknowledgedAt !== local.acknowledgedAt;
+    server.acknowledgedAt !== local.acknowledgedAt ||
+    server.ackDeadlineAt !== local.ackDeadlineAt ||
+    server.escalatedAt !== local.escalatedAt ||
+    (server.responses?.length ?? 0) !== (local.responses?.length ?? 0) ||
+    server.responses?.at(-1)?.at !== local.responses?.at(-1)?.at;
 
   if (!changed) return local;
 
@@ -113,6 +117,10 @@ export function mergeServerState(
     state: nextState,
     serverReceivedAt: server.serverReceivedAt,
     acknowledgedAt: server.acknowledgedAt,
+    acknowledgedBy: server.acknowledgedBy,
+    ackDeadlineAt: server.ackDeadlineAt,
+    escalatedAt: server.escalatedAt,
+    responses: server.responses,
     updatedAt: nowIso(),
     lastError: undefined,
     nextAttemptAt: undefined,
@@ -231,10 +239,7 @@ async function getServerAlert(id: string): Promise<ServerAlert | null> {
  */
 export async function pullStatuses(): Promise<number> {
   const localAlerts = (await getAllAlerts()).filter(
-    (alert) =>
-      alert.state !== 'received' &&
-      alert.state !== 'canceled' &&
-      Boolean(alert.serverReceivedAt),
+    (alert) => alert.state !== 'canceled' && Boolean(alert.serverReceivedAt),
   );
 
   let updated = 0;

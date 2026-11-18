@@ -17,6 +17,13 @@ export interface AlertLocation {
   capturedAt: string;
 }
 
+export interface AlertResponse {
+  code: string;
+  message?: string;
+  at: string;
+  by?: string;
+}
+
 export interface AlertRecord {
   id: string;
   type: EmergencyType;
@@ -40,6 +47,11 @@ export interface AlertRecord {
   lastError?: string;
   serverReceivedAt?: string;
   acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  /** Plazo para que la red confirme la alerta. */
+  ackDeadlineAt?: string;
+  escalatedAt?: string;
+  responses?: AlertResponse[];
   smsOpenedAt?: string;
 }
 
@@ -71,7 +83,12 @@ export interface ServerAlert {
   serverReceivedAt: string;
   acknowledgedAt?: string;
   acknowledgedBy?: string;
-  events?: Array<{ type: string; at: string; by?: string }>;
+  ackDeadlineAt?: string;
+  escalatedAt?: string;
+  escalationCount?: number;
+  lastEscalationChannel?: string;
+  responses?: AlertResponse[];
+  events?: Array<{ type: string; at: string; by?: string; code?: string; channel?: string }>;
 }
 
 export interface SyncResult {

@@ -48,6 +48,9 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const pending = alerts.filter((alert) => alert.state === 'pending').length;
+  const awaiting = alerts.filter(
+    (alert) => alert.state === 'sent' && !alert.acknowledgedAt,
+  ).length;
   const language = LANGUAGES.find((item) => item.id === settings.language);
 
   const handleClear = async () => {
@@ -310,7 +313,9 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
                 {online
                   ? pending > 0
                     ? `${pending} alerta${pending === 1 ? '' : 's'} en cola. Se reintenta con espera progresiva.`
-                    : 'Todo al día.'
+                    : awaiting > 0
+                      ? `${awaiting} alerta${awaiting === 1 ? '' : 's'} esperando confirmación de la red.`
+                      : 'Todo al día.'
                   : 'Sin conexión: las alertas esperan en el teléfono.'}
               </span>
             </span>

@@ -172,10 +172,16 @@ test('la confirmación de la red de salud llega por alerta, sin descargar la lis
   assert.ok(created);
 
   let requestedPath = '';
+  const responseAt = new Date().toISOString();
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     requestedPath = String(input);
     return new Response(
-      JSON.stringify({ alert: serverAlert(created as AlertRecord, true) }),
+      JSON.stringify({
+        alert: {
+          ...serverAlert(created as AlertRecord, true),
+          responses: [{ code: 'en_camino', at: responseAt, by: 'salud' }],
+        },
+      }),
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     );
   }) as typeof fetch;
@@ -187,6 +193,8 @@ test('la confirmación de la red de salud llega por alerta, sin descargar la lis
   const stored = await getAlert(created!.id);
   assert.equal(stored?.state, 'received');
   assert.ok(stored?.acknowledgedAt);
+  assert.equal(stored?.responses?.[0].code, 'en_camino');
+  assert.equal(stored?.responses?.[0].at, responseAt);
 });
 
 test('una alerta pendiente se puede anular y no se envía', async () => {
