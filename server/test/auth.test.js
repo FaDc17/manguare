@@ -6,6 +6,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { createHandler } from '../src/app.js';
 import { createAuth } from '../src/auth.js';
+import { BiodiversityStore } from '../src/biodiversity-store.js';
 import { AlertStore } from '../src/store.js';
 
 process.env.MANGUARE_LOG = '0';
@@ -23,6 +24,7 @@ before(async () => {
   await fs.writeFile(path.join(staticDir, 'panel.html'), '<html>PANEL</html>');
 
   const store = new AlertStore(path.join(directory, 'alerts.json'));
+  const biodiversityStore = new BiodiversityStore(path.join(directory, 'biodiversity.json'));
   const auth = createAuth({
     enabled: true,
     password: 'clave-de-prueba',
@@ -30,7 +32,7 @@ before(async () => {
     secret: Buffer.from('secreto-de-prueba'),
     ttlMs: 60 * 60 * 1000,
   });
-  server = http.createServer(createHandler({ store, staticDir, auth }));
+  server = http.createServer(createHandler({ store, biodiversityStore, staticDir, auth }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -69,13 +71,40 @@ test('el panel exige sesión para listar y confirmar alertas', async () => {
   });
   assert.equal(created.status, 201);
 
+  const report = await fetch(`${base}/api/biodiversity`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      id: 'auth-bio-report-01',
+      category: 'Tala ilegal',
+      title: 'Tala junto al río',
+      description: 'Árboles cortados cerca de la comunidad.',
+      reportedBy: 'Ana',
+      clientCreatedAt: new Date().toISOString(),
+    }),
+  });
+  assert.equal(report.status, 201);
+
   // La app móvil puede consultar su propia alerta por id, sin sesión.
   const own = await fetch(`${base}/api/alerts/auth-alert-0001`);
   assert.equal(own.status, 200);
 
+  const reportStatus = await fetch(`${base}/api/biodiversity/auth-bio-report-01/status`);
+  assert.equal(reportStatus.status, 200);
+  assert.equal((await reportStatus.json()).report.state, 'sent');
+
   const list = await fetch(`${base}/api/alerts`);
   assert.equal(list.status, 401);
   assert.equal((await list.json()).error, 'authentication_required');
+
+  const reportList = await fetch(`${base}/api/biodiversity`);
+  assert.equal(reportList.status, 401);
+  const reportDetails = await fetch(`${base}/api/biodiversity/auth-bio-report-01`);
+  assert.equal(reportDetails.status, 401);
+  const markReportRead = await fetch(`${base}/api/biodiversity/auth-bio-report-01/read`, {
+    method: 'POST',
+  });
+  assert.equal(markReportRead.status, 401);
 
   const ack = await fetch(`${base}/api/alerts/auth-alert-0001/received`, { method: 'POST' });
   assert.equal(ack.status, 401);
@@ -104,6 +133,19 @@ test('rechaza credenciales incorrectas y acepta las correctas con cookie segura'
   assert.equal(list.status, 200);
   const body = await list.json();
   assert.equal(body.alerts.length, 1);
+
+  const reportList = await fetch(`${base}/api/biodiversity`, { headers: { cookie } });
+  assert.equal(reportList.status, 200);
+  assert.equal((await reportList.json()).reports.length, 1);
+  const reportDetails = await fetch(`${base}/api/biodiversity/auth-bio-report-01`, {
+    headers: { cookie },
+  });
+  assert.equal(reportDetails.status, 200);
+  const markReportRead = await fetch(`${base}/api/biodiversity/auth-bio-report-01/read`, {
+    method: 'POST',
+    headers: { cookie },
+  });
+  assert.equal(markReportRead.status, 200);
 });
 
 test('la confirmación queda auditada con el usuario de la sesión', async () => {

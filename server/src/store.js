@@ -65,6 +65,24 @@ export class AlertStore {
     return { alert, created: true };
   }
 
+  async updateDetails(id, details) {
+    await this.ready;
+    const existing = this.alerts.get(id);
+    if (!existing) return null;
+    const updated = {
+      ...existing,
+      note: details.note,
+      community: details.community,
+      consentLocation: details.consentLocation,
+      ...(details.consentLocation && details.location ? { location: details.location } : {}),
+      ...(!details.consentLocation || !details.location ? { location: undefined } : {}),
+      ...(details.photo ? { photo: details.photo } : { photo: undefined }),
+    };
+    this.alerts.set(id, updated);
+    await this.#persist();
+    return updated;
+  }
+
   async acknowledge(id, acknowledgedAt, actor) {
     await this.ready;
     const existing = this.alerts.get(id);

@@ -18,6 +18,7 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=8787 \
     MANGUARE_DATA_FILE=/data/alerts.json \
+    MANGUARE_BIODIVERSITY_FILE=/data/biodiversity.json \
     MANGUARE_STATIC_DIR=/app/web/dist
 
 COPY package.json ./

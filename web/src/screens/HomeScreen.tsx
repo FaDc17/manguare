@@ -28,14 +28,14 @@ const HOME_AUDIO =
   'Puedes ver si está pendiente, enviada o recibida. Si tienes señal, también puedes avisar por mensaje de texto.';
 
 export function HomeScreen({
-  onNew,
+  onSOS,
   onOpenAlert,
   onHistory,
   onCommunity,
   onOpenLanguage,
   onOpenHelp,
 }: {
-  onNew: () => void;
+  onSOS: () => void;
   onOpenAlert: (id: string) => void;
   onHistory: () => void;
   onCommunity: () => void;
@@ -77,7 +77,7 @@ export function HomeScreen({
           si sigue pendiente.
         </p>
 
-        <button type="button" className="sos-button" data-testid="sos-button" onClick={onNew}>
+        <button type="button" className="sos-button" data-testid="sos-button" onClick={onSOS}>
           <span className="sos-ring sos-ring-1" aria-hidden="true" />
           <span className="sos-ring sos-ring-2" aria-hidden="true" />
           <span className="sos-inner">

@@ -12,13 +12,25 @@ import {
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
 
-export function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }) {
-  const [phone, setPhone] = useState('');
+export function LoginScreen({
+  onLogin,
+  onRegister,
+}: {
+  onLogin: (session: Session) => void;
+  onRegister: () => void;
+}) {
+  const [identifier, setIdentifier] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const canSubmit = useMemo(() => normalizePhone(phone).length >= 6 && pin.length === 6, [phone, pin]);
+  const canSubmit = useMemo(
+    () =>
+      (normalizePhone(identifier).length === 9 ||
+        /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(identifier.trim())) &&
+      pin.length === 6,
+    [identifier, pin],
+  );
 
   const addDigit = (digit: string) => {
     setError(null);
@@ -31,14 +43,14 @@ export function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }
   };
 
   const fillDemo = (demoPhone: string) => {
-    setPhone(demoPhone);
+    setIdentifier(demoPhone);
     setPin(DEMO_PIN);
     setError(null);
     setNotice(null);
   };
 
   const submit = () => {
-    const session = authenticate(phone, pin);
+    const session = authenticate(identifier, pin);
     if (!session) {
       setError('Número o PIN incorrecto. Usa uno de los accesos de demo.');
       setPin('');
@@ -68,15 +80,16 @@ export function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }
           <span className="login-phone">
             <UserRound size={17} aria-hidden="true" />
             <input
-              type="tel"
-              inputMode="numeric"
-              autoComplete="tel"
+              type="text"
+              inputMode="text"
+              autoComplete="username"
               data-testid="login-phone"
               placeholder="Ej. 992 066 275"
-              value={phone}
+              value={identifier}
               onChange={(event) => {
                 setError(null);
-                setPhone(normalizePhone(event.target.value));
+                const value = event.target.value.slice(0, 100);
+                setIdentifier(value.includes('@') ? value : normalizePhone(value));
               }}
             />
           </span>
@@ -158,7 +171,8 @@ export function LoginScreen({ onLogin }: { onLogin: (session: Session) => void }
           ¿Aún no tienes una cuenta?{' '}
           <button
             type="button"
-            onClick={() => setNotice('El registro se habilitará en el piloto. Usa un acceso de demo.')}
+            data-testid="register-link"
+            onClick={onRegister}
           >
             Regístrate
           </button>

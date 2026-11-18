@@ -1,4 +1,4 @@
-import { getAllAlerts, putAlert } from './db';
+import { getAlert, getAllAlerts, putAlert } from './db';
 import { isAttemptDue, nextAttemptAt } from './retry';
 import type {
   AlertDraft,
@@ -47,6 +47,7 @@ export async function createLocalAlert(draft: AlertDraft): Promise<AlertRecord> 
   const alert: AlertRecord = {
     id: newAlertId(),
     type: draft.type,
+    isSos: draft.isSos,
     note: trim(draft.note, 1000),
     community: trim(draft.community, 80),
     deviceName: trim(draft.deviceName, 80),
@@ -68,6 +69,7 @@ function toServerPayload(alert: AlertRecord) {
   return {
     id: alert.id,
     type: alert.type,
+    isSos: alert.isSos,
     note: alert.note,
     community: alert.community,
     deviceName: alert.deviceName,
@@ -94,6 +96,7 @@ export function mergeServerState(
   fallbackState: AlertState,
 ): AlertRecord {
   if (local.state === 'canceled') return local;
+  const pendingDetails = local.detailsPendingSync === true;
 
   const nextState = server.acknowledgedAt
     ? 'received'
@@ -108,12 +111,23 @@ export function mergeServerState(
     server.ackDeadlineAt !== local.ackDeadlineAt ||
     server.escalatedAt !== local.escalatedAt ||
     (server.responses?.length ?? 0) !== (local.responses?.length ?? 0) ||
-    server.responses?.at(-1)?.at !== local.responses?.at(-1)?.at;
+    server.responses?.at(-1)?.at !== local.responses?.at(-1)?.at ||
+    (!pendingDetails &&
+      (server.note !== local.note ||
+        server.community !== local.community ||
+        server.photo !== local.photo)) ||
+    server.isSos !== local.isSos;
 
   if (!changed) return local;
 
   return {
     ...local,
+    note: pendingDetails ? local.note : server.note,
+    community: pendingDetails ? local.community : server.community,
+    photo: pendingDetails ? local.photo : server.photo,
+    location: pendingDetails ? local.location : server.location,
+    consentLocation: pendingDetails ? local.consentLocation : server.consentLocation,
+    isSos: server.isSos,
     state: nextState,
     serverReceivedAt: server.serverReceivedAt,
     acknowledgedAt: server.acknowledgedAt,
@@ -166,10 +180,18 @@ async function doFlush(force: boolean): Promise<SyncResult> {
     const attemptedAt = nowIso();
     try {
       const server = await postAlert(alert);
-      const merged = mergeServerState(alert, server, 'sent');
+      const current = (await getAlert(alert.id)) ?? alert;
+      const serverHasLatestDetails =
+        server.note === current.note &&
+        server.community === current.community &&
+        server.photo === current.photo &&
+        server.consentLocation === current.consentLocation &&
+        JSON.stringify(server.location) === JSON.stringify(current.location);
+      const merged = mergeServerState(current, server, 'sent');
       await putAlert({
         ...merged,
-        attempts: alert.attempts + 1,
+        detailsPendingSync: !serverHasLatestDetails,
+        attempts: current.attempts + 1,
         lastAttemptAt: attemptedAt,
         lastError: undefined,
         nextAttemptAt: undefined,
@@ -261,6 +283,7 @@ export async function pullStatuses(): Promise<number> {
 
 export async function syncAll(force = false): Promise<SyncResult & { updated: number }> {
   const result = await flushQueue(force);
+  await flushPendingDetails();
   let updated = 0;
   try {
     updated = await pullStatuses();
@@ -268,6 +291,57 @@ export async function syncAll(force = false): Promise<SyncResult & { updated: nu
     // Sin conexión estable: se reintentará en el próximo ciclo.
   }
   return { ...result, updated };
+}
+
+export async function updateAlertDetails(
+  id: string,
+  details: {
+    note: string;
+    community: string;
+    location?: AlertRecord['location'];
+    photo?: string;
+  },
+): Promise<AlertRecord> {
+  const alert = await getAlert(id);
+  if (!alert) throw new Error('No se encontró la alerta que deseas completar.');
+  const updated: AlertRecord = {
+    ...alert,
+    ...details,
+    consentLocation: Boolean(details.location),
+    detailsPendingSync: true,
+    updatedAt: nowIso(),
+  };
+  await putAlert(updated);
+  return updated;
+}
+
+async function flushPendingDetails(): Promise<void> {
+  const pending = (await getAllAlerts()).filter(
+    (alert) => alert.detailsPendingSync && alert.serverReceivedAt,
+  );
+  for (const alert of pending) {
+    try {
+      const response = await fetch(`${API}/alerts/${encodeURIComponent(alert.id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          note: alert.note,
+          community: alert.community,
+          location: alert.consentLocation ? alert.location : undefined,
+          consentLocation: alert.consentLocation,
+          photo: alert.photo,
+        }),
+        cache: 'no-store',
+      });
+      if (!response.ok) throw new HttpError(response.status, '');
+      const data = (await response.json()) as { alert?: ServerAlert };
+      if (!data.alert) throw new Error('Respuesta del servidor incompleta');
+      const merged = mergeServerState(alert, data.alert, alert.state);
+      await putAlert({ ...merged, detailsPendingSync: false });
+    } catch {
+      // Se reintentará junto con las demás actualizaciones en el próximo ciclo.
+    }
+  }
 }
 
 /**

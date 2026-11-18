@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Clock3, Inbox, Plus, RefreshCw, TriangleAlert } from 'lucide-react';
+import { Clock3, Inbox, Leaf, Plus, RefreshCw, TriangleAlert } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { AlertCard } from '../components/AlertCard';
 import { EmptyState } from '../components/EmptyState';
@@ -27,7 +27,7 @@ export function HistoryScreen({
   onOpenAlert: (id: string) => void;
   onNew: () => void;
 }) {
-  const { alerts, online, syncing, syncNow } = useApp();
+  const { alerts, biodiversityReports, online, syncing, syncNow } = useApp();
   const [filter, setFilter] = useState<Filter>('all');
   const pending = alerts.filter((alert) => alert.state === 'pending');
   const filtered = useMemo(
@@ -50,7 +50,13 @@ export function HistoryScreen({
           <h1>Mis alertas</h1>
           <p className="screen-lead">Revisa qué se envió y qué sigue pendiente.</p>
         </div>
-        <button type="button" className="icon-btn" onClick={() => void syncNow(true)} aria-label="Actualizar estados">
+        <button
+          type="button"
+          className="icon-btn"
+          data-testid="history-refresh"
+          onClick={() => void syncNow(true)}
+          aria-label="Actualizar estados"
+        >
           <RefreshCw size={20} className={syncing ? 'spin' : ''} aria-hidden="true" />
         </button>
       </header>
@@ -137,6 +143,38 @@ export function HistoryScreen({
           )}
         </EmptyState>
       )}
+
+      <section className="biodiversity-history" aria-labelledby="biodiversity-history-title">
+        <div className="section-head">
+          <h2 id="biodiversity-history-title">Mis reportes de biodiversidad</h2>
+        </div>
+        {biodiversityReports.length ? (
+          <div className="biodiversity-history-list">
+            {biodiversityReports.map((report) => (
+              <article
+                className="biodiversity-history-card"
+                data-testid={`biodiversity-report-${report.id}`}
+                key={report.id}
+              >
+                <span className="biodiversity-history-icon"><Leaf size={18} aria-hidden="true" /></span>
+                <span className="biodiversity-history-copy">
+                  <strong>{report.title}</strong>
+                  <small>{report.category} · {formatRelative(report.createdAt)}</small>
+                </span>
+                <span className={`biodiversity-state is-${report.state}`}>
+                  {report.state === 'read'
+                    ? 'Leída'
+                    : report.state === 'sent'
+                      ? 'Enviada'
+                      : 'Pendiente'}
+                </span>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="biodiversity-history-empty">Aquí aparecerá el estado de tus reportes.</p>
+        )}
+      </section>
     </div>
   );
 }

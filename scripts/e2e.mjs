@@ -18,6 +18,7 @@ import process from 'node:process';
 import puppeteer from 'puppeteer-core';
 import { createHandler } from '../server/src/app.js';
 import { createAuth } from '../server/src/auth.js';
+import { BiodiversityStore } from '../server/src/biodiversity-store.js';
 import { AlertStore } from '../server/src/store.js';
 
 process.env.MANGUARE_LOG = '0';
@@ -28,6 +29,23 @@ const staticDir = path.join(root, 'web', 'dist');
 
 const CHROME_CANDIDATES = [
   process.env.CHROME_PATH,
+  ...(process.env.PROGRAMFILES
+    ? [path.join(process.env.PROGRAMFILES, 'Google', 'Chrome', 'Application', 'chrome.exe')]
+    : []),
+  ...(process.env['PROGRAMFILES(X86)']
+    ? [
+        path.join(
+          process.env['PROGRAMFILES(X86)'],
+          'Microsoft',
+          'Edge',
+          'Application',
+          'msedge.exe',
+        ),
+      ]
+    : []),
+  ...(process.env.LOCALAPPDATA
+    ? [path.join(process.env.LOCALAPPDATA, 'Google', 'Chrome', 'Application', 'chrome.exe')]
+    : []),
   '/usr/bin/chromium',
   '/usr/bin/chromium-browser',
   '/usr/bin/google-chrome',
@@ -54,13 +72,22 @@ async function main() {
 
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'manguare-e2e-'));
   const store = new AlertStore(path.join(directory, 'alerts.json'));
+  const biodiversityStore = new BiodiversityStore(path.join(directory, 'biodiversity.json'));
+  const dniSample = path.join(directory, 'dni-demo.png');
+  await fs.writeFile(
+    dniSample,
+    Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  );
   const auth = createAuth({
     enabled: true,
     password: PASSWORD,
     user: 'salud',
     secret: Buffer.from('secreto-e2e'),
   });
-  const server = http.createServer(createHandler({ store, staticDir, auth }));
+  const server = http.createServer(createHandler({ store, biodiversityStore, staticDir, auth }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -111,7 +138,8 @@ async function main() {
     // 1. Crear la alerta sin red.
     await app.setOfflineMode(true);
     await app.waitForFunction(() => navigator.onLine === false, { timeout: 5000 });
-    await app.click('[data-testid="sos-button"]');
+    await app.click('[data-testid="nav-history"]');
+    await app.click('.history > button.btn-danger');
     await app.click('[data-testid="type-mordedura"]');
     await app.waitForSelector('[data-testid="continue-button"]');
     await app.type('input[placeholder^="Ej. Nueva Esperanza"]', 'Comunidad E2E');
@@ -174,7 +202,8 @@ async function main() {
     await panel.waitForSelector('[data-testid="login-password"]', { timeout: 10000 });
     await panel.type('[data-testid="login-password"]', PASSWORD);
     await panel.click('[data-testid="login-submit"]');
-    await panel.waitForSelector('[data-testid^="ack-"]', { timeout: 10000 });
+    await panel.bringToFront();
+    await panel.waitForSelector('[data-testid^="ack-"]', { timeout: 15000 });
     await panel.waitForFunction(() => document.body.textContent?.includes('Reportó Juan'), {
       timeout: 5000,
     });
@@ -200,6 +229,8 @@ async function main() {
       () => document.body.textContent?.includes('Ambulancia o brigada en camino'),
       { timeout: 10000 },
     );
+    await panel.click('.panel-modal .panel-detail--large');
+    await panel.waitForSelector('.panel-modal', { hidden: true, timeout: 5000 });
     results.panelResponse = true;
 
     // 5. El teléfono recibe la confirmación y la respuesta.
@@ -239,7 +270,64 @@ async function main() {
       `con la cola vacía no debería consultar el servidor: ${apiRequests} solicitudes`,
     );
 
-    // 7. Los datos de comunidad del prototipo están en la app.
+    // 7. SOS mínimo, detalle sobre la misma alerta y lectura desde el panel.
+    await app.click('[data-testid="nav-home"]');
+    const alertCountBeforeSos = (await store.list()).length;
+    await app.click('[data-testid="sos-button"]');
+    await app.click('[data-testid="sos-confirm-cancel"]');
+    await app.waitForFunction(
+      () => !document.querySelector('[data-testid="sos-confirm-send"]'),
+      { timeout: 5000 },
+    );
+    assert.equal((await store.list()).length, alertCountBeforeSos, 'No debe enviar al elegir No');
+
+    await app.click('[data-testid="sos-button"]');
+    await app.click('[data-testid="sos-confirm-send"]');
+    await app.waitForSelector('[data-testid="sos-detail-open"]', { timeout: 15000 });
+    await app.waitForFunction(
+      () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Enviada',
+      { timeout: 15000 },
+    );
+    await app.click('[data-testid="sos-detail-open"]');
+    await app.type('[data-testid="sos-detail-reference"]', 'Río de la comunidad');
+    await app.type('[data-testid="sos-detail-description"]', 'Necesitamos apoyo en la ribera.');
+    await app.click('[data-testid="sos-detail-save"]');
+    await app.waitForFunction(
+      () => !document.querySelector('[data-testid="sos-detail-save"]'),
+      { timeout: 10000 },
+    );
+    const sosAlerts = (await store.list()).filter((alert) => alert.isSos);
+    assert.equal(sosAlerts.length, 1, 'El detalle debe actualizar la misma alerta SOS');
+    assert.equal(sosAlerts[0].note, 'Necesitamos apoyo en la ribera.');
+    assert.equal(sosAlerts[0].community, 'Río de la comunidad');
+    results.sosDetailUpdatedExistingAlert = true;
+
+    await panel.bringToFront();
+    const sosAckSelector = `[data-testid="ack-${sosAlerts[0].id}"]`;
+    await panel.waitForSelector(sosAckSelector, { timeout: 10000 });
+    await panel.click(sosAckSelector);
+    await panel.waitForFunction(
+      (selector) => !document.querySelector(selector),
+      { timeout: 10000 },
+      sosAckSelector,
+    );
+    await app.bringToFront();
+    await app.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="refresh-status"]');
+      return button instanceof HTMLButtonElement && !button.disabled;
+    }, { timeout: 15000 });
+    await app.click('[data-testid="refresh-status"]');
+    await app.waitForFunction(
+      () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Leída',
+      { timeout: 15000 },
+    );
+    await app.click('[data-testid="nav-history"]');
+    await app.waitForFunction(() => document.body.textContent?.includes('Leída'), {
+      timeout: 10000,
+    });
+    results.sosReadStateInProfile = true;
+
+    // 8. Publicaciones, detalle y reporte de biodiversidad.
     await app.bringToFront();
     await app.click('[data-testid="nav-community"]');
     await app.waitForFunction(
@@ -249,15 +337,149 @@ async function main() {
     const communityText = await app.evaluate(() => document.body.innerText);
     assert.ok(communityText.includes('Hospital Santa María'), 'faltan los centros de apoyo');
     assert.ok(communityText.includes('Alerta Amazonía'), 'falta la sección ambiental');
-    results.communityData = true;
 
-    // 8. Cerrar sesión de la app vuelve al acceso.
+    await app.click('[data-testid="listings-view-all"]');
+    await app.waitForFunction(() => document.body.textContent?.includes('Todas las publicaciones'));
+    await app.click('.community-card-button');
+    await app.waitForFunction(
+      () => document.body.textContent?.includes('Rango de precio') &&
+        document.body.textContent?.includes('Reseñas'),
+    );
+    await app.click('button[aria-label="Volver"]');
+    await app.waitForFunction(() => document.body.textContent?.includes('Todas las publicaciones'));
+    await app.click('button[aria-label="Volver"]');
+    await app.waitForFunction(() => document.body.textContent?.includes('Conecta Amazonía'));
+
+    await app.click('[data-testid="environment-topic-tala-ilegal"]');
+    await app.waitForSelector('[data-testid="biodiversity-category"]');
+    assert.equal(
+      await app.$eval('[data-testid="biodiversity-category"]', (element) => element.value),
+      'Tala ilegal',
+    );
+    await app.type('[data-testid="biodiversity-title"]', 'Tala junto a la quebrada');
+    await app.type(
+      '[data-testid="biodiversity-description"]',
+      'Se observan árboles cortados cerca del camino comunal.',
+    );
+    await app.click('[data-testid="biodiversity-submit"]');
+    await app.waitForFunction(
+      () => document.querySelector('[data-testid="biodiversity-state"]')?.textContent === 'Enviada',
+      { timeout: 15000 },
+    );
+    const report = (await biodiversityStore.list())[0];
+    assert.equal(report.category, 'Tala ilegal');
+    assert.equal(report.title, 'Tala junto a la quebrada');
+    await app.click('[data-testid="nav-history"]');
+    const reportSelector = `[data-testid="biodiversity-report-${report.id}"]`;
+    await app.waitForSelector(reportSelector, { timeout: 10000 });
+    assert.ok(
+      (await app.$eval(reportSelector, (element) => element.textContent)).includes('Enviada'),
+    );
+    const panelCookie = panelCookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
+    const markedReport = await fetch(`${base}/api/biodiversity/${report.id}/read`, {
+      method: 'POST',
+      headers: { cookie: panelCookie },
+    });
+    assert.equal(markedReport.status, 200);
+    await app.click('[data-testid="history-refresh"]');
+    await app.waitForFunction(
+      (selector) => document.querySelector(selector)?.textContent?.includes('Leída'),
+      { timeout: 10000 },
+      reportSelector,
+    );
+    results.publicationDetails = true;
+    results.biodiversityAvailableAndRead = true;
+
+    // 9. Mapa: solo Conecta y centros de apoyo; ubica y enfoca resultados.
+    await app.click('[data-testid="nav-map"]');
+    const mapFilters = await app.$$eval('.map-filters button', (buttons) =>
+      buttons.map((button) => button.textContent?.trim()),
+    );
+    assert.deepEqual(mapFilters, ['Conecta', 'Centro de apoyo']);
+    await app.browserContext().overridePermissions(base, ['geolocation']);
+    await app.setGeolocation({ latitude: -5.9, longitude: -76.1 });
+    await app.click('.map-location-button');
+    await app.waitForFunction(() => document.body.textContent?.includes('Actualizar mi ubicación'));
+    await app.type('[data-testid="map-search-input"]', 'Hospital');
+    await app.waitForFunction(
+      () => document.querySelector('.map-result-list')?.textContent?.includes('Hospital'),
+    );
+    await app.click('.map-result-list button');
+    await app.waitForSelector('[data-testid="map-selected"]');
+    assert.ok(
+      (await app.$eval('[data-testid="map-selected"]', (element) => element.textContent)).includes(
+        'Hospital',
+      ),
+    );
+    results.mapLocationAndFilters = true;
+
+    // 10. Cerrar sesión y completar registro local con DNI de demostración.
+    await app.click('[data-testid="nav-settings"]');
+    await app.click('[data-testid="logout-button"]');
+    await app.waitForSelector('[data-testid="login-phone"]', { timeout: 5000 });
+    await app.click('[data-testid="register-link"]');
+    await app.waitForSelector('[data-testid="register-submit"]');
+
+    await app.type('[data-testid="register-phone"]', '123');
+    await app.type('[data-testid="register-email"]', 'correo-invalido');
+    await app.click('[data-testid="register-submit"]');
+    await app.waitForFunction(
+      () =>
+        document.body.textContent?.includes('Usa 9 dígitos y empieza con 9') &&
+        document.body.textContent?.includes('Escribe un correo válido.'),
+    );
+
+    await app.click('[data-testid="register-first-name"]');
+    await app.type('[data-testid="register-first-name"]', 'Ana');
+    await app.type('[data-testid="register-last-name"]', 'Demo');
+    await app.click('[data-testid="register-phone"]');
+    await app.keyboard.down('Control');
+    await app.keyboard.press('A');
+    await app.keyboard.up('Control');
+    await app.keyboard.press('Backspace');
+    await app.type('[data-testid="register-phone"]', '923456789');
+    await app.click('[data-testid="register-email"]');
+    await app.keyboard.down('Control');
+    await app.keyboard.press('A');
+    await app.keyboard.up('Control');
+    await app.keyboard.press('Backspace');
+    await app.type('[data-testid="register-email"]', 'ana.demo@example.com');
+    await app.select('[data-testid="register-department"]', 'Amazonas');
+    await app.select('[data-testid="register-province"]', 'Bagua');
+    await app.select('[data-testid="register-district"]', 'Bagua');
+    await app.type('[data-testid="register-community"]', 'aguajun');
+    await app.type('[data-testid="register-address"]', 'Cerca del río');
+    await app.type('[data-testid="register-pin"]', '654321');
+    await app.type('[data-testid="register-pin-confirm"]', '654321');
+    await app.click('[data-testid="register-leader-yes"]');
+    await (await app.$('[data-testid="register-dni-front"]')).uploadFile(dniSample);
+    await (await app.$('[data-testid="register-dni-back"]')).uploadFile(dniSample);
+    await app.waitForSelector('img[alt="Vista previa Frontal del DNI"]');
+    await app.waitForSelector('img[alt="Vista previa Posterior del DNI"]');
+    await app.click('[data-testid="register-submit"]');
+    await app.waitForSelector('[data-testid="register-accept"]', { timeout: 5000 });
+    await app.click('[data-testid="register-accept"]');
+    await app.waitForFunction(() =>
+      document.body.textContent?.includes('En un máximo de 24 horas verificaremos tu rol.'),
+    );
+    await app.click('[data-testid="register-continue"]');
+    await app.waitForFunction(() => document.body.textContent?.includes('Hola, Ana'));
+    await app.click('[data-testid="nav-settings"]');
+    await app.click('[data-testid="logout-button"]');
+    await app.waitForSelector('[data-testid="login-phone"]');
+    await app.type('[data-testid="login-phone"]', '923456789');
+    for (const digit of '654321') await app.click(`[data-testid="login-key-${digit}"]`);
+    await app.click('[data-testid="login-submit"]');
+    await app.waitForFunction(() => document.body.textContent?.includes('Hola, Ana'));
+    results.registrationValidationAndLocalLogin = true;
+
+    // 11. Cerrar sesión de la app vuelve al acceso.
     await app.click('[data-testid="nav-settings"]');
     await app.click('[data-testid="logout-button"]');
     await app.waitForSelector('[data-testid="login-phone"]', { timeout: 5000 });
     results.appLogoutWorks = true;
 
-    // 9. Cerrar sesión deja el panel bloqueado.
+    // 12. Cerrar sesión deja el panel bloqueado.
     await panel.bringToFront();
     await panel.evaluate(() => {
       const button = [...document.querySelectorAll('button')].find((item) =>

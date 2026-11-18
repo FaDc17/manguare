@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import './styles/base.css';
 import './styles/app.css';
+import './styles/features.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('No se encontró el contenedor de la app.');

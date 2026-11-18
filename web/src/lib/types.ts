@@ -27,6 +27,7 @@ export interface AlertResponse {
 export interface AlertRecord {
   id: string;
   type: EmergencyType;
+  isSos?: boolean;
   note: string;
   community: string;
   deviceName: string;
@@ -41,6 +42,7 @@ export interface AlertRecord {
   updatedAt: string;
   state: AlertState;
   attempts: number;
+  detailsPendingSync?: boolean;
   lastAttemptAt?: string;
   /** Marca de tiempo del próximo reintento automático (política de espera progresiva). */
   nextAttemptAt?: string;
@@ -57,6 +59,7 @@ export interface AlertRecord {
 
 export interface AlertDraft {
   type: EmergencyType;
+  isSos?: boolean;
   note: string;
   community: string;
   deviceName: string;
@@ -71,6 +74,7 @@ export interface AlertDraft {
 export interface ServerAlert {
   id: string;
   type: EmergencyType;
+  isSos?: boolean;
   note: string;
   community: string;
   deviceName: string;
@@ -95,3 +99,45 @@ export interface SyncResult {
   sent: number;
   failed: number;
 }
+
+export const BIODIVERSITY_CATEGORIES = [
+  'Tala ilegal',
+  'Caza o pesca ilegal',
+  'Contaminación de ríos',
+  'Minería ilegal',
+  'Incendios',
+  'Otro',
+] as const;
+
+export type BiodiversityCategory = (typeof BIODIVERSITY_CATEGORIES)[number];
+export type BiodiversityReportState = 'pending' | 'sent' | 'read';
+
+export interface BiodiversityReport {
+  id: string;
+  category: BiodiversityCategory;
+  title: string;
+  description: string;
+  photo?: string;
+  location?: AlertLocation;
+  community: string;
+  reportedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  state: BiodiversityReportState;
+  attempts: number;
+  serverReceivedAt?: string;
+  readAt?: string;
+  lastError?: string;
+}
+
+export interface ServerBiodiversityReport
+  extends Omit<BiodiversityReport, 'state' | 'attempts' | 'lastError' | 'updatedAt'> {
+  state: 'sent' | 'read';
+  serverReceivedAt: string;
+  readAt?: string;
+}
+
+export type BiodiversityReportDraft = Omit<
+  BiodiversityReport,
+  'id' | 'createdAt' | 'updatedAt' | 'state' | 'attempts' | 'serverReceivedAt' | 'readAt' | 'lastError'
+>;

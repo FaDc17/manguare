@@ -20,8 +20,17 @@ export interface CommunityListing {
   category: string;
   title: string;
   description: string;
+  photo?: string;
   location: string;
   rating: number;
+  priceRange: string;
+  author: string;
+  department: string;
+  province: string;
+  district: string;
+  community: string;
+  coordinates: { lat: number; lng: number };
+  reviews: Array<{ name: string; date: string; rating: number; comment: string }>;
 }
 
 /** Datos de demostración tomados del prototipo de Figma. */
@@ -30,17 +39,55 @@ export const COMMUNITY_LISTINGS: CommunityListing[] = [
     id: 'miel-comunidad',
     category: 'alimentos',
     title: 'Miel pura de la comunidad',
-    description: 'Miel artesanal cosechada en nuestra comunidad.',
+    description:
+      'Miel artesanal cosechada en nuestra comunidad. Atención coordinada y trato cercano para toda la comunidad.',
     location: 'Chiriaco, Imaza',
     rating: 4.9,
+    priceRange: 'S/ 20 – 30',
+    author: 'María Tsamajain',
+    department: 'Amazonas',
+    province: 'Bagua',
+    district: 'Imaza',
+    community: 'Awajún',
+    coordinates: { lat: -5.15, lng: -78.29 },
+    reviews: [
+      {
+        name: 'Ana Tuwi',
+        date: '12 jun 2025',
+        rating: 5,
+        comment: 'Muy buena atención y producto de calidad.',
+      },
+      {
+        name: 'José S.',
+        date: '03 jun 2025',
+        rating: 5,
+        comment: 'Entrega coordinada con la comunidad.',
+      },
+    ],
   },
   {
     id: 'transporte-carlos',
     category: 'transporte',
     title: 'Transporte fluvial Carlos',
-    description: 'Viajes seguros por el río Marañón.',
+    description:
+      'Viajes seguros por el río Marañón. Coordina el horario y el punto de encuentro antes de salir.',
     location: 'Santa María de Nieva',
     rating: 4.7,
+    priceRange: 'S/ 10 – 20',
+    author: 'Carlos Antún',
+    department: 'Amazonas',
+    province: 'Condorcanqui',
+    district: 'Nieva',
+    community: 'Wampis',
+    coordinates: { lat: -4.59, lng: -77.86 },
+    reviews: [
+      {
+        name: 'Rosa W.',
+        date: '08 jun 2025',
+        rating: 5,
+        comment: 'Viaje puntual y seguro.',
+      },
+    ],
   },
 ];
 
@@ -49,6 +96,7 @@ export interface SupportCenter {
   name: string;
   distance: string;
   note: string;
+  coordinates: { lat: number; lng: number };
 }
 
 /** Distancias de demostración; no son una ubicación real de la comunidad. */
@@ -58,18 +106,21 @@ export const SUPPORT_CENTERS: SupportCenter[] = [
     name: 'Hospital Santa María',
     distance: '2.1 km',
     note: 'Atención general',
+    coordinates: { lat: -4.58, lng: -77.87 },
   },
   {
     id: 'posta-imaza',
     name: 'Posta de salud Imaza',
     distance: '3.2 km',
     note: 'Atención general',
+    coordinates: { lat: -5.14, lng: -78.28 },
   },
   {
     id: 'centro-chiriaco',
     name: 'Centro de salud Chiriaco',
     distance: '4.3 km',
     note: 'Atención general',
+    coordinates: { lat: -5.13, lng: -78.29 },
   },
 ];
 

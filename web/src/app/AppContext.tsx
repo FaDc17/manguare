@@ -8,12 +8,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { clearAlerts } from '../lib/db';
+import { clearAlerts, getAllBiodiversityReports } from '../lib/db';
+import { createLocalBiodiversityReport } from '../lib/biodiversity';
 import {
   cancelAlert as cancelLocalAlert,
   createLocalAlert,
   listAlertsSorted,
   markSmsOpened,
+  updateAlertDetails as saveAlertDetails,
 } from '../lib/queue-core';
 import {
   isEffectivelyOnline,
@@ -27,7 +29,12 @@ import {
   saveSettings,
   type Settings,
 } from '../lib/settings';
-import type { AlertDraft, AlertRecord } from '../lib/types';
+import type {
+  AlertDraft,
+  AlertRecord,
+  BiodiversityReport,
+  BiodiversityReportDraft,
+} from '../lib/types';
 
 type ToastTone = 'ok' | 'warn' | 'error';
 
@@ -39,6 +46,7 @@ interface ToastState {
 
 interface AppContextValue {
   alerts: AlertRecord[];
+  biodiversityReports: BiodiversityReport[];
   loading: boolean;
   syncing: boolean;
   online: boolean;
@@ -49,6 +57,16 @@ interface AppContextValue {
   dismissToast: () => void;
   refresh: () => Promise<void>;
   createAlert: (draft: AlertDraft) => Promise<AlertRecord>;
+  updateAlertDetails: (
+    id: string,
+    details: {
+      note: string;
+      community: string;
+      location?: AlertRecord['location'];
+      photo?: string;
+    },
+  ) => Promise<void>;
+  createBiodiversityReport: (draft: BiodiversityReportDraft) => Promise<BiodiversityReport>;
   cancelAlert: (id: string) => Promise<boolean>;
   syncNow: (manual?: boolean) => Promise<void>;
   updateSettings: (patch: Partial<Settings>) => void;
@@ -60,6 +78,7 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [alerts, setAlerts] = useState<AlertRecord[]>([]);
+  const [biodiversityReports, setBiodiversityReports] = useState<BiodiversityReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [realOnline, setRealOnline] = useState(() =>
@@ -91,8 +110,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     try {
-      const list = await listAlertsSorted();
+      const [list, reports] = await Promise.all([
+        listAlertsSorted(),
+        getAllBiodiversityReports(),
+      ]);
       setAlerts(list);
+      setBiodiversityReports(reports.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     } catch {
       showToast('No se pudo leer el almacenamiento del teléfono.', 'error');
     } finally {
@@ -156,6 +179,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })();
       }
       return alert;
+    },
+    [refresh],
+  );
+
+  const updateAlertDetails = useCallback(
+    async (
+      id: string,
+      details: {
+        note: string;
+        community: string;
+        location?: AlertRecord['location'];
+        photo?: string;
+      },
+    ) => {
+      await saveAlertDetails(id, details);
+      await refresh();
+      notifyQueueChanged();
+      if (isEffectivelyOnline()) {
+        await runSync(true);
+        await refresh();
+      }
+    },
+    [refresh],
+  );
+
+  const createBiodiversityReport = useCallback(
+    async (draft: BiodiversityReportDraft) => {
+      const report = await createLocalBiodiversityReport(draft);
+      await refresh();
+      notifyQueueChanged();
+      void requestBackgroundSync();
+      if (isEffectivelyOnline()) {
+        setSyncing(true);
+        try {
+          await runSync(true);
+          await refresh();
+        } finally {
+          setSyncing(false);
+        }
+      }
+      const current = await getAllBiodiversityReports();
+      return current.find((item) => item.id === report.id) ?? report;
     },
     [refresh],
   );
@@ -305,6 +370,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(
     () => ({
       alerts,
+      biodiversityReports,
       loading,
       syncing,
       online,
@@ -315,6 +381,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dismissToast,
       refresh,
       createAlert,
+      updateAlertDetails,
+      createBiodiversityReport,
       cancelAlert,
       syncNow,
       updateSettings,
@@ -323,6 +391,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }),
     [
       alerts,
+      biodiversityReports,
       loading,
       syncing,
       online,
@@ -333,6 +402,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       dismissToast,
       refresh,
       createAlert,
+      updateAlertDetails,
+      createBiodiversityReport,
       cancelAlert,
       syncNow,
       updateSettings,

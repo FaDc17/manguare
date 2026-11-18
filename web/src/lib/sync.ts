@@ -1,5 +1,6 @@
 import { syncAll } from './queue-core';
 import { loadSettings } from './settings';
+import { syncBiodiversityReports } from './biodiversity';
 
 export const QUEUE_CHANGED_EVENT = 'manguare:queue-changed';
 
@@ -36,8 +37,13 @@ export async function runSync(
   if (!isEffectivelyOnline()) return null;
   try {
     const result = await syncAll(force);
+    const biodiversity = await syncBiodiversityReports();
     notifyQueueChanged();
-    return result;
+    return {
+      sent: result.sent + biodiversity.sent,
+      failed: result.failed + biodiversity.failed,
+      updated: result.updated + biodiversity.updated,
+    };
   } catch {
     notifyQueueChanged();
     return null;
