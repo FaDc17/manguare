@@ -61,6 +61,85 @@ en el teléfono para ver **Recibida**.
 
 Guion completo de 3 minutos: [`docs/DEMO.md`](docs/DEMO.md).
 
+## Para el equipo: probar esta versión
+
+Esta es la versión de prueba del **18-11-2026**. Incluye acceso demo, cola offline,
+panel con contraseña, plazo de acuse, alertas vencidas, escalamiento por SMS y
+respuestas de la red.
+
+### 1. Levantar la app
+
+```bash
+git clone https://github.com/ProgramaGrueso/manguare.git
+cd manguare
+npm install
+npm run build
+npm start
+```
+
+Abre <http://localhost:8787> y <http://localhost:8787/panel>. Para mostrar el
+vencimiento rápido:
+
+```bash
+MANGUARE_ACK_MINUTES=1 \
+MANGUARE_ESCALATION_PHONE=+51999999999 \
+npm start
+```
+
+### 2. Checklist de pruebas
+
+| # | Prueba | Resultado esperado |
+| --- | --- | --- |
+| 1 | Entrar con usuario `992066275` / PIN `123456` | Inicio con “Hola, Juan” |
+| 2 | Entrar con admin `987654321` / PIN `123456` | Aparece **Panel de la red** |
+| 3 | Crear alerta con **Simular sin conexión** | Queda **Pendiente** |
+| 4 | Desactivar la simulación | Pasa a **Enviada** sin duplicarse |
+| 5 | En el panel, **Marcar recibida** | El teléfono pasa a **Recibida** |
+| 6 | Enviar respuesta **“Ambulancia o brigada en camino”** | El teléfono muestra la respuesta |
+| 7 | Crear alerta y no confirmarla con `MANGUARE_ACK_MINUTES=1` | Panel la marca **Vencida** y ofrece SMS/llamada |
+| 8 | Abrir **Comunidad → Conecta Amazonía** | Aparecen Miel, Transporte y centros de apoyo |
+| 9 | **Ajustes → Cerrar sesión** | Vuelve a la pantalla de acceso |
+| 10 | Recargar la app con una sesión abierta | La sesión y la cola se conservan |
+
+Pruebas automáticas:
+
+```bash
+npm run check      # typecheck + 31 pruebas + build
+npm run test:e2e   # recorrido completo con Chromium (requiere build)
+```
+
+### 3. Probar en teléfono
+
+- Usa `localhost` o HTTPS. Por IP de LAN en HTTP la PWA no se instala ni funciona
+  sin pestaña abierta.
+- Prueba **modo avión**, cerrar la pestaña, volver a abrir y recuperar señal.
+- El protocolo completo para Android de gama baja está en
+  [`docs/PRUEBAS.md`](docs/PRUEBAS.md).
+
+### 4. Cómo reportar un hallazgo
+
+Incluye:
+
+- modelo de teléfono, versión de Android y de Chrome;
+- pasos exactos para reproducirlo;
+- qué esperabas y qué pasó;
+- captura o video si es visual;
+- si estabas sin conexión, con conexión intermitente o con el servidor caído.
+
+Abre un issue en <https://github.com/ProgramaGrueso/manguare/issues> con la
+etiqueta `prueba`. No publiques ubicaciones reales ni datos de personas.
+
+### 5. Límites de esta versión
+
+- El PIN de la app es de demostración: no es autenticación real.
+- El SMS de escalamiento abre la app de mensajes; no hay envío automático ni
+  confirmación de entrega.
+- El panel tiene un solo usuario y no tiene roles.
+- Awajún y Shawi siguen pendientes de grabación con hablantes.
+- Falta la prueba en un Android físico de gama baja.
+- Más detalle: [`docs/OPERACION.md`](docs/OPERACION.md) y
+  [`docs/PRUEBAS.md`](docs/PRUEBAS.md).
+
 ## Requisitos
 
 - Node.js 22 o superior (probado con Node 26).
@@ -223,11 +302,11 @@ web/                 App React + Vite + TypeScript (PWA)
   src/lib/           Cola IndexedDB, reintentos, sincronización, sesión demo, GPS/foto/SMS
   src/panel/         Panel web de la red de salud (login incluido)
   src/sw.ts          Service worker (precaché + Background Sync)
-  test/              Pruebas de cola offline y acceso demo
+  test/              Pruebas de cola offline, acceso demo y plazos
 server/              API Node sin dependencias
   src/               Rutas, validación, autenticación, persistencia JSON
   scripts/seed.js    Alertas de demostración
-  test/              Pruebas de API y de sesión
+  test/              Pruebas de API, sesión y plazos de acuse
 scripts/e2e.mjs      Recorrido completo con Chromium
 docs/DEMO.md         Guion de demostración
 docs/OPERACION.md    Despliegue, seguridad, respaldos y protocolo
@@ -244,7 +323,7 @@ docker-compose.yml   Despliegue con volumen persistente
 | `npm run build` | Compila app, panel y service worker |
 | `npm start` | Sirve la web compilada y la API |
 | `npm run seed` | Carga 3 alertas de ejemplo idempotentes |
-| `npm test` | Pruebas de API, cola offline y acceso demo |
+| `npm test` | Pruebas de API, cola offline, acceso demo y plazos |
 | `npm run test:e2e` | Recorrido completo con Chromium (requiere build) |
 | `npm run typecheck` | TypeScript sin emitir |
 | `npm run check` | Typecheck + pruebas + build |
