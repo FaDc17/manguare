@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { ArrowLeft, ImagePlus, Leaf, LoaderCircle, MapPin, Send, X } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useSession } from '../app/SessionContext';
-import { LocationPicker } from '../components/LocationPicker';
+import { AsyncLocationPicker } from '../components/AsyncLocationPicker';
 import { SubHeader } from '../components/SubHeader';
 import { compressImage } from '../lib/photo';
 import { BIODIVERSITY_CATEGORIES, type AlertLocation, type BiodiversityCategory } from '../lib/types';
@@ -189,7 +189,7 @@ export function BiodiversityReportScreen({
 
         <div className="field">
           <span className="field-label"><MapPin size={15} aria-hidden="true" /> Ubicación aproximada (opcional)</span>
-          <LocationPicker value={location} onChange={setLocation} />
+          <AsyncLocationPicker value={location} onChange={setLocation} />
           {location ? (
             <button type="button" className="text-btn" onClick={() => setLocation(undefined)}>
               Quitar ubicación

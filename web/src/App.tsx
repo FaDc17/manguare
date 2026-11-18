@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { AppProvider, useApp } from './app/AppContext';
 import { SessionProvider, useSession } from './app/SessionContext';
 import { BottomNav, type Tab } from './components/BottomNav';
@@ -9,7 +9,6 @@ import { Toast } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { clearSession, loadSession, saveSession, type Session } from './lib/session';
 import type { AlertLocation, BiodiversityCategory } from './lib/types';
-import { MapScreen } from './screens/MapScreen';
 import { AlertDetailScreen } from './screens/AlertDetailScreen';
 import { BiodiversityReportScreen } from './screens/BiodiversityReportScreen';
 import { CommunityScreen } from './screens/CommunityScreen';
@@ -20,6 +19,10 @@ import { NewAlertScreen } from './screens/NewAlertScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { isEffectivelyOnline } from './lib/sync';
+
+const MapScreen = lazy(() =>
+  import('./screens/MapScreen').then((module) => ({ default: module.MapScreen })),
+);
 
 type Screen =
   | { name: 'home' }
@@ -37,7 +40,7 @@ function AppShell() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [sosConfirmOpen, setSosConfirmOpen] = useState(false);
   const [sosSending, setSosSending] = useState(false);
-  const { createAlert, settings, showToast } = useApp();
+  const { createAlert, alerts, settings, showToast } = useApp();
   const { session } = useSession();
 
   const goHome = () => setScreen({ name: 'home' });
@@ -92,7 +95,9 @@ function AppShell() {
           ) : null}
 
           {screen.name === 'map' ? (
-            <MapScreen onSOS={() => setSosConfirmOpen(true)} />
+            <Suspense fallback={<div className="inline-loading">Cargando mapa…</div>}>
+              <MapScreen onSOS={() => setSosConfirmOpen(true)} />
+            </Suspense>
           ) : null}
 
           {screen.name === 'biodiversity' ? (
@@ -180,6 +185,18 @@ function AppShell() {
 
   async function sendSosAlert() {
     if (sosSending) return;
+    const recentSos = alerts.find(
+      (item) =>
+        item.isSos &&
+        item.state !== 'canceled' &&
+        Date.now() - Date.parse(item.createdAt) < 2 * 60_000,
+    );
+    if (recentSos) {
+      setSosConfirmOpen(false);
+      setScreen({ name: 'alert', id: recentSos.id });
+      showToast('Ya hay una alerta SOS reciente. No se creó otra.', 'warn');
+      return;
+    }
     setSosSending(true);
     try {
       const location = await captureSosLocation();

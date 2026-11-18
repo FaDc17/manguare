@@ -7,6 +7,7 @@ import {
   useMap,
 } from 'react-leaflet';
 import { LocateFixed, Map as MapIcon, MapPin, Search, TriangleAlert } from 'lucide-react';
+import { useApp } from '../app/AppContext';
 import { COMMUNITY_CATEGORIES, COMMUNITY_LISTINGS, SUPPORT_CENTERS } from '../lib/community';
 import type { AlertLocation } from '../lib/types';
 import 'leaflet/dist/leaflet.css';
@@ -64,6 +65,7 @@ function MapFocus({
 }
 
 export function MapScreen({ onSOS }: { onSOS: () => void }) {
+  const { online } = useApp();
   const [search, setSearch] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<Filter, boolean>>({
     conecta: true,
@@ -127,6 +129,13 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
           <TriangleAlert size={16} aria-hidden="true" /> SOS
         </button>
       </header>
+
+      {!online ? (
+        <p className="map-offline-note">
+          Sin conexión: el mapa no puede cargar las teselas. La lista de resultados y tus
+          coordenadas siguen funcionando.
+        </p>
+      ) : null}
 
       <section className="map-controls" aria-label="Buscar y filtrar en el mapa">
         <button

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
+import { useApp } from '../app/AppContext';
 import type { AlertLocation } from '../lib/types';
 import 'leaflet/dist/leaflet.css';
 
@@ -28,6 +29,7 @@ export function LocationPicker({
 }) {
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
+  const { online } = useApp();
   const center: [number, number] = value ? [value.lat, value.lng] : AMAZONAS_CENTER;
 
   const activateLocation = () => {
@@ -93,9 +95,11 @@ export function LocationPicker({
         ) : null}
       </MapContainer>
       <p className="map-helper">
-        {value
-          ? 'Punto elegido. Toca otra parte del mapa para ajustarlo.'
-          : 'Toca el mapa para elegir una ubicación aproximada.'}
+        {!online
+          ? 'Sin conexión no se ven las teselas del mapa. Puedes activar el GPS o tocar el recuadro para fijar un punto aproximado.'
+          : value
+            ? 'Punto elegido. Toca otra parte del mapa para ajustarlo.'
+            : 'Toca el mapa para elegir una ubicación aproximada.'}
       </p>
       {error ? <p className="field-error" role="status">{error}</p> : null}
     </div>

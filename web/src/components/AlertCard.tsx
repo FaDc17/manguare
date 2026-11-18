@@ -42,6 +42,9 @@ export function AlertCard({
               <ImageIcon size={12} aria-hidden="true" /> Foto
             </span>
           ) : null}
+          {alert.isSos ? (
+            <span className="alert-flag alert-flag--sos">SOS</span>
+          ) : null}
           {isOverdue(alert) ? (
             <span className="alert-flag alert-flag--overdue">
               <TriangleAlert size={12} aria-hidden="true" /> Plazo vencido
@@ -49,11 +52,7 @@ export function AlertCard({
           ) : null}
         </span>
       </span>
-      <StatusChip
-        state={alert.state}
-        compact
-        label={alert.isSos && alert.state === 'received' ? 'Leída' : undefined}
-      />
+      <StatusChip state={alert.state} compact />
       <ChevronRight size={18} className="alert-chevron" aria-hidden="true" />
     </button>
   );

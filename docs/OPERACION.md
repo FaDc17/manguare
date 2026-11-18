@@ -41,7 +41,7 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-Los datos quedan en el volumen `manguare-data` (archivo `/data/alerts.json`).
+Los datos quedan en el volumen `manguare-data` (`/data/alerts.json` y `/data/biodiversity.json`).
 
 Para una imagen sin Compose:
 
@@ -61,6 +61,7 @@ docker run -d --name manguare -p 8787:8787 \
 | `PORT` | `8787` | Puerto HTTP |
 | `HOST` | `0.0.0.0` | Interfaz de escucha |
 | `MANGUARE_DATA_FILE` | `server/data/alerts.json` | Archivo JSON de alertas |
+| `MANGUARE_BIODIVERSITY_FILE` | `server/data/biodiversity.json` | Archivo JSON de reportes de biodiversidad |
 | `MANGUARE_STATIC_DIR` | `web/dist` | Web compilada |
 | `MANGUARE_LOG` | activo | `MANGUARE_LOG=0` silencia el log por petición |
 | `MANGUARE_PANEL_PASSWORD` | vacío | Si se define, el panel exige login |
@@ -103,7 +104,7 @@ abierto: la app se sirve desde el mismo origen que la API.
 
 ## 4. Respaldos y retención
 
-Todo vive en `alerts.json` (incluidas las fotos en base64). Es un archivo que se
+Todo vive en `alerts.json` y `biodiversity.json` (incluidas las fotos en base64). Son archivos que se
 reescribe completo en cada cambio; para un piloto con muchas alertas conviene
 migrar a base de datos y almacenamiento de objetos.
 
@@ -111,14 +112,16 @@ Respaldo manual:
 
 ```bash
 # servidor detenido o en una ventana de baja actividad
-cp server/data/alerts.json "respaldo-$(date +%F-%H%M).json"
+cp server/data/alerts.json "respaldo-alertas-$(date +%F-%H%M).json"
+cp server/data/biodiversity.json "respaldo-biodiversidad-$(date +%F-%H%M).json"
 ```
 
 Con Docker:
 
 ```bash
 docker run --rm -v manguare-data:/data -v "$PWD":/backup alpine \
-  cp /data/alerts.json "/backup/respaldo-$(date +%F-%H%M).json"
+  cp /data/alerts.json "/backup/respaldo-alertas-$(date +%F-%H%M).json"
+  cp /data/biodiversity.json "/backup/respaldo-biodiversidad-$(date +%F-%H%M).json"
 ```
 
 Restauración: detén el servidor, reemplaza el archivo y arráncalo de nuevo. Si el
@@ -130,7 +133,7 @@ Recomendaciones para un piloto:
 - Respaldo diario y antes de cada actualización.
 - Retención definida con la red de salud (por ejemplo, 90 días para fotos).
 - Borrar fotos cuando ya no sean necesarias para la respuesta.
-- No compartir `alerts.json` por canales informales: contiene datos personales.
+- No compartir `alerts.json` ni `biodiversity.json` por canales informales: contienen datos personales y fotos.
 
 ## 5. Acceso y roles
 

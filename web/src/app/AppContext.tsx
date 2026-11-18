@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { clearAlerts, getAllBiodiversityReports } from '../lib/db';
+import { clearAlerts, clearBiodiversityReports, getAllBiodiversityReports } from '../lib/db';
 import { createLocalBiodiversityReport } from '../lib/biodiversity';
 import {
   cancelAlert as cancelLocalAlert,
@@ -266,9 +266,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const clearLocal = useCallback(async () => {
-    await clearAlerts();
+    await Promise.all([clearAlerts(), clearBiodiversityReports()]);
     await refresh();
-    showToast('Se borraron las alertas de este teléfono.', 'ok');
+    showToast('Se borraron las alertas y reportes de este teléfono.', 'ok');
   }, [refresh, showToast]);
 
   const activeCount = alerts.filter((alert) => {

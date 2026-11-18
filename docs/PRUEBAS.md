@@ -14,7 +14,7 @@ npm run test:e2e    # recorrido completo con Chromium (requiere build)
 Resultado de `npm run check`:
 
 - TypeScript sin errores.
-- 20 pruebas de API/servidor.
+- 24 pruebas de API/servidor.
 - 11 pruebas de la cola offline, acceso demo y plazos.
 - Build de app, panel y service worker correcto.
 
@@ -22,10 +22,10 @@ Resultado de `npm run test:e2e`:
 
 ```json
 {
-  "loginMs": 854,
+  "loginMs": 934,
   "greeting": "Hola, Juan · Miembro de la comunidad · 992 066 275",
-  "loadMs": 866,
-  "navigation": { "domContentLoaded": 602, "load": 604 },
+  "loadMs": 944,
+  "navigation": { "domContentLoaded": 657, "load": 658 },
   "offlineState": "Pendiente",
   "persistedAfterReload": true,
   "onlineState": "Enviada",
@@ -35,7 +35,12 @@ Resultado de `npm run test:e2e`:
   "appResponse": true,
   "receivedState": "Recibida",
   "idleApiRequestsIn3s": 0,
-  "communityData": true,
+  "sosDetailUpdatedExistingAlert": true,
+  "sosReceivedStateInProfile": true,
+  "publicationDetails": true,
+  "biodiversityAvailableAndRead": true,
+  "mapLocationAndFilters": true,
+  "registrationValidationAndLocalLogin": true,
   "appLogoutWorks": true,
   "logoutWorks": true
 }
@@ -89,7 +94,19 @@ hardware real.
 > no envía SMS ni confirma entrega; para el piloto hace falta un gateway o módem.
 
 
-## 4. Integración del prototipo de Figma
+## 4. Funciones de la rama de FaDc17
+
+| Qué se verifica | Cómo | Resultado |
+| --- | --- | --- |
+| SOS mínimo con confirmación | Se crea una sola alerta y el detalle se adjunta a la misma | OK (E2E) |
+| Edición del SOS protegida | PATCH sin token o tras confirmar la alerta → 403/409 | OK (API) |
+| Mapa con teselas | CSP permite OpenStreetMap y el mapa carga en producción | OK (captura) |
+| Mapa sin conexión | Aviso visible y lista de resultados disponible | OK (captura) |
+| Panel de biodiversidad | Lista reportes y “Marcar leída” actualiza el teléfono | OK (E2E) |
+| Registro local | Valida datos, guarda solo en el dispositivo | OK (E2E) |
+| DNI de líder | Se mantiene como vista previa local, no se envía | Revisión visual |
+
+## 5. Integración del prototipo de Figma
 
 | Qué se verifica | Cómo | Resultado |
 | --- | --- | --- |
@@ -104,11 +121,11 @@ hardware real.
 > El PIN de la app es un acceso de demostración con credenciales en el cliente.
 > No es autenticación real; el panel de la red sí usa contraseña de servidor.
 
-## 5. Fase 3 — Gama baja, red y batería
+## 6. Fase 3 — Gama baja, red y batería
 
 ### Automatizado
 
-- CPU 4× más lenta + red lenta: carga inicial + login **866 ms**.
+- CPU 4× más lenta + red lenta: carga inicial + login **944 ms**.
 - Cola vacía: **0 solicitudes API en 3.5 s** (antes se consultaba cada 20 s).
 - Con pendientes: reintento cada 20 s; sin pendientes: cada 2 min.
 - Cortes de red simulados con Chromium (`Network.emulateNetworkConditions`).
@@ -153,7 +170,7 @@ Criterio de aceptación: el recorrido completo funciona con la app cerrada duran
 al menos 30 minutos y el consumo en reposo es aceptable para un panel solar
 pequeño. Registrar modelo, versión de Android, versión de Chrome y resultado.
 
-## 6. Empaquetado y despliegue
+## 7. Empaquetado y despliegue
 
 - `docker build -t manguare:verify .` completó sin errores.
 - Contenedor con volumen persistente y contraseña: `/api/health` → 200,
@@ -162,7 +179,7 @@ pequeño. Registrar modelo, versión de Android, versión de Chrome y resultado.
   checks, E2E con Chrome y build de la imagen. No se ejecutó en GitHub desde este
   entorno; la corrida local equivale a los comandos del trabajo `checks`.
 
-## 7. Lo que no se pudo probar aquí
+## 8. Lo que no se pudo probar aquí
 
 - Android físico, Doze, batería real y Background Sync del sistema.
 - Entrega real de SMS (el prototipo solo abre la app de mensajes).

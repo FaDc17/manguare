@@ -5,6 +5,7 @@ web/dist/
 
 # Datos locales de la demo (se recrean con "npm run seed")
 server/data/alerts.json
+server/data/biodiversity.json
 server/data/*.tmp
 server/data/*.corrupt-*
 

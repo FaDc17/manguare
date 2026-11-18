@@ -42,6 +42,8 @@ export interface AlertRecord {
   updatedAt: string;
   state: AlertState;
   attempts: number;
+  /** Token local para editar el detalle del SOS; el servidor guarda solo su hash. */
+  editToken?: string;
   detailsPendingSync?: boolean;
   lastAttemptAt?: string;
   /** Marca de tiempo del próximo reintento automático (política de espera progresiva). */

@@ -318,14 +318,14 @@ async function main() {
     }, { timeout: 15000 });
     await app.click('[data-testid="refresh-status"]');
     await app.waitForFunction(
-      () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Leída',
+      () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Recibida',
       { timeout: 15000 },
     );
     await app.click('[data-testid="nav-history"]');
-    await app.waitForFunction(() => document.body.textContent?.includes('Leída'), {
+    await app.waitForFunction(() => document.body.textContent?.includes('Recibida'), {
       timeout: 10000,
     });
-    results.sosReadStateInProfile = true;
+    results.sosReceivedStateInProfile = true;
 
     // 8. Publicaciones, detalle y reporte de biodiversidad.
     await app.bringToFront();
@@ -375,12 +375,18 @@ async function main() {
     assert.ok(
       (await app.$eval(reportSelector, (element) => element.textContent)).includes('Enviada'),
     );
-    const panelCookie = panelCookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
-    const markedReport = await fetch(`${base}/api/biodiversity/${report.id}/read`, {
-      method: 'POST',
-      headers: { cookie: panelCookie },
-    });
-    assert.equal(markedReport.status, 200);
+    await panel.bringToFront();
+    await panel.waitForSelector(`[data-testid="bio-${report.id}"]`, { timeout: 10000 });
+    await panel.click(`[data-testid="bio-read-${report.id}"]`);
+    await panel.waitForFunction(
+      (id) =>
+        document
+          .querySelector(`[data-testid="bio-${id}"]`)
+          ?.textContent?.includes('Leída'),
+      { timeout: 10000 },
+      report.id,
+    );
+    await app.bringToFront();
     await app.click('[data-testid="history-refresh"]');
     await app.waitForFunction(
       (selector) => document.querySelector(selector)?.textContent?.includes('Leída'),
@@ -392,6 +398,7 @@ async function main() {
 
     // 9. Mapa: solo Conecta y centros de apoyo; ubica y enfoca resultados.
     await app.click('[data-testid="nav-map"]');
+    await app.waitForSelector('[data-testid="map-filter-conecta"]', { timeout: 15000 });
     const mapFilters = await app.$$eval('.map-filters button', (buttons) =>
       buttons.map((button) => button.textContent?.trim()),
     );
@@ -460,7 +467,7 @@ async function main() {
     await app.waitForSelector('[data-testid="register-accept"]', { timeout: 5000 });
     await app.click('[data-testid="register-accept"]');
     await app.waitForFunction(() =>
-      document.body.textContent?.includes('En un máximo de 24 horas verificaremos tu rol.'),
+      document.body.textContent?.includes('Tu solicitud de líder quedó registrada localmente'),
     );
     await app.click('[data-testid="register-continue"]');
     await app.waitForFunction(() => document.body.textContent?.includes('Hola, Ana'));

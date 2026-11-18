@@ -52,7 +52,7 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
   pendientes, y nada mientras la pestaña está oculta.
 - Prueba E2E con Chromium: CPU 4× más lenta, red lenta, modo offline, recarga,
   sincronización, login del panel, confirmación y vuelta a `Recibida`.
-- Carga inicial con login medida: **866 ms** con CPU 4×; **0 solicitudes API en
+- Carga inicial con login medida: **944 ms** con CPU 4×; **0 solicitudes API en
   3.5 s** con la cola vacía.
 - `Dockerfile`, `docker-compose.yml`, `.env.example` y CI de GitHub Actions
   (checks, E2E y build de imagen).
@@ -72,6 +72,20 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
 - El acceso es **solo de demostración**: credenciales en el cliente, sin
   autenticación real. No confundir con la contraseña del panel, que sí vive en el
   servidor.
+
+### Aportes de la rama de FaDc17 (2026-11-18)
+- **SOS de un toque**: alerta mínima con GPS, confirmación y detalle adjunto a la
+  misma alerta. La edición usa un token local; el servidor guarda solo su hash y
+  no permite editar alertas confirmadas.
+- **Mapa** con OpenStreetMap, búsqueda y filtros Conecta/Centro de apoyo. Leaflet
+  se carga en un chunk aparte; sin conexión se muestra la lista y un aviso.
+- **Conecta Amazonía** con detalle, reseñas y filtros por ubicación. Los nombres,
+  reseñas y coordenadas son datos de demostración proporcionados por el equipo.
+- **Registro local** con validaciones, DNI de líder como vista previa y aceptación
+  de términos. Las cuentas y el PIN viven solo en el dispositivo.
+- **Biodiversidad**: reportes offline, API separada y sección en el panel para
+  listarlos y marcarlos como leídos.
+- El panel distingue SOS y muestra los reportes ambientales.
 
 ### Plazo de acuse, escalamiento y respuesta (2026-11-18)
 - Cada alerta recibe un `ackDeadlineAt` configurable (`MANGUARE_ACK_MINUTES`, 10

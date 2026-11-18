@@ -65,7 +65,7 @@ export class AlertStore {
     return { alert, created: true };
   }
 
-  async updateDetails(id, details) {
+  async updateDetails(id, details, at = new Date().toISOString()) {
     await this.ready;
     const existing = this.alerts.get(id);
     if (!existing) return null;
@@ -77,6 +77,7 @@ export class AlertStore {
       ...(details.consentLocation && details.location ? { location: details.location } : {}),
       ...(!details.consentLocation || !details.location ? { location: undefined } : {}),
       ...(details.photo ? { photo: details.photo } : { photo: undefined }),
+      events: appendEvent(existing.events, { type: 'details', at }),
     };
     this.alerts.set(id, updated);
     await this.#persist();

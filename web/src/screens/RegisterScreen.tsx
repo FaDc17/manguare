@@ -160,7 +160,7 @@ export function RegisterScreen({
           <h1>¡Bienvenido/a, {completedSession.name}!</h1>
           <p className="login-lead">
             {leader
-              ? 'Tu registro se ha completado. En un máximo de 24 horas verificaremos tu rol. La confirmación llegará a tu correo.'
+              ? 'Tu solicitud de líder quedó registrada localmente para la demostración. No se verifica ni se envía a ningún servidor.'
               : 'Tu registro local está listo. Puedes ingresar con tu celular o correo y el PIN que elegiste.'}
           </p>
           {leader ? (

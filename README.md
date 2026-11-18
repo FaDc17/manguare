@@ -63,38 +63,35 @@ Guion completo de 3 minutos: [`docs/DEMO.md`](docs/DEMO.md).
 
 ## Estado actual de la app de población
 
-**Actualizado: 18-11-2026, 15:16:58 (PET, UTC-5).**
+**Actualizado: 18-11-2026.**
 
 Se mantuvo la PWA existente, su cola offline y el panel administrativo separado.
 En la app de población se agregaron:
 
-- Confirmación rápida de SOS, envío mínimo, detalle adjunto a la misma alerta y
-  estados **Pendiente / Enviada / Leída**.
-- Listado de Conecta Amazonía con filtros por ubicación y detalle de publicación.
-- Reporte de biodiversidad con categorías, foto y ubicación; la API expone el
-  estado para que el teléfono pueda mostrar cuando el panel lo marca como leído.
+- Confirmación rápida de SOS, envío mínimo y detalle adjunto a la misma alerta.
+- Listado de Conecta Amazonía con filtros por ubicación, detalle de publicación y
+  contactos de la localidad para la demostración.
+- Reporte de biodiversidad con categorías, foto y ubicación; el panel ahora lista
+  esos reportes y permite marcarlos como leídos.
 - Registro local con validaciones, selector de fotos de DNI de demostración y
   aceptación de términos.
-- Mapa con OpenStreetMap y solo los filtros **Conecta** y **Centro de apoyo**.
+- Mapa con OpenStreetMap, búsqueda y filtros **Conecta** y **Centro de apoyo**.
+  Sin conexión se muestra la lista y un aviso: el mapa necesita red para las
+  teselas.
 
-El panel administrativo no se modificó. Para mostrar allí los reportes de
-biodiversidad, su equipo todavía debe conectarlo a la API documentada abajo.
 Las cuentas nuevas solo existen en el navegador/dispositivo donde se registran;
 las fotos del DNI son vistas previas temporales y no se verifican ni se envían.
-Las publicaciones, ubicaciones y centros de apoyo son datos de demostración.
+Las publicaciones, nombres, reseñas, ubicaciones y centros de apoyo son datos de
+demostración proporcionados por el equipo; no deben tratarse como directorio
+oficial sin validación.
 
-**Verificación:** `npm run check` pasó (typecheck, 24 pruebas de API, 11 pruebas
-web y build); `npm run test:e2e` pasó los recorridos de SOS, publicaciones,
-biodiversidad, mapa, registro y lectura desde el panel.
+**Verificación:** `npm run check` pasa (typecheck, pruebas de API y web, build);
+`npm run test:e2e` cubre SOS, publicaciones, biodiversidad, mapa, registro y
+lectura desde el panel.
 
 **Prueba local:** ejecuta `npm start` y abre <http://localhost:8787>. Acceso demo:
-celular `992066275`, PIN `123456`. En esta sesión el servidor quedó iniciado en
-esa dirección. La URL pública de TryCloudflare consultada
-(`https://harris-increase-perth-wright.trycloudflare.com/`) responde, pero sirve
-una compilación anterior y todavía no muestra estos cambios. Para probarlos desde
-otro dispositivo, el túnel debe apuntar al servidor actualizado del puerto `8787`.
-No uses datos personales reales: el enlace público está en modo demostración y el
-panel no tiene contraseña configurada.
+celular `992066275`, PIN `123456`. No uses datos personales reales en una demo
+pública.
 
 ## Para el equipo: probar esta versión
 
@@ -346,6 +343,10 @@ en `MANGUARE_ESCALATION_PHONE` (o llamar al 106). La red también puede enviar
 **respuestas rápidas** a la comunidad: “ambulancia en camino”, “acude a la posta”,
 “coordinar traslado” u otra indicación. El teléfono las recibe en la siguiente
 sincronización.
+
+El panel también muestra los **reportes de biodiversidad** enviados desde la app y
+permite marcarlos como leídos. Se guardan aparte de las emergencias, en
+`MANGUARE_BIODIVERSITY_FILE`.
 
 Con `MANGUARE_PANEL_PASSWORD` definida, el panel pide login y usa una cookie de
 sesión `HttpOnly`; la confirmación queda auditada con el usuario. Sin esa

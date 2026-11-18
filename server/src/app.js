@@ -1,5 +1,6 @@
 //CONJUNTO DE RUTAS
 
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRateLimiter } from './auth.js';
@@ -44,7 +45,7 @@ const HTML_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://tile.openstreetmap.org",
   "media-src 'self' blob:",
   "connect-src 'self'",
   "manifest-src 'self'",
@@ -156,6 +157,17 @@ function readPhoto(value) {
   return value;
 }
 
+function hashEditToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+/** No expone el hash del token de edición en respuestas públicas. */
+function publicAlert(alert) {
+  if (!alert) return alert;
+  const { editTokenHash, ...safe } = alert;
+  return safe;
+}
+
 function toAlert(body, now, ackMinutes) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new HttpError(400, 'invalid_body');
@@ -171,10 +183,15 @@ function toAlert(body, now, ackMinutes) {
   const consentLocation = Boolean(body.consentLocation);
   const serverReceivedAt = now();
   const minutes = Number.isFinite(ackMinutes) && ackMinutes >= 0 ? ackMinutes : DEFAULT_ACK_MINUTES;
+  const editToken = readString(body.editToken, 100, 'editToken');
+  if (editToken && !/^[A-Za-z0-9_-]{16,100}$/.test(editToken)) {
+    throw new HttpError(400, 'invalid_edit_token');
+  }
   const alert = {
     id,
     type: body.type,
     ...(body.isSos === true ? { isSos: true } : {}),
+    ...(editToken ? { editTokenHash: hashEditToken(editToken) } : {}),
     note: readString(body.note, 1000, 'note'),
     community: readString(body.community, 80, 'community'),
     deviceName: readString(body.deviceName, 80, 'deviceName'),
@@ -530,7 +547,7 @@ export function createHandler({
           }
           await store.escalateOverdue(now());
           const alerts = await store.list();
-          sendJson(res, 200, { alerts });
+          sendJson(res, 200, { alerts: alerts.map(publicAlert) });
           return;
         }
         if (req.method === 'POST') {
@@ -548,11 +565,11 @@ export function createHandler({
           const alert = toAlert(body, now, effectiveAckMinutes);
           const existing = await store.get(alert.id);
           if (existing) {
-            sendJson(res, 200, { alert: existing });
+            sendJson(res, 200, { alert: publicAlert(existing) });
             return;
           }
           const result = await store.add(alert);
-          sendJson(res, result.created ? 201 : 200, { alert: result.alert });
+          sendJson(res, result.created ? 201 : 200, { alert: publicAlert(result.alert) });
           return;
         }
         sendJson(res, 405, { error: 'method_not_allowed' });
@@ -582,7 +599,7 @@ export function createHandler({
 
           if (action === '/received') {
             const updated = await store.acknowledge(id, now(), actor);
-            sendJson(res, 200, { alert: updated });
+            sendJson(res, 200, { alert: publicAlert(updated) });
             return;
           }
 
@@ -594,7 +611,7 @@ export function createHandler({
               throw new HttpError(400, 'invalid_channel');
             }
             const updated = await store.escalate(id, now(), actor, channel);
-            sendJson(res, 200, { alert: updated });
+            sendJson(res, 200, { alert: publicAlert(updated) });
             return;
           }
 
@@ -609,7 +626,7 @@ export function createHandler({
             throw new HttpError(400, 'message_required');
           }
           const updated = await store.respond(id, { code, message }, now(), actor);
-          sendJson(res, 200, { alert: updated });
+          sendJson(res, 200, { alert: publicAlert(updated) });
           return;
         }
 
@@ -625,19 +642,45 @@ export function createHandler({
         }
         if (req.method === 'PATCH') {
           const body = await readJsonBody(req);
+          const existing = await store.get(id);
+          if (!existing) {
+            sendJson(res, 404, { error: 'not_found' });
+            return;
+          }
+          if (!existing.isSos) {
+            sendJson(res, 403, { error: 'not_editable' });
+            return;
+          }
+          if (existing.acknowledgedAt) {
+            sendJson(res, 409, { error: 'already_received' });
+            return;
+          }
+          const token = readString(body.editToken, 100, 'editToken');
+          if (
+            !existing.editTokenHash ||
+            !token ||
+            hashEditToken(token) !== existing.editTokenHash
+          ) {
+            sendJson(res, 403, { error: 'invalid_edit_token' });
+            return;
+          }
           const consentLocation = Boolean(body.consentLocation);
-          const updated = await store.updateDetails(id, {
-            note: readString(body.note, 1000, 'note'),
-            community: readString(body.community, 80, 'community'),
-            consentLocation,
-            location: consentLocation ? readLocation(body.location) : undefined,
-            photo: readPhoto(body.photo),
-          });
+          const updated = await store.updateDetails(
+            id,
+            {
+              note: readString(body.note, 1000, 'note'),
+              community: readString(body.community, 80, 'community'),
+              consentLocation,
+              location: consentLocation ? readLocation(body.location) : undefined,
+              photo: readPhoto(body.photo),
+            },
+            now(),
+          );
           if (!updated) {
             sendJson(res, 404, { error: 'not_found' });
             return;
           }
-          sendJson(res, 200, { alert: updated });
+          sendJson(res, 200, { alert: publicAlert(updated) });
           return;
         }
         sendJson(res, 405, { error: 'method_not_allowed' });

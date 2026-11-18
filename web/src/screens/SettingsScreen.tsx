@@ -35,6 +35,7 @@ const SETTINGS_AUDIO =
 export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void }) {
   const {
     alerts,
+    biodiversityReports,
     settings,
     updateSettings,
     online,
@@ -376,11 +377,11 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <Trash2 size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Borrar alertas locales</span>
+              <span className="setting-label">Borrar datos locales</span>
               <span className="setting-sub">
-                {alerts.length === 0
-                  ? 'No hay alertas guardadas'
-                  : `${alerts.length} alerta${alerts.length === 1 ? '' : 's'} en este teléfono`}
+                {alerts.length + biodiversityReports.length === 0
+                  ? 'No hay alertas ni reportes guardados'
+                  : `${alerts.length} alerta${alerts.length === 1 ? '' : 's'} y ${biodiversityReports.length} reporte${biodiversityReports.length === 1 ? '' : 's'} en este teléfono`}
               </span>
             </span>
             <ChevronRight size={18} aria-hidden="true" />
@@ -426,7 +427,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
 
       <Sheet
         open={confirmClear}
-        title="Borrar alertas locales"
+        title="Borrar datos locales"
         onClose={() => setConfirmClear(false)}
         footer={
           <>
@@ -439,14 +440,16 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               onClick={() => void handleClear()}
               disabled={clearing}
             >
-              {clearing ? 'Borrando…' : 'Borrar alertas'}
+              {clearing ? 'Borrando…' : 'Borrar datos'}
             </button>
           </>
         }
       >
         <p className="sheet-intro">
-          Se borrarán {alerts.length} alerta{alerts.length === 1 ? '' : 's'} de este teléfono. Las
-          alertas que ya llegaron al servidor y a la red de salud no se eliminan allí.
+          Se borrarán {alerts.length} alerta{alerts.length === 1 ? '' : 's'} y{' '}
+          {biodiversityReports.length} reporte
+          {biodiversityReports.length === 1 ? '' : 's'} de este teléfono. Lo que ya llegó al
+          servidor y a la red de salud no se elimina allí.
         </p>
         <div className="notice-box notice-box--danger">
           <strong>Esta acción no se puede deshacer en el teléfono</strong>

@@ -11,6 +11,7 @@ import {
   Image as ImageIcon,
   Inbox,
   KeyRound,
+  Leaf,
   LoaderCircle,
   LogIn,
   LogOut,
@@ -26,7 +27,7 @@ import { BrandMark } from '../components/BrandMark';
 import { EMERGENCY_META } from '../lib/emergency';
 import { formatDateTime, formatRelative, formatTime, shortId } from '../lib/format';
 import { RESPONSE_OPTIONS, responseText } from '../lib/sla';
-import type { ServerAlert } from '../lib/types';
+import type { ServerAlert, ServerBiodiversityReport } from '../lib/types';
 
 type PanelFilter = 'all' | 'pending' | 'overdue' | 'received';
 
@@ -120,7 +121,8 @@ function AlertRow({
   onOpen: (id: string) => void;
 }) {
   const meta = EMERGENCY_META[alert.type];
-  const Icon = meta.icon;
+  const Icon = alert.isSos ? TriangleAlert : meta.icon;
+  const tone = alert.isSos ? 'red' : meta.tone;
 
   return (
     <article
@@ -128,12 +130,12 @@ function AlertRow({
         isServerOverdue(alert) ? 'is-overdue' : ''
       }`}
     >
-      <span className={`type-tile type-tile--${meta.tone}`}>
+      <span className={`type-tile type-tile--${tone}`}>
         <Icon size={23} aria-hidden="true" />
       </span>
       <div className="panel-row-main">
         <div className="panel-row-title">
-          <strong>{meta.label}</strong>
+          <strong>{alert.isSos ? 'SOS' : meta.label}</strong>
           {alert.community ? <span className="panel-row-community">{alert.community}</span> : null}
           {!alert.acknowledgedAt ? <span className="panel-new">Nueva</span> : null}
         </div>
@@ -259,7 +261,7 @@ function AlertModal({
               <Icon size={24} aria-hidden="true" />
             </span>
             <div>
-              <h2>{meta.label}</h2>
+              <h2>{alert.isSos ? 'Alerta SOS' : meta.label}</h2>
               <p>
                 {alert.community || 'Comunidad no indicada'} · Ref {shortId(alert.id)}
               </p>
@@ -603,6 +605,7 @@ function PanelLogin({
 
 export function PanelApp() {
   const [alerts, setAlerts] = useState<ServerAlert[]>([]);
+  const [bioReports, setBioReports] = useState<ServerBiodiversityReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -611,6 +614,7 @@ export function PanelApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [acking, setAcking] = useState<string | null>(null);
   const [responding, setResponding] = useState<string | null>(null);
+  const [bioReading, setBioReading] = useState<string | null>(null);
   const [toast, setToast] = useState<PanelToastState | null>(null);
   const [session, setSession] = useState<PanelSessionState | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
@@ -658,19 +662,31 @@ export function PanelApp() {
     inFlight.current = true;
     if (indicator) setRefreshing(true);
     try {
-      const response = await fetch('/api/alerts', { cache: 'no-store' });
-      if (response.status === 401) {
+      const [alertResponse, bioResponse] = await Promise.all([
+        fetch('/api/alerts', { cache: 'no-store' }),
+        fetch('/api/biodiversity', { cache: 'no-store' }).catch(() => null),
+      ]);
+      if (alertResponse.status === 401 || bioResponse?.status === 401) {
         setSession((current) => ({
           authRequired: true,
           authenticated: false,
           ...(current?.user ? { user: current.user } : {}),
         }));
         setAlerts([]);
+        setBioReports([]);
         return;
       }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = (await response.json()) as { alerts?: ServerAlert[] };
+      if (!alertResponse.ok) throw new Error(`HTTP ${alertResponse.status}`);
+      const data = (await alertResponse.json()) as { alerts?: ServerAlert[] };
       const list = data.alerts ?? [];
+      if (bioResponse?.ok) {
+        const bioData = (await bioResponse.json()) as {
+          reports?: ServerBiodiversityReport[];
+        };
+        setBioReports(bioData.reports ?? []);
+      } else {
+        setBioReports([]);
+      }
       const fresh = list.filter((alert) => !knownIds.current.has(alert.id));
       const overdueIds = new Set(list.filter((alert) => isServerOverdue(alert)).map((alert) => alert.id));
       const newOverdue = [...overdueIds].some((id) => !knownOverdue.current.has(id));
@@ -800,6 +816,32 @@ export function PanelApp() {
       setToast({ message: 'No se pudo enviar la respuesta a la comunidad.', tone: 'error' });
     } finally {
       setResponding(null);
+    }
+  };
+
+  const markBioRead = async (id: string) => {
+    setBioReading(id);
+    try {
+      const response = await fetch(`/api/biodiversity/${encodeURIComponent(id)}/read`, {
+        method: 'POST',
+      });
+      if (response.status === 401) {
+        setSession({ authRequired: true, authenticated: false });
+        return;
+      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = (await response.json()) as { report?: ServerBiodiversityReport };
+      if (!data.report) throw new Error('Respuesta incompleta');
+      setBioReports((current) =>
+        current.map((report) =>
+          report.id === id ? (data.report as ServerBiodiversityReport) : report,
+        ),
+      );
+      setToast({ message: 'Reporte de biodiversidad marcado como leído.', tone: 'ok' });
+    } catch {
+      setToast({ message: 'No se pudo marcar el reporte como leído.', tone: 'error' });
+    } finally {
+      setBioReading(null);
     }
   };
 
@@ -1074,6 +1116,85 @@ export function PanelApp() {
                 Cuando una comunidad envíe una emergencia y el teléfono recupere conexión, la alerta
                 aparecerá aquí automáticamente.
               </p>
+            </div>
+          )}
+        </section>
+
+        <section className="panel-bio-section" aria-labelledby="panel-bio-title">
+          <div className="panel-list-head">
+            <div>
+              <p className="panel-kicker">Alerta Amazonía</p>
+              <h2 id="panel-bio-title">Reportes de biodiversidad</h2>
+            </div>
+            <span className="panel-count">
+              {bioReports.length} {bioReports.length === 1 ? 'reporte' : 'reportes'}
+            </span>
+          </div>
+          {bioReports.length > 0 ? (
+            <div className="bio-list">
+              {bioReports.map((report) => (
+                <article
+                  key={report.id}
+                  className={`bio-row ${report.state === 'read' ? 'is-read' : ''}`}
+                  data-testid={`bio-${report.id}`}
+                >
+                  <span className="bio-icon">
+                    <Leaf size={19} aria-hidden="true" />
+                  </span>
+                  <div className="bio-main">
+                    <div className="bio-title-row">
+                      <strong>{report.title}</strong>
+                      <span className={`bio-state ${report.state === 'read' ? 'is-read' : ''}`}>
+                        {report.state === 'read' ? 'Leída' : 'Nueva'}
+                      </span>
+                    </div>
+                    <p>{report.description}</p>
+                    <p className="bio-meta">
+                      {report.category} · {report.community || 'Comunidad no indicada'} ·{' '}
+                      {report.reportedBy} · {formatRelative(report.serverReceivedAt)}
+                      {report.readAt ? ` · leída ${formatRelative(report.readAt)}` : ''}
+                    </p>
+                    {report.photo ? (
+                      <a
+                        className="bio-photo-link"
+                        href={report.photo}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <img src={report.photo} alt={`Foto del reporte: ${report.title}`} />
+                      </a>
+                    ) : null}
+                  </div>
+                  <div className="bio-actions">
+                    {report.state === 'sent' ? (
+                      <button
+                        type="button"
+                        className="panel-ack"
+                        data-testid={`bio-read-${report.id}`}
+                        onClick={() => void markBioRead(report.id)}
+                        disabled={bioReading === report.id}
+                      >
+                        {bioReading === report.id ? (
+                          <LoaderCircle size={15} className="spin" aria-hidden="true" />
+                        ) : (
+                          <Check size={15} aria-hidden="true" />
+                        )}
+                        Marcar leída
+                      </button>
+                    ) : (
+                      <span className="bio-read-label">Leída</span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="panel-empty panel-empty--compact">
+              <span>
+                <Leaf size={26} aria-hidden="true" />
+              </span>
+              <h2>No hay reportes de biodiversidad</h2>
+              <p>Cuando la app envíe un reporte de Alerta Amazonía, aparecerá aquí.</p>
             </div>
           )}
         </section>

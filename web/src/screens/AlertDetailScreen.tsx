@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Sheet } from '../components/Sheet';
-import { LocationPicker } from '../components/LocationPicker';
+import { AsyncLocationPicker } from '../components/AsyncLocationPicker';
 import { StatusChip } from '../components/StatusChip';
 import { SubHeader } from '../components/SubHeader';
 import { EMERGENCY_META } from '../lib/emergency';
@@ -109,7 +109,9 @@ export function AlertDetailScreen({
   }
 
   const meta = EMERGENCY_META[alert.type];
-  const Icon = meta.icon;
+  const displayLabel = alert.isSos ? 'SOS' : meta.label;
+  const displayTone = alert.isSos ? 'red' : meta.tone;
+  const Icon = alert.isSos ? TriangleAlert : meta.icon;
   const StateIcon = STATE_ICON[alert.state as AlertState];
   const isPending = alert.state === 'pending';
   const isReceived = alert.state === 'received';
@@ -117,11 +119,6 @@ export function AlertDetailScreen({
   const deadline = deadlineText(alert);
   const latestResponse = alert.responses?.at(-1);
   const awaitingConfirmation = alert.state === 'sent' && !alert.acknowledgedAt;
-  const stateLabel = alert.isSos && isReceived ? 'Leída' : STATE_LABEL[alert.state];
-  const stateDescription =
-    alert.isSos && isReceived
-      ? 'La red de salud ya leyó la alerta.'
-      : STATE_DESCRIPTION[alert.state];
 
   const saveDetails = async () => {
     if (detailsSaving) return;
@@ -162,7 +159,7 @@ export function AlertDetailScreen({
       done: Boolean(alert.serverReceivedAt),
     },
     {
-      label: alert.isSos ? 'Leída por la red de salud' : 'Recibida por la red de salud',
+      label: 'Recibida por la red de salud',
       detail: 'Alguien de la red confirmó que la recibió.',
       time: alert.acknowledgedAt,
       done: Boolean(alert.acknowledgedAt),
@@ -180,7 +177,6 @@ export function AlertDetailScreen({
           <StatusChip
             state={alert.state}
             compact
-            label={alert.isSos && isReceived ? 'Leída' : undefined}
           />
         }
       />
@@ -191,8 +187,8 @@ export function AlertDetailScreen({
         </span>
         <div className="status-hero-copy">
           <span className="status-kicker">Estado actual</span>
-          <h1 data-testid="alert-state">{stateLabel}</h1>
-          <p>{stateDescription}</p>
+          <h1 data-testid="alert-state">{STATE_LABEL[alert.state]}</h1>
+          <p>{STATE_DESCRIPTION[alert.state]}</p>
         </div>
         <span className={`status-orb status-orb--${alert.state}`} aria-hidden="true">
           {isPending && online ? <span className="pulse-dot" /> : null}
@@ -226,7 +222,7 @@ export function AlertDetailScreen({
                 : 'La alerta se conserva en este teléfono hasta recuperar conexión.'}
             </p>
           </div>
-          {alert.state !== 'canceled' ? (
+          {alert.state !== 'canceled' && !alert.acknowledgedAt ? (
             <button
               type="button"
               className="btn btn-secondary btn-block"
@@ -401,11 +397,11 @@ export function AlertDetailScreen({
       <section className="card">
         <h2 className="card-title">Datos de la alerta</h2>
         <div className="detail-type">
-          <span className={`type-tile type-tile--${meta.tone}`}>
+          <span className={`type-tile type-tile--${displayTone}`}>
             <Icon size={23} aria-hidden="true" />
           </span>
           <div>
-            <strong>{meta.label}</strong>
+            <strong>{displayLabel}</strong>
             <span>{formatDateTime(alert.createdAt)}</span>
           </div>
         </div>
@@ -583,7 +579,7 @@ export function AlertDetailScreen({
         </label>
         <div className="field">
           <span className="field-label">Confirma o ajusta la ubicación</span>
-          <LocationPicker value={detailsLocation} onChange={setDetailsLocation} />
+          <AsyncLocationPicker value={detailsLocation} onChange={setDetailsLocation} />
           {detailsLocation ? (
             <button type="button" className="text-btn" onClick={() => setDetailsLocation(undefined)}>
               Quitar ubicación

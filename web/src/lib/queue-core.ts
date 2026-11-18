@@ -48,6 +48,7 @@ export async function createLocalAlert(draft: AlertDraft): Promise<AlertRecord> 
     id: newAlertId(),
     type: draft.type,
     isSos: draft.isSos,
+    editToken: newAlertId(),
     note: trim(draft.note, 1000),
     community: trim(draft.community, 80),
     deviceName: trim(draft.deviceName, 80),
@@ -70,6 +71,7 @@ function toServerPayload(alert: AlertRecord) {
     id: alert.id,
     type: alert.type,
     isSos: alert.isSos,
+    editToken: alert.editToken,
     note: alert.note,
     community: alert.community,
     deviceName: alert.deviceName,
@@ -325,6 +327,7 @@ async function flushPendingDetails(): Promise<void> {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          editToken: alert.editToken,
           note: alert.note,
           community: alert.community,
           location: alert.consentLocation ? alert.location : undefined,
@@ -338,8 +341,19 @@ async function flushPendingDetails(): Promise<void> {
       if (!data.alert) throw new Error('Respuesta del servidor incompleta');
       const merged = mergeServerState(alert, data.alert, alert.state);
       await putAlert({ ...merged, detailsPendingSync: false });
-    } catch {
-      // Se reintentará junto con las demás actualizaciones en el próximo ciclo.
+    } catch (error) {
+      if (error instanceof HttpError && (error.status === 403 || error.status === 409)) {
+        await putAlert({
+          ...alert,
+          detailsPendingSync: false,
+          lastError:
+            error.status === 409
+              ? 'La red ya confirmó la alerta; no se puede editar.'
+              : 'No se pudo editar la alerta.',
+          updatedAt: nowIso(),
+        });
+      }
+      // Los errores de red se reintentan en el próximo ciclo.
     }
   }
 }

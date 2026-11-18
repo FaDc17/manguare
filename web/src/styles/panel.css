@@ -1685,3 +1685,135 @@
 .panel-modal-foot > div:last-child {
   justify-content: flex-end;
 }
+
+/* Reportes de biodiversidad en el panel */
+.panel-bio-section {
+  margin: 18px 0 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.panel-bio-section .panel-list-head {
+  margin-bottom: 10px;
+}
+
+.panel-bio-section h2 {
+  margin: 2px 0 0;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.bio-list {
+  display: grid;
+  gap: 8px;
+}
+
+.bio-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.bio-row.is-read {
+  opacity: 0.75;
+}
+
+.bio-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--green-100);
+  color: var(--green-800);
+}
+
+.bio-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.bio-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.bio-title-row strong {
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.bio-state {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--clay-50);
+  color: var(--clay-800);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.bio-state.is-read {
+  background: var(--green-50);
+  color: var(--green-800);
+}
+
+.bio-main p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.bio-meta {
+  color: var(--muted) !important;
+  font-size: 9.5px !important;
+}
+
+.bio-photo-link img {
+  width: 74px;
+  height: 56px;
+  object-fit: cover;
+  margin-top: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.bio-actions {
+  flex: none;
+}
+
+.bio-read-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--green-700);
+}
+
+.panel-empty--compact {
+  padding: 18px 12px;
+}
+
+.panel-empty--compact h2 {
+  font-size: 14px;
+}
+
+.panel-sos-badge {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--clay-600);
+  color: #fffdf8;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}

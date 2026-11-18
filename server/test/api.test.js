@@ -126,16 +126,39 @@ test('sincroniza el estado de la alerta al consultarla', async () => {
 });
 
 test('completa una alerta SOS ya creada sin generar otra', async () => {
+  const editToken = 'sos-edit-token-0001';
   const created = await postAlert(
-    payload({ id: 'sos-alert-0001', isSos: true, note: 'Alerta SOS' }),
+    payload({ id: 'sos-alert-0001', isSos: true, note: 'Alerta SOS', editToken }),
   );
   assert.equal(created.response.status, 201);
   assert.equal(created.data.alert.isSos, true);
+  assert.equal(created.data.alert.editTokenHash, undefined);
+
+  const unauthorized = await fetch(`${base}/api/alerts/sos-alert-0001`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ note: 'sin token', community: 'X', consentLocation: false }),
+  });
+  assert.equal(unauthorized.status, 403);
+  assert.equal((await unauthorized.json()).error, 'invalid_edit_token');
+
+  const wrongToken = await fetch(`${base}/api/alerts/sos-alert-0001`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      editToken: 'token-equivocado-0001',
+      note: 'sin token',
+      community: 'X',
+      consentLocation: false,
+    }),
+  });
+  assert.equal(wrongToken.status, 403);
 
   const updated = await fetch(`${base}/api/alerts/sos-alert-0001`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      editToken,
       note: 'Necesito ayuda cerca del río.',
       community: 'Chiriaco',
       consentLocation: false,
@@ -147,9 +170,41 @@ test('completa una alerta SOS ya creada sin generar otra', async () => {
   assert.equal(updatedBody.alert.id, created.data.alert.id);
   assert.equal(updatedBody.alert.isSos, true);
   assert.equal(updatedBody.alert.note, 'Necesito ayuda cerca del río.');
+  assert.ok(updatedBody.alert.events.some((event) => event.type === 'details'));
 
   const list = await (await fetch(`${base}/api/alerts`)).json();
   assert.equal(list.alerts.filter((alert) => alert.id === 'sos-alert-0001').length, 1);
+
+  const normal = await postAlert(
+    payload({ id: 'normal-alert-0009', isSos: false, note: 'Normal', editToken: 'normal-edit-token-0001' }),
+  );
+  assert.equal(normal.response.status, 201);
+  const notEditable = await fetch(`${base}/api/alerts/normal-alert-0009`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      editToken: 'normal-edit-token-0001',
+      note: 'No debería',
+      community: '',
+      consentLocation: false,
+    }),
+  });
+  assert.equal(notEditable.status, 403);
+  assert.equal((await notEditable.json()).error, 'not_editable');
+
+  await fetch(`${base}/api/alerts/sos-alert-0001/received`, { method: 'POST' });
+  const afterAck = await fetch(`${base}/api/alerts/sos-alert-0001`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      editToken,
+      note: 'Tarde',
+      community: 'Chiriaco',
+      consentLocation: false,
+    }),
+  });
+  assert.equal(afterAck.status, 409);
+  assert.equal((await afterAck.json()).error, 'already_received');
 });
 
 test('rechaza datos inválidos sin guardar', async () => {
@@ -209,7 +264,7 @@ test('expone salud y no permite leer el archivo de datos', async () => {
   assert.equal(health.status, 200);
   const data = await health.json();
   assert.equal(data.ok, true);
-  assert.equal(data.alerts, 3);
+  assert.equal(data.alerts, 4);
 
   const traversal = await fetch(`${base}/../package.json`);
   assert.ok([403, 404].includes(traversal.status));
@@ -218,7 +273,7 @@ test('expone salud y no permite leer el archivo de datos', async () => {
 test('persiste las alertas en disco', async () => {
   const file = path.join(directory, 'alerts.json');
   const raw = JSON.parse(await fs.readFile(file, 'utf8'));
-  assert.equal(raw.alerts.length, 3);
+  assert.equal(raw.alerts.length, 4);
   assert.ok(raw.alerts.some((alert) => alert.id === 'test-alert-0001'));
 });
 
