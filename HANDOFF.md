@@ -10,6 +10,7 @@
 - Documentos existentes:
   - `/home/juang/projects/DevUT/DevUT_proyecto_APA7.pdf` (propuesta: problema, 3 capas, alerta, mercado, ética, sostenibilidad, próximos pasos)
   - `/home/juang/projects/DevUT/Guia_entrevista_sociologo_DevUT.pdf` (guía por secciones A-J, preguntas `[P]` prioritarias, anexo de 12 supuestos C/R/M/N)
+- Prototipo de Figma del equipo: <https://www.figma.com/make/yl8cQTkMYIjxGdjKOxSF0l/Build-a-Text-Entry-App> (acceso demo: usuario `992066275`, admin `987654321`, PIN `123456`)
 
 ## Estado — 2026-11-18
 
@@ -51,12 +52,26 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
   pendientes, y nada mientras la pestaña está oculta.
 - Prueba E2E con Chromium: CPU 4× más lenta, red lenta, modo offline, recarga,
   sincronización, login del panel, confirmación y vuelta a `Recibida`.
-- Carga inicial medida: **734 ms** con CPU 4×; **0 solicitudes API en 3.5 s** con
-  la cola vacía.
+- Carga inicial con login medida: **872 ms** con CPU 4×; **0 solicitudes API en
+  3.5 s** con la cola vacía.
 - `Dockerfile`, `docker-compose.yml`, `.env.example` y CI de GitHub Actions
   (checks, E2E y build de imagen).
 - Documentación de operación, respaldos, HTTPS y protocolo de respuesta en
   `docs/OPERACION.md`; verificación y protocolo Android en `docs/PRUEBAS.md`.
+
+### Integración del prototipo de Figma (2026-11-18)
+- Acceso con **número + PIN de 6 dígitos** y teclado numérico, con dos cuentas de
+  demostración: usuario `992066275` (Juan) y admin `987654321`; PIN `123456`.
+- Saludo y perfil de la comunidad, rol visible y cierre de sesión.
+- El perfil admin enlaza al **panel de la red de salud**.
+- Pestaña **Comunidad / Conecta Amazonía** con las categorías, las dos
+  publicaciones de ejemplo (Miel de la comunidad, Transporte fluvial Carlos) y
+  los tres centros de apoyo del Figma.
+- Sección **Alerta Amazonía** con los temas ambientales del prototipo; el reporte
+  queda marcado para el piloto.
+- El acceso es **solo de demostración**: credenciales en el cliente, sin
+  autenticación real. No confundir con la contraseña del panel, que sí vive en el
+  servidor.
 
 ### Decisiones tomadas
 - PWA en lugar de app nativa: instala desde el navegador y permite iterar rápido.
@@ -70,6 +85,8 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
 - El SMS abre la app de mensajes con un número de prueba; no confirma entrega.
 - Se prefiere espera progresiva antes que reintentar cada 20 s: ahorra batería y
   datos en equipos de gama baja.
+- El acceso con número/PIN replica el Figma para la demo; no es seguridad real.
+  El panel sí tiene contraseña de servidor.
 
 ### Limitaciones conocidas
 - **Falta la prueba en Android físico** (Doze, batería, app cerrada y Background
@@ -82,6 +99,10 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
 - Sin roles, asignación de responsables ni historial de auditoría externo.
 - No hay notificaciones push: el panel suena solo si está abierto.
 - Las traducciones/audios en Awajún y Shawi dependen de hablantes reales.
+- El acceso de la app es una demo con credenciales visibles; los datos del
+  catálogo, centros y alertas ambientales son estáticos y no vienen de la nube.
+- El login con PIN puede ser una barrera en una emergencia real. Antes del piloto
+  hay que definir si se permite un modo invitado o una sesión persistente.
 - Los datos de `server/data/alerts.json` son de demostración.
 
 ### Cómo ejecutar
@@ -108,7 +129,7 @@ docker compose up -d --build
 Verificación:
 
 ```bash
-npm run check      # typecheck + 19 pruebas + build
+npm run check      # typecheck + 22 pruebas + build
 npm run test:e2e   # recorrido completo con Chromium
 ```
 

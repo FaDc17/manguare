@@ -15,21 +15,26 @@ Resultado de `npm run check`:
 
 - TypeScript sin errores.
 - 13 pruebas de API/servidor.
-- 6 pruebas de la cola offline.
+- 9 pruebas de la cola offline y del acceso demo.
 - Build de app, panel y service worker correcto.
 
 Resultado de `npm run test:e2e`:
 
 ```json
 {
-  "loadMs": 734,
-  "navigation": { "domContentLoaded": 583, "load": 588 },
+  "loginMs": 862,
+  "greeting": "Hola, Juan · Miembro de la comunidad · 992 066 275",
+  "loadMs": 872,
+  "navigation": { "domContentLoaded": 598, "load": 599 },
   "offlineState": "Pendiente",
   "persistedAfterReload": true,
   "onlineState": "Enviada",
+  "panelReporter": true,
   "panelConfirmed": true,
   "receivedState": "Recibida",
   "idleApiRequestsIn3s": 0,
+  "communityData": true,
+  "appLogoutWorks": true,
   "logoutWorks": true
 }
 ```
@@ -65,11 +70,26 @@ hardware real.
 | La app no descarga toda la lista | Consulta `GET /api/alerts/:id` solo para sus alertas | OK |
 | SMS de respaldo | Abre la app de mensajes con texto y número | Prototipo; no confirma entrega |
 
-## 4. Fase 3 — Gama baja, red y batería
+## 4. Integración del prototipo de Figma
+
+| Qué se verifica | Cómo | Resultado |
+| --- | --- | --- |
+| Acceso usuario demo | `992066275` + PIN `123456` muestra "Hola, Juan" | OK (E2E) |
+| Acceso admin demo | `987654321` + PIN `123456`, enlace al panel | Verificado en pruebas de sesión |
+| PIN incorrecto | Se rechaza y se limpia el PIN | OK (prueba unitaria) |
+| Persistencia de sesión | Recargar la app mantiene la sesión | OK (E2E) |
+| Cierre de sesión | Vuelve a la pantalla de acceso | OK (E2E) |
+| Conecta Amazonía | Miel, Transporte fluvial, centros y Alerta Amazonía visibles | OK (E2E) |
+| Datos estáticos | Catálogo y centros marcados como demostración | Revisión visual |
+
+> El PIN de la app es un acceso de demostración con credenciales en el cliente.
+> No es autenticación real; el panel de la red sí usa contraseña de servidor.
+
+## 5. Fase 3 — Gama baja, red y batería
 
 ### Automatizado
 
-- CPU 4× más lenta + red lenta: carga inicial **734 ms**.
+- CPU 4× más lenta + red lenta: carga inicial + login **872 ms**.
 - Cola vacía: **0 solicitudes API en 3.5 s** (antes se consultaba cada 20 s).
 - Con pendientes: reintento cada 20 s; sin pendientes: cada 2 min.
 - Cortes de red simulados con Chromium (`Network.emulateNetworkConditions`).
@@ -114,7 +134,7 @@ Criterio de aceptación: el recorrido completo funciona con la app cerrada duran
 al menos 30 minutos y el consumo en reposo es aceptable para un panel solar
 pequeño. Registrar modelo, versión de Android, versión de Chrome y resultado.
 
-## 5. Empaquetado y despliegue
+## 6. Empaquetado y despliegue
 
 - `docker build -t manguare:verify .` completó sin errores.
 - Contenedor con volumen persistente y contraseña: `/api/health` → 200,
@@ -123,7 +143,7 @@ pequeño. Registrar modelo, versión de Android, versión de Chrome y resultado.
   checks, E2E con Chrome y build de la imagen. No se ejecutó en GitHub desde este
   entorno; la corrida local equivale a los comandos del trabajo `checks`.
 
-## 6. Lo que no se pudo probar aquí
+## 7. Lo que no se pudo probar aquí
 
 - Android físico, Doze, batería real y Background Sync del sistema.
 - Entrega real de SMS (el prototipo solo abre la app de mensajes).

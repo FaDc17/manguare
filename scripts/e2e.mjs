@@ -85,7 +85,15 @@ async function main() {
 
     const started = Date.now();
     await app.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
+    await app.waitForSelector('[data-testid="login-phone"]', { timeout: 15000 });
+    await app.click('[data-testid="demo-user"]');
+    await app.click('[data-testid="login-submit"]');
     await app.waitForSelector('[data-testid="sos-button"]', { timeout: 15000 });
+    results.loginMs = Date.now() - started;
+    results.greeting = await app.$eval('[data-testid="home-hello"]', (element) =>
+      element.textContent?.replace(/\s+/g, ' ').trim(),
+    );
+    assert.match(results.greeting ?? '', /Hola, Juan/);
     results.loadMs = Date.now() - started;
 
     const navigation = await app.evaluate(() => {
@@ -167,6 +175,10 @@ async function main() {
     await panel.type('[data-testid="login-password"]', PASSWORD);
     await panel.click('[data-testid="login-submit"]');
     await panel.waitForSelector('[data-testid^="ack-"]', { timeout: 10000 });
+    await panel.waitForFunction(() => document.body.textContent?.includes('Reportó Juan'), {
+      timeout: 5000,
+    });
+    results.panelReporter = true;
     const ackButton = await panel.$('[data-testid^="ack-"]');
     await ackButton.click();
     await panel.waitForFunction(
@@ -203,7 +215,25 @@ async function main() {
       `con la cola vacía no debería consultar el servidor: ${apiRequests} solicitudes`,
     );
 
-    // 7. Cerrar sesión deja el panel bloqueado.
+    // 7. Los datos de comunidad del prototipo están en la app.
+    await app.bringToFront();
+    await app.click('[data-testid="nav-community"]');
+    await app.waitForFunction(
+      () => document.body.textContent?.includes('Miel pura de la comunidad'),
+      { timeout: 5000 },
+    );
+    const communityText = await app.evaluate(() => document.body.innerText);
+    assert.ok(communityText.includes('Hospital Santa María'), 'faltan los centros de apoyo');
+    assert.ok(communityText.includes('Alerta Amazonía'), 'falta la sección ambiental');
+    results.communityData = true;
+
+    // 8. Cerrar sesión de la app vuelve al acceso.
+    await app.click('[data-testid="nav-settings"]');
+    await app.click('[data-testid="logout-button"]');
+    await app.waitForSelector('[data-testid="login-phone"]', { timeout: 5000 });
+    results.appLogoutWorks = true;
+
+    // 9. Cerrar sesión deja el panel bloqueado.
     await panel.bringToFront();
     await panel.evaluate(() => {
       const button = [...document.querySelectorAll('button')].find((item) =>

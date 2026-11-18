@@ -5,6 +5,7 @@ import {
   Globe2,
   Info,
   Languages,
+  LogOut,
   MapPin,
   MessageSquareText,
   Phone,
@@ -13,15 +14,18 @@ import {
   Smartphone,
   Trash2,
   TriangleAlert,
+  UserRound,
   Volume2,
   Wifi,
   WifiOff,
 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { useSession } from '../app/SessionContext';
 import { AudioButton } from '../components/AudioButton';
 import { ConnectionPill } from '../components/ConnectionPill';
 import { Sheet } from '../components/Sheet';
 import { formatRelative } from '../lib/format';
+import { formatPhone, roleLabel } from '../lib/session';
 import { LANGUAGES } from '../lib/settings';
 
 const SETTINGS_AUDIO =
@@ -40,6 +44,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
     clearLocal,
     showToast,
   } = useApp();
+  const { session, logout } = useSession();
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const pending = alerts.filter((alert) => alert.state === 'pending').length;
@@ -61,9 +66,76 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
         <div>
           <p className="eyebrow">Preferencias del teléfono</p>
           <h1>Ajustes</h1>
-          <p className="screen-lead">Idioma, respaldo por SMS y modo de demostración.</p>
+          <p className="screen-lead">Cuenta, idioma y respaldo sin conexión.</p>
         </div>
       </header>
+
+      <section className="settings-group" aria-labelledby="settings-account">
+        <h2 id="settings-account">Mi cuenta</h2>
+        <div className="settings-card">
+          <div className="setting-row">
+            <span className="setting-icon">
+              <UserRound size={20} aria-hidden="true" />
+            </span>
+            <span className="setting-main">
+              <span className="setting-label">{session.name}</span>
+              <span className="setting-sub">{roleLabel(session.role)}</span>
+            </span>
+            <span className={`account-role account-role--${session.role}`}>
+              {session.role === 'admin' ? 'Admin' : 'Usuario'}
+            </span>
+          </div>
+
+          <div className="setting-row">
+            <span className="setting-icon">
+              <Smartphone size={20} aria-hidden="true" />
+            </span>
+            <span className="setting-main">
+              <span className="setting-label">Número de acceso</span>
+              <span className="setting-sub">Acceso de demostración</span>
+            </span>
+            <span className="account-phone">{formatPhone(session.phone)}</span>
+          </div>
+
+          {session.role === 'admin' ? (
+            <a
+              className="setting-row setting-row--button setting-row--link"
+              href="/panel"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <span className="setting-icon">
+                <ShieldCheck size={20} aria-hidden="true" />
+              </span>
+              <span className="setting-main">
+                <span className="setting-label">Panel de la red de salud</span>
+                <span className="setting-sub">Alertas recibidas y confirmaciones</span>
+              </span>
+              <ChevronRight size={18} aria-hidden="true" />
+            </a>
+          ) : null}
+
+          <button
+            type="button"
+            className="setting-row setting-row--button"
+            data-testid="logout-button"
+            onClick={logout}
+          >
+            <span className="setting-icon setting-icon--danger">
+              <LogOut size={20} aria-hidden="true" />
+            </span>
+            <span className="setting-main">
+              <span className="setting-label">Cerrar sesión</span>
+              <span className="setting-sub">Volver a la pantalla de acceso</span>
+            </span>
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        </div>
+        <p className="settings-note">
+          <Info size={15} aria-hidden="true" /> Este acceso es de demostración. El panel de la red
+          tiene su propia contraseña en el servidor.
+        </p>
+      </section>
 
       <section className="settings-group" aria-labelledby="settings-prefs">
         <h2 id="settings-prefs">Preferencias</h2>

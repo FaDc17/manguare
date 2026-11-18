@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { useSession } from '../app/SessionContext';
 import { AudioButton } from '../components/AudioButton';
 import { EMERGENCY_META } from '../lib/emergency';
 import { compressImage } from '../lib/photo';
@@ -44,6 +45,7 @@ export function NewAlertScreen({
   onCreated: (id: string) => void;
 }) {
   const { settings, online, createAlert, showToast } = useApp();
+  const { session } = useSession();
   const [step, setStep] = useState<Step>(1);
   const [type, setType] = useState<EmergencyType | null>(null);
   const [note, setNote] = useState('');
@@ -131,6 +133,8 @@ export function NewAlertScreen({
         note,
         community,
         deviceName: settings.deviceName,
+        reportedBy: session.name,
+        reporterPhone: session.phone,
         location: consent && geo.status === 'ok' ? geo.location : undefined,
         photo,
         consentLocation: consent,

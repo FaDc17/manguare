@@ -163,6 +163,8 @@ function toAlert(body, now) {
     note: readString(body.note, 1000, 'note'),
     community: readString(body.community, 80, 'community'),
     deviceName: readString(body.deviceName, 80, 'deviceName'),
+    reportedBy: readString(body.reportedBy, 80, 'reportedBy') || undefined,
+    reporterPhone: readString(body.reporterPhone, 30, 'reporterPhone') || undefined,
     consentLocation,
     clientCreatedAt: Number.isNaN(createdAt.getTime())
       ? now()

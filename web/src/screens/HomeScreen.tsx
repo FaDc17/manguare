@@ -6,16 +6,21 @@ import {
   Info,
   Phone,
   RefreshCw,
+  ShieldCheck,
+  Sparkles,
+  Store,
   TriangleAlert,
   Volume2,
   Wifi,
   WifiOff,
 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { useSession } from '../app/SessionContext';
 import { AlertCard } from '../components/AlertCard';
 import { EmptyState } from '../components/EmptyState';
 import { canSpeak, speakSpanish } from '../lib/audio';
 import { LANGUAGES } from '../lib/settings';
+import { formatPhone, roleLabel } from '../lib/session';
 
 const HOME_AUDIO =
   'Manguaré guarda tu alerta en el teléfono. Si no hay señal, la envía automáticamente cuando vuelve la conexión. ' +
@@ -25,16 +30,19 @@ export function HomeScreen({
   onNew,
   onOpenAlert,
   onHistory,
+  onCommunity,
   onOpenLanguage,
   onOpenHelp,
 }: {
   onNew: () => void;
   onOpenAlert: (id: string) => void;
   onHistory: () => void;
+  onCommunity: () => void;
   onOpenLanguage: () => void;
   onOpenHelp: () => void;
 }) {
   const { alerts, online, syncing, settings, syncNow, showToast } = useApp();
+  const { session } = useSession();
   const pending = alerts.filter((alert) => alert.state === 'pending');
   const recent = alerts.slice(0, 2);
   const language = LANGUAGES.find((item) => item.id === settings.language);
@@ -52,6 +60,13 @@ export function HomeScreen({
       <section className="hero">
         <p className="eyebrow">
           <span className="eyebrow-dot" /> Red de salud comunitaria
+        </p>
+        <p className="home-hello" data-testid="home-hello">
+          Hola, {session.name}
+          <span>
+            {' '}
+            · {roleLabel(session.role)} · {formatPhone(session.phone)}
+          </span>
         </p>
         <h1>Pide ayuda sin esperar señal.</h1>
         <p className="hero-copy">
@@ -158,6 +173,33 @@ export function HomeScreen({
           <span className="quick-title">Números de ayuda</span>
           <span className="quick-sub">SAMU · Bomberos · Policía</span>
         </button>
+        <button type="button" className="quick-card" onClick={onCommunity}>
+          <span className="quick-icon quick-icon--green">
+            <Store size={21} aria-hidden="true" />
+          </span>
+          <span className="quick-title">Conecta Amazonía</span>
+          <span className="quick-sub">Servicios y centros de apoyo</span>
+        </button>
+        <button
+          type="button"
+          className="quick-card"
+          onClick={() => showToast('El asistente estará disponible en el piloto.', 'warn')}
+        >
+          <span className="quick-icon quick-icon--sand">
+            <Sparkles size={21} aria-hidden="true" />
+          </span>
+          <span className="quick-title">Asistente IA</span>
+          <span className="quick-sub">Próximamente</span>
+        </button>
+        {session.role === 'admin' ? (
+          <a className="quick-card" href="/panel" target="_blank" rel="noreferrer">
+            <span className="quick-icon quick-icon--clay">
+              <ShieldCheck size={21} aria-hidden="true" />
+            </span>
+            <span className="quick-title">Panel de la red</span>
+            <span className="quick-sub">Alertas y confirmaciones</span>
+          </a>
+        ) : null}
         {canSpeak() ? (
           <button type="button" className="quick-card quick-card--audio" onClick={playGuide}>
             <span className="quick-icon quick-icon--sand">

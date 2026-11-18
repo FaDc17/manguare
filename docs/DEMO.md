@@ -20,14 +20,17 @@ Objetivo: mostrar un solo recorrido completo:
    ```
 
    `npm run seed` es idempotente y necesita el servidor encendido.
-2. Abre dos ventanas:
+2. Accesos de demo de la app:
+   - Usuario: `992066275` · PIN `123456` (Juan).
+   - Admin: `987654321` · PIN `123456` (enlaza al panel).
+3. Abre dos ventanas:
    - Laptop: <http://localhost:8787/panel> (panel, a pantalla completa).
    - Teléfono o ventana móvil: <http://localhost:8787> (app).
    Si arrancaste con `MANGUARE_PANEL_PASSWORD`, inicia sesión en el panel antes de
    empezar (usuario `salud`). Déjalo ya abierto para no perder tiempo en vivo.
-3. Deja la app en **Inicio** y el panel en **Todas**.
-4. Comprueba que el panel dice **En vivo** y que el teléfono muestra señal.
-5. Plan B: si la red del lugar falla, usa **Ajustes → Simular sin conexión** en
+4. Entra a la app con el acceso de demo y déjala en **Inicio**.
+5. Deja el panel en **Todas** y comprueba que dice **En vivo**.
+6. Plan B: si la red del lugar falla, usa **Ajustes → Simular sin conexión** en
    la app. No borra alertas y permite mostrar el estado Pendiente igual.
 
 > Si presentas desde el teléfono por la IP de la LAN, usa HTTPS o mantén la
@@ -97,6 +100,10 @@ Señala la app: botón grande de emergencia, indicador de conexión y pendientes
 > la comunidad, definir quién responde y probarlo en Android de gama baja. Las
 > traducciones y audios en Awajún y Shawi los graban hablantes de las
 > comunidades, no una voz sintética."
+
+Si sobra tiempo, muestra **Comunidad → Conecta Amazonía** y **Alerta Amazonía**:
+son los datos de demostración del prototipo de Figma, todavía sin contactos ni
+reportes reales.
 
 ## Frases que conviene evitar
 

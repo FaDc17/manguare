@@ -103,6 +103,7 @@ function AlertRow({
         <p className="panel-row-meta">
           <span>{formatRelative(alert.clientCreatedAt)}</span>
           <span>{alert.deviceName || 'Equipo no indicado'}</span>
+          {alert.reportedBy ? <span>Reportó {alert.reportedBy}</span> : null}
           <span>
             {alert.location ? `GPS ±${alert.location.accuracy} m` : 'Sin GPS'}
           </span>
@@ -218,6 +219,14 @@ function AlertModal({
               <div>
                 <dt>Equipo</dt>
                 <dd>{alert.deviceName || 'No indicado'}</dd>
+              </div>
+              <div>
+                <dt>Reportado por</dt>
+                <dd>
+                  {alert.reportedBy
+                    ? `${alert.reportedBy}${alert.reporterPhone ? ` · ${alert.reporterPhone}` : ''}`
+                    : 'No indicado'}
+                </dd>
               </div>
               <div>
                 <dt>Ubicación</dt>

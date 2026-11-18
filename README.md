@@ -18,6 +18,11 @@ usan para enviar mensajes a distancia: un golpe que se escucha mucho más lejos
 de lo que llega una voz. La app retoma esa idea: cuando no hay señal, la alerta
 se guarda y se transmite en cuanto el camino se abre.
 
+La versión actual integra además el prototipo de Figma del equipo: acceso con
+número y PIN, perfil de la comunidad, el catálogo **Conecta Amazonía** y centros
+de apoyo de demostración. El acceso con PIN es **solo de demostración**: no es
+autenticación real ni protege datos.
+
 El nombre es una referencia cultural, no una apropiación: antes de usar la marca
 en un piloto real, debe validarse con las comunidades y, si corresponde, contar
 con su autorización.
@@ -38,6 +43,13 @@ npm run seed
 
 - App móvil: <http://localhost:8787>
 - Panel de la red de salud: <http://localhost:8787/panel>
+
+Accesos de demostración de la app (tomados del prototipo de Figma):
+
+| Perfil | Número | PIN |
+| --- | --- | --- |
+| Usuario (Juan) | `992066275` | `123456` |
+| Admin (red de salud) | `987654321` | `123456` |
 
 En la app: **Emergencia** → elegir tipo → completar detalles → **Continuar** →
 **Guardar alerta**. Sin conexión verás **Pendiente**; al volver la señal cambia a
@@ -191,11 +203,11 @@ La ubicación solo se guarda si `consentLocation` es `true`.
 
 ```
 web/                 App React + Vite + TypeScript (PWA)
-  src/screens/       Inicio, nueva alerta, detalle, historial, ajustes
-  src/lib/           Cola IndexedDB, reintentos, sincronización, GPS/foto/SMS
+  src/screens/       Acceso, inicio, nueva alerta, detalle, historial, comunidad, ajustes
+  src/lib/           Cola IndexedDB, reintentos, sincronización, sesión demo, GPS/foto/SMS
   src/panel/         Panel web de la red de salud (login incluido)
   src/sw.ts          Service worker (precaché + Background Sync)
-  test/              Pruebas de la cola offline
+  test/              Pruebas de cola offline y acceso demo
 server/              API Node sin dependencias
   src/               Rutas, validación, autenticación, persistencia JSON
   scripts/seed.js    Alertas de demostración
@@ -216,7 +228,7 @@ docker-compose.yml   Despliegue con volumen persistente
 | `npm run build` | Compila app, panel y service worker |
 | `npm start` | Sirve la web compilada y la API |
 | `npm run seed` | Carga 3 alertas de ejemplo idempotentes |
-| `npm test` | Pruebas de API y de la cola offline |
+| `npm test` | Pruebas de API, cola offline y acceso demo |
 | `npm run test:e2e` | Recorrido completo con Chromium (requiere build) |
 | `npm run typecheck` | TypeScript sin emitir |
 | `npm run check` | Typecheck + pruebas + build |
@@ -232,6 +244,11 @@ arráncalo de nuevo y ejecuta `npm run seed`.
 - El panel debe tratarse como información sensible: usa
   `MANGUARE_PANEL_PASSWORD` y HTTPS antes de cualquier uso real. Sin contraseña
   queda en modo demostración y el servidor lo advierte.
+- El acceso de la app con número/PIN es de demostración: las credenciales están
+  en el cliente y cualquiera puede leerlas. No protege datos ni reemplaza cuentas
+  reales; para un piloto hay que implementar autenticación en el servidor.
+- El login no debe bloquear una emergencia real: antes del piloto hay que definir
+  un modo invitado o una sesión persistente.
 - La sesión del panel vive en memoria: un reinicio cierra las sesiones. No hay
   roles ni historial de auditoría independiente de la alerta.
 - Awajún y Shawi aparecen como **Pendiente**: no se inventan traducciones ni

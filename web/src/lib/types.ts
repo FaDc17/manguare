@@ -23,6 +23,10 @@ export interface AlertRecord {
   note: string;
   community: string;
   deviceName: string;
+  /** Nombre del perfil que reportó (acceso de demostración). */
+  reportedBy?: string;
+  /** Teléfono del perfil que reportó. */
+  reporterPhone?: string;
   location?: AlertLocation;
   photo?: string;
   consentLocation: boolean;
@@ -44,6 +48,8 @@ export interface AlertDraft {
   note: string;
   community: string;
   deviceName: string;
+  reportedBy?: string;
+  reporterPhone?: string;
   location?: AlertLocation;
   photo?: string;
   consentLocation: boolean;
@@ -56,6 +62,8 @@ export interface ServerAlert {
   note: string;
   community: string;
   deviceName: string;
+  reportedBy?: string;
+  reporterPhone?: string;
   location?: AlertLocation;
   photo?: string;
   consentLocation: boolean;

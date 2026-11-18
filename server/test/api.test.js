@@ -40,6 +40,8 @@ function payload(overrides = {}) {
     note: 'Fiebre alta desde ayer',
     community: 'Nueva Esperanza',
     deviceName: 'Celular de prueba',
+    reportedBy: 'Juan',
+    reporterPhone: '992066275',
     consentLocation: true,
     location: {
       lat: -5.9012,
@@ -66,6 +68,8 @@ test('crea una alerta y es idempotente por id', async () => {
   assert.equal(first.response.status, 201);
   assert.equal(first.data.alert.id, 'test-alert-0001');
   assert.ok(first.data.alert.serverReceivedAt);
+  assert.equal(first.data.alert.reportedBy, 'Juan');
+  assert.equal(first.data.alert.reporterPhone, '992066275');
   assert.equal(first.data.alert.acknowledgedAt, undefined);
 
   const second = await postAlert(payload({ note: 'Otro texto' }));
