@@ -49,7 +49,11 @@ export function AlertCard({
           ) : null}
         </span>
       </span>
-      <StatusChip state={alert.state} compact />
+      <StatusChip
+        state={alert.state}
+        compact
+        label={alert.isSos && alert.state === 'received' ? 'Leída' : undefined}
+      />
       <ChevronRight size={18} className="alert-chevron" aria-hidden="true" />
     </button>
   );

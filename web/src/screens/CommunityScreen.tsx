@@ -10,203 +10,451 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { SubHeader } from '../components/SubHeader';
 import {
   COMMUNITY_CATEGORIES,
   COMMUNITY_LISTINGS,
   ENVIRONMENT_TOPICS,
   SUPPORT_CENTERS,
+  type CommunityListing,
 } from '../lib/community';
+import type { BiodiversityCategory } from '../lib/types';
 
-export function CommunityScreen() {
+type View = 'home' | 'all' | 'detail';
+
+function ListingPhoto({ listing, large = false }: { listing: CommunityListing; large?: boolean }) {
+  const category = COMMUNITY_CATEGORIES.find((item) => item.id === listing.category);
+  const Icon = category?.icon ?? Store;
+  return listing.photo ? (
+    <img
+      className={`listing-photo ${large ? 'is-large' : ''}`}
+      src={listing.photo}
+      alt={`Foto de ${listing.title}`}
+    />
+  ) : (
+    <span
+      className={`listing-photo listing-photo-placeholder ${large ? 'is-large' : ''}`}
+      aria-label={`Imagen de demostración para ${listing.title}`}
+    >
+      <Icon size={large ? 42 : 27} aria-hidden="true" />
+      {large ? <small>{category?.label ?? 'Comunidad'}</small> : null}
+    </span>
+  );
+}
+
+function ListingCard({
+  listing,
+  onOpen,
+}: {
+  listing: CommunityListing;
+  onOpen: () => void;
+}) {
+  const category = COMMUNITY_CATEGORIES.find((item) => item.id === listing.category);
+  return (
+    <button
+      type="button"
+      className="community-card community-card-button"
+      data-testid={`listing-${listing.id}`}
+      onClick={onOpen}
+    >
+      <ListingPhoto listing={listing} />
+      <span className="community-card-content">
+        <span className="community-card-top">
+          <span className="community-card-tag">{category?.label ?? 'Comunidad'}</span>
+          <span className="community-rating">
+            <Star size={13} aria-hidden="true" /> {listing.rating.toFixed(1)}
+          </span>
+        </span>
+        <strong className="community-card-title">{listing.title}</strong>
+        <span className="community-card-description">{listing.description}</span>
+        <span className="community-card-foot">
+          <span><MapPin size={14} aria-hidden="true" /> {listing.location}</span>
+          <span className="text-btn">Ver más <ChevronRight size={14} aria-hidden="true" /></span>
+        </span>
+      </span>
+    </button>
+  );
+}
+
+function ListingDetail({ listing, onBack }: { listing: CommunityListing; onBack: () => void }) {
+  const category = COMMUNITY_CATEGORIES.find((item) => item.id === listing.category);
+  const [rating, setRating] = useState(0);
+  const [review, setReview] = useState('');
+  const [reviewPosted, setReviewPosted] = useState(false);
+  const [contactNotice, setContactNotice] = useState(false);
+
+  return (
+    <div className="screen listing-detail-screen">
+      <SubHeader title="Detalle del servicio" onBack={onBack} />
+      <div className="listing-detail-body">
+        <ListingPhoto listing={listing} large />
+        <div className="listing-detail-title-row">
+          <div>
+            <p className="community-card-tag">{category?.label ?? 'Comunidad'}</p>
+            <h1>{listing.title}</h1>
+          </div>
+          <span className="listing-detail-rating"><Star size={14} /> {listing.rating.toFixed(1)}</span>
+        </div>
+        <p className="listing-author">Por {listing.author}</p>
+        <p className="listing-detail-description">{listing.description}</p>
+
+        <div className="listing-info-grid">
+          <div><span>Rango de precio</span><strong>{listing.priceRange}</strong></div>
+          <div><span>Ubicación</span><strong>{listing.location}</strong></div>
+        </div>
+
+        <section className="listing-approx">
+          <h2>Ubicación aproximada</h2>
+          <div>
+            <MapPin size={19} aria-hidden="true" />
+            <span>{listing.community} · {listing.district}, {listing.province}</span>
+          </div>
+          <small>El mapa no muestra una ubicación exacta de personas.</small>
+        </section>
+
+        <button
+          type="button"
+          className="btn btn-primary btn-block btn-lg"
+          onClick={() => setContactNotice(true)}
+        >
+          Contactar
+        </button>
+        {contactNotice ? (
+          <p className="field-help">Los contactos no están habilitados en esta demostración.</p>
+        ) : null}
+
+        <section className="listing-reviews">
+          <div className="section-head">
+            <h2>Reseñas</h2>
+            <strong>{listing.rating.toFixed(1)} de 5</strong>
+          </div>
+          <div className="review-compose">
+            <strong>Tu calificación</strong>
+            <div className="review-stars" role="group" aria-label="Elige una calificación">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  type="button"
+                  key={value}
+                  aria-label={`${value} estrellas`}
+                  aria-pressed={rating === value}
+                  onClick={() => setRating(value)}
+                >
+                  <Star size={23} fill={rating >= value ? 'currentColor' : 'none'} />
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={review}
+              onChange={(event) => setReview(event.target.value)}
+              placeholder="Escribe tu comentario"
+              rows={3}
+              maxLength={400}
+            />
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              disabled={!rating || !review.trim()}
+              onClick={() => {
+                setReviewPosted(true);
+                setReview('');
+                setRating(0);
+              }}
+            >
+              Publicar comentario
+            </button>
+            {reviewPosted ? (
+              <p className="field-help">Gracias. La reseña solo se muestra en esta demostración.</p>
+            ) : null}
+          </div>
+          {listing.reviews.map((item) => (
+            <article className="listing-review" key={`${item.name}-${item.date}`}>
+              <span className="review-avatar">{item.name.slice(0, 1)}</span>
+              <div>
+                <strong>{item.name}</strong>
+                <span className="community-rating">{'★'.repeat(item.rating)}</span>
+                <small>{item.date}</small>
+                <p>{item.comment}</p>
+              </div>
+            </article>
+          ))}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+export function CommunityScreen({
+  onReportBiodiversity,
+}: {
+  onReportBiodiversity: (category: BiodiversityCategory) => void;
+}) {
   const { showToast } = useApp();
   const [category, setCategory] = useState<string>('todos');
+  const [view, setView] = useState<View>('home');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [department, setDepartment] = useState('');
+  const [province, setProvince] = useState('');
+  const [district, setDistrict] = useState('');
+  const [community, setCommunity] = useState('');
 
+  const provinces = useMemo(
+    () => [...new Set(COMMUNITY_LISTINGS.filter((item) => !department || item.department === department).map((item) => item.province))],
+    [department],
+  );
+  const districts = useMemo(
+    () => [...new Set(COMMUNITY_LISTINGS.filter((item) => (!department || item.department === department) && (!province || item.province === province)).map((item) => item.district))],
+    [department, province],
+  );
+  const communities = useMemo(
+    () => [...new Set(COMMUNITY_LISTINGS.filter((item) => (!department || item.department === department) && (!province || item.province === province) && (!district || item.district === district)).map((item) => item.community))],
+    [department, province, district],
+  );
   const listings = useMemo(
     () =>
-      category === 'todos'
-        ? COMMUNITY_LISTINGS
-        : COMMUNITY_LISTINGS.filter((item) => item.category === category),
-    [category],
+      COMMUNITY_LISTINGS.filter(
+        (item) =>
+          (category === 'todos' || item.category === category) &&
+          (view !== 'all' || !department || item.department === department) &&
+          (view !== 'all' || !province || item.province === province) &&
+          (view !== 'all' || !district || item.district === district) &&
+          (view !== 'all' || !community || item.community === community),
+      ),
+    [category, community, department, district, province, view],
   );
+  const selectedListing = COMMUNITY_LISTINGS.find((item) => item.id === selectedId);
+
+  if (view === 'detail' && selectedListing) {
+    return <ListingDetail listing={selectedListing} onBack={() => setView('all')} />;
+  }
+
+  const openDetail = (id: string) => {
+    setSelectedId(id);
+    setView('detail');
+  };
 
   return (
     <div className="screen community">
-      <header className="screen-head">
-        <div>
-          <p className="eyebrow">
-            <span className="eyebrow-dot" /> Compra y ofrece cerca de ti
-          </p>
-          <h1>Conecta Amazonía</h1>
-          <p className="screen-lead">
-            Servicios, productos y centros de apoyo de la comunidad, también sin conexión.
-          </p>
-        </div>
-      </header>
-
-      <section className="card community-publish">
-        <div className="community-publish-copy">
-          <span className="community-publish-icon">
-            <Store size={22} aria-hidden="true" />
-          </span>
+      {view === 'all' ? (
+        <SubHeader title="Todas las publicaciones" onBack={() => setView('home')} />
+      ) : (
+        <header className="screen-head">
           <div>
-            <strong>Publica mi servicio</strong>
-            <p>Haz visible tu emprendimiento cuando vuelva la señal.</p>
+            <p className="eyebrow">
+              <span className="eyebrow-dot" /> Compra y ofrece cerca de ti
+            </p>
+            <h1>Conecta Amazonía</h1>
+            <p className="screen-lead">
+              Servicios, productos y centros de apoyo de la comunidad, también sin conexión.
+            </p>
           </div>
-        </div>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() =>
-            showToast('La publicación estará disponible en el piloto con la comunidad.', 'warn')
-          }
-        >
-          <Plus size={17} aria-hidden="true" /> Publicar
-        </button>
-      </section>
+        </header>
+      )}
 
-      <div className="community-chips" role="tablist" aria-label="Categorías de la comunidad">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={category === 'todos'}
-          className={`community-chip ${category === 'todos' ? 'is-active' : ''}`}
-          onClick={() => setCategory('todos')}
-        >
-          Todos
-        </button>
-        {COMMUNITY_CATEGORIES.map((item) => {
-          const Icon = item.icon;
-          return (
+      {view === 'home' ? (
+        <>
+          <section className="card community-publish">
+            <div className="community-publish-copy">
+              <span className="community-publish-icon"><Store size={22} aria-hidden="true" /></span>
+              <div>
+                <strong>Publica mi servicio</strong>
+                <p>Haz visible tu emprendimiento cuando vuelva la señal.</p>
+              </div>
+            </div>
             <button
-              key={item.id}
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => showToast('La publicación estará disponible en el piloto con la comunidad.', 'warn')}
+            >
+              <Plus size={17} aria-hidden="true" /> Publicar
+            </button>
+          </section>
+
+          <div className="community-chips" role="tablist" aria-label="Categorías de la comunidad">
+            <button
               type="button"
               role="tab"
-              aria-selected={category === item.id}
-              className={`community-chip ${category === item.id ? 'is-active' : ''}`}
-              onClick={() => setCategory(item.id)}
+              aria-selected={category === 'todos'}
+              className={`community-chip ${category === 'todos' ? 'is-active' : ''}`}
+              onClick={() => setCategory('todos')}
             >
-              <Icon size={14} aria-hidden="true" /> {item.label}
+              Todos
             </button>
-          );
-        })}
-      </div>
+            {COMMUNITY_CATEGORIES.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={category === item.id}
+                  className={`community-chip ${category === item.id ? 'is-active' : ''}`}
+                  onClick={() => setCategory(item.id)}
+                >
+                  <Icon size={14} aria-hidden="true" /> {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      ) : (
+        <section className="listing-filters" aria-label="Filtrar publicaciones por ubicación">
+          <label>
+            Departamento
+            <select
+              value={department}
+              onChange={(event) => {
+                setDepartment(event.target.value);
+                setProvince('');
+                setDistrict('');
+                setCommunity('');
+              }}
+            >
+              <option value="">Todos</option>
+              {[...new Set(COMMUNITY_LISTINGS.map((item) => item.department))].map((value) => (
+                <option key={value} value={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Provincia
+            <select
+              value={province}
+              onChange={(event) => {
+                setProvince(event.target.value);
+                setDistrict('');
+                setCommunity('');
+              }}
+            >
+              <option value="">Todas</option>
+              {provinces.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label>
+            Distrito
+            <select
+              value={district}
+              onChange={(event) => {
+                setDistrict(event.target.value);
+                setCommunity('');
+              }}
+            >
+              <option value="">Todos</option>
+              {districts.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+          <label>
+            Comunidad
+            <select value={community} onChange={(event) => setCommunity(event.target.value)}>
+              <option value="">Todas</option>
+              {communities.map((value) => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>
+        </section>
+      )}
 
       <section className="community-section" aria-labelledby="community-listings">
         <div className="section-head">
-          <h2 id="community-listings">Recomendado cerca de ti</h2>
-          <span className="demo-badge">Datos de demo</span>
+          <h2 id="community-listings">{view === 'all' ? 'Publicaciones' : 'Recomendado cerca de ti'}</h2>
+          {view === 'home' ? (
+            <button type="button" className="text-btn" onClick={() => setView('all')}>
+              Ver todo <ChevronRight size={14} aria-hidden="true" />
+            </button>
+          ) : (
+            <span className="demo-badge">Datos de demo</span>
+          )}
         </div>
         {listings.length > 0 ? (
           <div className="community-list">
             {listings.map((item) => (
-              <article key={item.id} className="community-card">
-                <div className="community-card-top">
-                  <span className="community-card-tag">
-                    {COMMUNITY_CATEGORIES.find((cat) => cat.id === item.category)?.label ??
-                      'Comunidad'}
-                  </span>
-                  <span className="community-rating">
-                    <Star size={13} aria-hidden="true" /> {item.rating}
-                  </span>
-                </div>
-                <h3>{item.title}</h3>
-                <p>{item.description}</p>
-                <div className="community-card-foot">
-                  <span>
-                    <MapPin size={14} aria-hidden="true" /> {item.location}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-btn"
-                    onClick={() =>
-                      showToast('Los contactos se habilitarán en el piloto.', 'warn')
-                    }
-                  >
-                    Ver más <ChevronRight size={14} aria-hidden="true" />
-                  </button>
-                </div>
-              </article>
+              <ListingCard key={item.id} listing={item} onOpen={() => openDetail(item.id)} />
             ))}
           </div>
         ) : (
           <div className="community-empty">
             <Store size={22} aria-hidden="true" />
-            <p>Todavía no hay publicaciones en esta categoría.</p>
+            <p>No hay publicaciones para esos filtros.</p>
           </div>
         )}
+        {view === 'home' ? (
+          <button
+            type="button"
+            className="btn btn-secondary btn-block listing-view-all"
+            data-testid="listings-view-all"
+            onClick={() => setView('all')}
+          >
+            Ver todas las publicaciones
+          </button>
+        ) : null}
       </section>
 
-      <section className="community-section" aria-labelledby="community-centers">
-        <div className="section-head">
-          <h2 id="community-centers">Centros de apoyo próximos</h2>
-          <span className="demo-badge">Distancias de demo</span>
-        </div>
-        <p className="community-section-lead">
-          Puntos de auxilio para llamar o acudir. No reemplazan a la radio del puesto de salud.
-        </p>
-        <div className="center-list">
-          {SUPPORT_CENTERS.map((center) => (
-            <div key={center.id} className="center-row">
-              <span className="center-icon">
-                <MapPin size={19} aria-hidden="true" />
-              </span>
-              <span className="center-copy">
-                <strong>{center.name}</strong>
-                <span>
-                  {center.distance} · {center.note}
-                </span>
-              </span>
-              <button
-                type="button"
-                className="text-btn"
-                onClick={() =>
-                  showToast(`${center.name}: ${center.distance}. Dato de demostración.`, 'ok')
-                }
-              >
-                Ver
-              </button>
+      {view === 'home' ? (
+        <>
+          <section className="community-section" aria-labelledby="community-centers">
+            <div className="section-head">
+              <h2 id="community-centers">Centros de apoyo próximos</h2>
+              <span className="demo-badge">Distancias de demo</span>
             </div>
-          ))}
-        </div>
-      </section>
+            <p className="community-section-lead">
+              Puntos de auxilio para llamar o acudir. No reemplazan a la radio del puesto de salud.
+            </p>
+            <div className="center-list">
+              {SUPPORT_CENTERS.map((center) => (
+                <div key={center.id} className="center-row">
+                  <span className="center-icon"><MapPin size={19} aria-hidden="true" /></span>
+                  <span className="center-copy">
+                    <strong>{center.name}</strong>
+                    <span>{center.distance} · {center.note}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="text-btn"
+                    onClick={() => showToast(`${center.name}: ${center.distance}. Dato de demostración.`, 'ok')}
+                  >
+                    Ver
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
 
-      <section className="community-section environment" aria-labelledby="community-environment">
-        <div className="environment-head">
-          <span className="environment-icon">
-            <Leaf size={21} aria-hidden="true" />
-          </span>
-          <div>
-            <h2 id="community-environment">Alerta Amazonía</h2>
-            <p>Proteger la Amazonía es proteger la vida. Reporta lo que daña el bosque o los ríos.</p>
-          </div>
-        </div>
-        <div className="environment-topics">
-          {ENVIRONMENT_TOPICS.map((topic) => (
-            <span key={topic}>{topic}</span>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="btn btn-secondary btn-block"
-          onClick={() =>
-            showToast(
-              'La red ambiental se habilitará en el piloto; por ahora usa Emergencia si hay peligro.',
-              'warn',
-            )
-          }
-        >
-          <TriangleAlert size={17} aria-hidden="true" /> Reportar una alerta
-        </button>
-        <p className="environment-note">
-          <ShieldCheck size={14} aria-hidden="true" /> Solo el líder o el centro encargado verá el
-          reporte.
-        </p>
-      </section>
-
-      <p className="disclaimer">
-        Contenido de demostración tomado del prototipo de Figma. No hay pagos ni contactos reales
-        habilitados.
-      </p>
+          <section className="community-section environment" aria-labelledby="community-environment">
+            <div className="environment-head">
+              <span className="environment-icon"><Leaf size={21} aria-hidden="true" /></span>
+              <div>
+                <h2 id="community-environment">Alerta Amazonía</h2>
+                <p>Proteger la Amazonía es proteger la vida. Reporta lo que daña el bosque o los ríos.</p>
+              </div>
+            </div>
+            <div className="environment-topics">
+              {ENVIRONMENT_TOPICS.map((topic) => (
+                <button
+                  type="button"
+                  key={topic}
+                  data-testid={`environment-topic-${topic.toLocaleLowerCase('es').replace(/\s+/g, '-')}`}
+                  onClick={() => onReportBiodiversity(topic)}
+                >
+                  {topic}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-block"
+              onClick={() => onReportBiodiversity('Otro')}
+            >
+              <TriangleAlert size={17} aria-hidden="true" /> Reportar una alerta
+            </button>
+            <p className="environment-note">
+              <ShieldCheck size={14} aria-hidden="true" /> El reporte se guarda por separado de las
+              emergencias.
+            </p>
+          </section>
+          <p className="disclaimer">
+            Contenido de demostración tomado del prototipo de Figma. No hay pagos ni contactos reales
+            habilitados.
+          </p>
+        </>
+      ) : null}
     </div>
   );
 }

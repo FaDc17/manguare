@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
+  Camera,
   Ban,
   Check,
   CheckCircle2,
@@ -7,6 +8,7 @@ import {
   Copy,
   ExternalLink,
   Image as ImageIcon,
+  ImagePlus,
   LoaderCircle,
   MapPin,
   MessageSquareText,
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Sheet } from '../components/Sheet';
+import { LocationPicker } from '../components/LocationPicker';
 import { StatusChip } from '../components/StatusChip';
 import { SubHeader } from '../components/SubHeader';
 import { EMERGENCY_META } from '../lib/emergency';
@@ -32,7 +35,8 @@ import {
 } from '../lib/format';
 import { copyText, buildSmsBody, smsHref } from '../lib/sms';
 import { deadlineText, isOverdue, responseText } from '../lib/sla';
-import type { AlertState } from '../lib/types';
+import { compressImage } from '../lib/photo';
+import type { AlertLocation, AlertState } from '../lib/types';
 
 const STATE_ICON = {
   pending: Clock3,
@@ -61,6 +65,7 @@ export function AlertDetailScreen({
     syncing,
     syncNow,
     settings,
+    updateAlertDetails,
     markSms,
     cancelAlert,
     showToast,
@@ -68,6 +73,14 @@ export function AlertDetailScreen({
   const [showCoords, setShowCoords] = useState(false);
   const [smsOpen, setSmsOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsSaving, setDetailsSaving] = useState(false);
+  const [detailsNote, setDetailsNote] = useState('');
+  const [detailsCommunity, setDetailsCommunity] = useState('');
+  const [detailsLocation, setDetailsLocation] = useState<AlertLocation>();
+  const [detailsPhoto, setDetailsPhoto] = useState<string>();
+  const [detailsError, setDetailsError] = useState('');
+  const detailsFileRef = useRef<HTMLInputElement>(null);
   const alert = alerts.find((item) => item.id === id);
 
   const smsBody = useMemo(() => (alert ? buildSmsBody(alert) : ''), [alert]);
@@ -104,6 +117,36 @@ export function AlertDetailScreen({
   const deadline = deadlineText(alert);
   const latestResponse = alert.responses?.at(-1);
   const awaitingConfirmation = alert.state === 'sent' && !alert.acknowledgedAt;
+  const stateLabel = alert.isSos && isReceived ? 'Leída' : STATE_LABEL[alert.state];
+  const stateDescription =
+    alert.isSos && isReceived
+      ? 'La red de salud ya leyó la alerta.'
+      : STATE_DESCRIPTION[alert.state];
+
+  const saveDetails = async () => {
+    if (detailsSaving) return;
+    setDetailsSaving(true);
+    setDetailsError('');
+    try {
+      await updateAlertDetails(alert.id, {
+        note: detailsNote.trim() || 'Alerta SOS',
+        community: detailsCommunity.trim(),
+        location: detailsLocation,
+        photo: detailsPhoto,
+      });
+      setDetailsOpen(false);
+      showToast(
+        online
+          ? 'Detalle agregado a la misma alerta.'
+          : 'Detalle guardado; se enviará al recuperar conexión.',
+        online ? 'ok' : 'warn',
+      );
+    } catch (error) {
+      setDetailsError(error instanceof Error ? error.message : 'No se pudo guardar el detalle.');
+    } finally {
+      setDetailsSaving(false);
+    }
+  };
 
   const steps = [
     {
@@ -119,7 +162,7 @@ export function AlertDetailScreen({
       done: Boolean(alert.serverReceivedAt),
     },
     {
-      label: 'Recibida por la red de salud',
+      label: alert.isSos ? 'Leída por la red de salud' : 'Recibida por la red de salud',
       detail: 'Alguien de la red confirmó que la recibió.',
       time: alert.acknowledgedAt,
       done: Boolean(alert.acknowledgedAt),
@@ -133,7 +176,13 @@ export function AlertDetailScreen({
         title="Estado de la alerta"
         subtitle={`Ref. ${shortId(alert.id)}`}
         onBack={onBack}
-        right={<StatusChip state={alert.state} compact />}
+        right={
+          <StatusChip
+            state={alert.state}
+            compact
+            label={alert.isSos && isReceived ? 'Leída' : undefined}
+          />
+        }
       />
 
       <div className={`status-hero status-hero--${alert.state}`}>
@@ -142,8 +191,8 @@ export function AlertDetailScreen({
         </span>
         <div className="status-hero-copy">
           <span className="status-kicker">Estado actual</span>
-          <h1 data-testid="alert-state">{STATE_LABEL[alert.state]}</h1>
-          <p>{STATE_DESCRIPTION[alert.state]}</p>
+          <h1 data-testid="alert-state">{stateLabel}</h1>
+          <p>{stateDescription}</p>
         </div>
         <span className={`status-orb status-orb--${alert.state}`} aria-hidden="true">
           {isPending && online ? <span className="pulse-dot" /> : null}
@@ -164,6 +213,40 @@ export function AlertDetailScreen({
             </p>
           </div>
         </div>
+      ) : null}
+
+      {alert.isSos ? (
+        <section className="card sos-detail-card">
+          <div>
+            <span className="review-kicker">Alerta SOS</span>
+            <h2>{alert.note === 'Alerta SOS' ? 'Alerta mínima enviada' : 'Detalle de tu alerta'}</h2>
+            <p>
+              {alert.serverReceivedAt
+                ? `Enviada ${formatDateTime(alert.serverReceivedAt)}.`
+                : 'La alerta se conserva en este teléfono hasta recuperar conexión.'}
+            </p>
+          </div>
+          {alert.state !== 'canceled' ? (
+            <button
+              type="button"
+              className="btn btn-secondary btn-block"
+              data-testid="sos-detail-open"
+              onClick={() => {
+                setDetailsNote(alert.note === 'Alerta SOS' ? '' : alert.note);
+                setDetailsCommunity(alert.community);
+                setDetailsLocation(alert.location);
+                setDetailsPhoto(alert.photo);
+                setDetailsError('');
+                setDetailsOpen(true);
+              }}
+            >
+              <ImagePlus size={18} aria-hidden="true" />
+              {alert.note === 'Alerta SOS' && !alert.photo && !alert.location
+                ? 'Enviar detalle'
+                : 'Agregar o editar detalle'}
+            </button>
+          ) : null}
+        </section>
       ) : null}
 
       {awaitingConfirmation ? (
@@ -465,6 +548,104 @@ export function AlertDetailScreen({
             <Ban size={18} aria-hidden="true" /> Sí, anular
           </button>
         </div>
+      </Sheet>
+
+      <Sheet
+        open={detailsOpen}
+        title="Completar alerta SOS"
+        onClose={() => {
+          if (!detailsSaving) setDetailsOpen(false);
+        }}
+        footer={
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            data-testid="sos-detail-save"
+            disabled={detailsSaving}
+            onClick={() => void saveDetails()}
+          >
+            {detailsSaving ? 'Guardando…' : 'Guardar detalle'}
+          </button>
+        }
+      >
+        <p className="sheet-intro">
+          La alerta ya existe. Estos datos se agregarán a la misma alerta, no crearán otra.
+        </p>
+        <label className="field">
+          <span className="field-label">Referencia de ubicación</span>
+          <input
+            value={detailsCommunity}
+            data-testid="sos-detail-reference"
+            onChange={(event) => setDetailsCommunity(event.target.value)}
+            placeholder="Comunidad, río o punto conocido"
+            maxLength={80}
+          />
+        </label>
+        <div className="field">
+          <span className="field-label">Confirma o ajusta la ubicación</span>
+          <LocationPicker value={detailsLocation} onChange={setDetailsLocation} />
+          {detailsLocation ? (
+            <button type="button" className="text-btn" onClick={() => setDetailsLocation(undefined)}>
+              Quitar ubicación
+            </button>
+          ) : null}
+          <small className="field-help">La ubicación solo se envía al servidor de alertas.</small>
+        </div>
+        <label className="field">
+          <span className="field-label">Descripción (opcional)</span>
+          <textarea
+            value={detailsNote}
+            data-testid="sos-detail-description"
+            onChange={(event) => setDetailsNote(event.target.value)}
+            placeholder="Agrega información útil para quienes te ayudarán."
+            rows={3}
+            maxLength={1000}
+          />
+        </label>
+        <div className="field">
+          <span className="field-label">Imagen (opcional)</span>
+          <input
+            ref={detailsFileRef}
+            type="file"
+            accept="image/*"
+            className="visually-hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (!file) return;
+              void compressImage(file)
+                .then((image) => {
+                  setDetailsPhoto(image);
+                  setDetailsError('');
+                })
+                .catch((error: unknown) =>
+                  setDetailsError(error instanceof Error ? error.message : 'No se pudo procesar la imagen.'),
+                );
+            }}
+          />
+          {detailsPhoto ? (
+            <div className="photo-preview">
+              <img src={detailsPhoto} alt="Imagen adjunta al SOS" />
+              <button
+                type="button"
+                className="photo-remove"
+                onClick={() => setDetailsPhoto(undefined)}
+                aria-label="Quitar imagen"
+              >
+                <X size={16} aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="photo-add"
+              onClick={() => detailsFileRef.current?.click()}
+            >
+              <Camera size={20} aria-hidden="true" /> Adjuntar imagen
+            </button>
+          )}
+        </div>
+        {detailsError ? <p className="field-error" role="alert">{detailsError}</p> : null}
       </Sheet>
 
       <Sheet open={smsOpen} title="Avisar por SMS" onClose={() => setSmsOpen(false)}>

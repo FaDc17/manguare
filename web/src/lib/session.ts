@@ -12,6 +12,9 @@ export interface Session {
   name: string;
   role: SessionRole;
   loggedAt: string;
+  email?: string;
+  community?: string;
+  leaderVerificationPending?: boolean;
 }
 
 export interface DemoAccount {
@@ -21,6 +24,19 @@ export interface DemoAccount {
   role: SessionRole;
   label: string;
   description: string;
+}
+
+export interface LocalAccount {
+  phone: string;
+  email: string;
+  pin: string;
+  name: string;
+  community: string;
+  department: string;
+  province: string;
+  district: string;
+  addressReference: string;
+  leaderVerificationPending: boolean;
 }
 
 export const DEMO_PIN = '123456';
@@ -45,6 +61,7 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
 ];
 
 const STORAGE_KEY = 'manguare.session.v1';
+const ACCOUNTS_STORAGE_KEY = 'manguare.local-accounts.v1';
 
 export function normalizePhone(value: string): string {
   return value.replace(/[^\d]/g, '').slice(0, 15);
@@ -71,17 +88,83 @@ export function roleLabel(role: SessionRole): string {
   return role === 'admin' ? 'Administrador de la red' : 'Miembro de la comunidad';
 }
 
-export function authenticate(phone: string, pin: string): Session | null {
-  const cleanPhone = toLocalPhone(phone);
-  const account = DEMO_ACCOUNTS.find(
-    (item) => item.phone === cleanPhone && item.pin === pin,
-  );
-  if (!account) return null;
+export function loadLocalAccounts(): LocalAccount[] {
+  try {
+    const raw = localStorage.getItem(ACCOUNTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (account): account is LocalAccount =>
+        account !== null &&
+        typeof account === 'object' &&
+        'phone' in account &&
+        'email' in account &&
+        'pin' in account &&
+        'name' in account &&
+        typeof account.phone === 'string' &&
+        typeof account.email === 'string' &&
+        typeof account.pin === 'string' &&
+        typeof account.name === 'string',
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function registerLocalAccount(account: LocalAccount): Session {
+  const accounts = loadLocalAccounts();
+  if (accounts.some((saved) => saved.phone === account.phone)) {
+    throw new Error('Ese celular ya está registrado en este dispositivo.');
+  }
+  if (accounts.some((saved) => saved.email.toLowerCase() === account.email.toLowerCase())) {
+    throw new Error('Ese correo ya está registrado en este dispositivo.');
+  }
+  try {
+    localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([...accounts, account]));
+  } catch {
+    throw new Error('No se pudo guardar la cuenta en este dispositivo.');
+  }
   return {
     phone: account.phone,
     name: account.name,
-    role: account.role,
+    role: 'user',
     loggedAt: new Date().toISOString(),
+    email: account.email,
+    community: account.community,
+    leaderVerificationPending: account.leaderVerificationPending,
+  };
+}
+
+export function authenticate(identifier: string, pin: string): Session | null {
+  const cleanIdentifier = identifier.trim().toLowerCase();
+  const cleanPhone = toLocalPhone(identifier);
+  const account = DEMO_ACCOUNTS.find(
+    (item) => item.phone === cleanPhone && item.pin === pin,
+  );
+  if (account) {
+    return {
+      phone: account.phone,
+      name: account.name,
+      role: account.role,
+      loggedAt: new Date().toISOString(),
+    };
+  }
+  const localAccount = loadLocalAccounts().find(
+    (item) =>
+      item.pin === pin &&
+      (toLocalPhone(identifier) === item.phone ||
+        (cleanIdentifier.includes('@') && cleanIdentifier === item.email.toLowerCase())),
+  );
+  if (!localAccount) return null;
+  return {
+    phone: localAccount.phone,
+    name: localAccount.name,
+    role: 'user',
+    loggedAt: new Date().toISOString(),
+    email: localAccount.email,
+    community: localAccount.community,
+    leaderVerificationPending: localAccount.leaderVerificationPending,
   };
 }
 
@@ -102,6 +185,11 @@ export function loadSession(): Session | null {
       name: parsed.name,
       role: parsed.role,
       loggedAt: typeof parsed.loggedAt === 'string' ? parsed.loggedAt : new Date().toISOString(),
+      ...(typeof parsed.email === 'string' ? { email: parsed.email } : {}),
+      ...(typeof parsed.community === 'string' ? { community: parsed.community } : {}),
+      ...(typeof parsed.leaderVerificationPending === 'boolean'
+        ? { leaderVerificationPending: parsed.leaderVerificationPending }
+        : {}),
     };
   } catch {
     return null;

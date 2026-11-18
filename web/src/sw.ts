@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { syncAll } from './lib/queue-core';
+import { syncBiodiversityReports } from './lib/biodiversity';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision?: string | null }>;
@@ -89,7 +90,14 @@ syncTarget.addEventListener('sync', (event) => {
   if (event.tag !== 'manguare-alerts') return;
   event.waitUntil(
     (async () => {
-      const result = await syncAll(true);
+      const alerts = await syncAll(true);
+      const reports = await syncBiodiversityReports();
+      const result = {
+        ...alerts,
+        sent: alerts.sent + reports.sent,
+        failed: alerts.failed + reports.failed,
+        updated: alerts.updated + reports.updated,
+      };
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       clients.forEach((client) => client.postMessage({ type: 'manguare:sync-done', result }));
       if (result.failed > 0) {

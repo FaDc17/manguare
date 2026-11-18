@@ -9,12 +9,20 @@ const ICONS = {
   canceled: XCircle,
 };
 
-export function StatusChip({ state, compact = false }: { state: AlertState; compact?: boolean }) {
+export function StatusChip({
+  state,
+  compact = false,
+  label,
+}: {
+  state: AlertState;
+  compact?: boolean;
+  label?: string;
+}) {
   const Icon = ICONS[state];
   return (
     <span className={`status-chip status-${state} ${compact ? 'is-compact' : ''}`}>
       <Icon size={compact ? 13 : 14} aria-hidden="true" />
-      {STATE_LABEL[state]}
+      {label ?? STATE_LABEL[state]}
     </span>
   );
 }

@@ -61,6 +61,41 @@ en el teléfono para ver **Recibida**.
 
 Guion completo de 3 minutos: [`docs/DEMO.md`](docs/DEMO.md).
 
+## Estado actual de la app de población
+
+**Actualizado: 18-11-2026, 15:16:58 (PET, UTC-5).**
+
+Se mantuvo la PWA existente, su cola offline y el panel administrativo separado.
+En la app de población se agregaron:
+
+- Confirmación rápida de SOS, envío mínimo, detalle adjunto a la misma alerta y
+  estados **Pendiente / Enviada / Leída**.
+- Listado de Conecta Amazonía con filtros por ubicación y detalle de publicación.
+- Reporte de biodiversidad con categorías, foto y ubicación; la API expone el
+  estado para que el teléfono pueda mostrar cuando el panel lo marca como leído.
+- Registro local con validaciones, selector de fotos de DNI de demostración y
+  aceptación de términos.
+- Mapa con OpenStreetMap y solo los filtros **Conecta** y **Centro de apoyo**.
+
+El panel administrativo no se modificó. Para mostrar allí los reportes de
+biodiversidad, su equipo todavía debe conectarlo a la API documentada abajo.
+Las cuentas nuevas solo existen en el navegador/dispositivo donde se registran;
+las fotos del DNI son vistas previas temporales y no se verifican ni se envían.
+Las publicaciones, ubicaciones y centros de apoyo son datos de demostración.
+
+**Verificación:** `npm run check` pasó (typecheck, 24 pruebas de API, 11 pruebas
+web y build); `npm run test:e2e` pasó los recorridos de SOS, publicaciones,
+biodiversidad, mapa, registro y lectura desde el panel.
+
+**Prueba local:** ejecuta `npm start` y abre <http://localhost:8787>. Acceso demo:
+celular `992066275`, PIN `123456`. En esta sesión el servidor quedó iniciado en
+esa dirección. La URL pública de TryCloudflare consultada
+(`https://harris-increase-perth-wright.trycloudflare.com/`) responde, pero sirve
+una compilación anterior y todavía no muestra estos cambios. Para probarlos desde
+otro dispositivo, el túnel debe apuntar al servidor actualizado del puerto `8787`.
+No uses datos personales reales: el enlace público está en modo demostración y el
+panel no tiene contraseña configurada.
+
 ## Para el equipo: probar esta versión
 
 Esta es la versión de prueba del **18-11-2026**. Incluye acceso demo, cola offline,
@@ -104,7 +139,7 @@ npm start
 Pruebas automáticas:
 
 ```bash
-npm run check      # typecheck + 31 pruebas + build
+npm run check      # typecheck + 35 pruebas + build
 npm run test:e2e   # recorrido completo con Chromium (requiere build)
 ```
 
@@ -201,9 +236,48 @@ Los datos quedan en el volumen `manguare-data`. La guía completa está en
 | `MANGUARE_SESSION_HOURS` | `12` | Duración de la sesión del panel |
 | `MANGUARE_ACK_MINUTES` | `10` | Plazo para que la red confirme una alerta |
 | `MANGUARE_ESCALATION_PHONE` | vacío | Número para el SMS de escalamiento del panel |
+| `MANGUARE_BIODIVERSITY_FILE` | `server/data/biodiversity.json` | Archivo separado para reportes de biodiversidad |
 | `MANGUARE_SECURE_COOKIES` | `0` | `1` para cookie `Secure` detrás de HTTPS |
 | `MANGUARE_TRUST_PROXY` | `0` | `1` para leer `X-Forwarded-For` de un proxy de confianza |
 | `VITE_SMS_NUMBER` | `+51999999999` | Número de respaldo SMS (se fija al compilar) |
+
+### Reportes de biodiversidad y panel externo
+
+La app de población guarda los reportes sin conexión y los envía a una API separada
+de las emergencias. Se conservan en `MANGUARE_BIODIVERSITY_FILE` (en Docker, dentro
+del volumen persistente). El panel externo no se modifica ni se integra
+automáticamente: para mostrarlos, su equipo debe consultar estos endpoints:
+
+| Método | Ruta | Uso |
+| --- | --- | --- |
+| `POST` | `/api/biodiversity` | Recibir un reporte de la app de población |
+| `GET` | `/api/biodiversity` | Listar reportes para la sesión del panel |
+| `GET` | `/api/biodiversity/:id` | Leer el detalle de un reporte para la sesión del panel |
+| `POST` | `/api/biodiversity/:id/read` | Marcarlo como leído desde la sesión del panel |
+| `GET` | `/api/biodiversity/:id/status` | Consultar solo estado y fechas para sincronizar el teléfono |
+
+El panel debe usar la sesión autenticada del servidor en las rutas de lista,
+detalle y marcado como leído. `POST` recibe los campos `id`, `category`, `title`,
+`description`, `community`, `reportedBy`, `clientCreatedAt` y, opcionalmente,
+`location` y `photo`. La ruta pública de estado solo devuelve `id`, `state`,
+`serverReceivedAt` y `readAt`; no devuelve el contenido del reporte. Si se configura
+`MANGUARE_PANEL_PASSWORD`, el acceso del panel requiere iniciar sesión. No expongas
+el servidor en internet sin configurar esa protección. Si el panel está alojado
+en otro dominio, su backend debe consumir la API o servirla mediante un proxy del
+mismo origen; la API no habilita CORS. No pongas la contraseña del panel en el
+código del navegador.
+
+La respuesta del listado tiene la forma `{ "reports": [...] }`; cada elemento
+incluye `state` (`sent` o `read`) y `serverReceivedAt`, y, cuando corresponda,
+`readAt` y `readBy`. Marcarlo como leído devuelve `{ "report": {...} }`. El equipo
+del panel externo debe implementar su propia pantalla y acción para usar este
+contrato; esta app no incluye ni modifica ese panel.
+
+El registro de población y sus PIN de demostración se guardan solo en ese navegador
+y dispositivo; no crean cuentas compartidas entre dispositivos. Las fotos del DNI
+del flujo de líder solo se previsualizan durante el registro y no se validan ni se
+envían. El mapa usa teselas públicas de OpenStreetMap y ubicaciones de demostración;
+no muestra alertas ni ubicaciones de emergencia.
 
 ## Probar el modo sin conexión
 

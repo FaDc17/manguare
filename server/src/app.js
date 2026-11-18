@@ -1,8 +1,18 @@
+//CONJUNTO DE RUTAS
+
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRateLimiter } from './auth.js';
 
 const TYPES = new Set(['enfermedad', 'accidente', 'mordedura', 'parto', 'otro']);
+const BIODIVERSITY_CATEGORIES = new Set([
+  'Tala ilegal',
+  'Caza o pesca ilegal',
+  'Contaminación de ríos',
+  'Minería ilegal',
+  'Incendios',
+  'Otro',
+]);
 const RESPONSE_CODES = new Set(['en_camino', 'acudir_posta', 'sin_medico', 'otra']);
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const MAX_PHOTO_CHARS = 2_500_000;
@@ -164,6 +174,7 @@ function toAlert(body, now, ackMinutes) {
   const alert = {
     id,
     type: body.type,
+    ...(body.isSos === true ? { isSos: true } : {}),
     note: readString(body.note, 1000, 'note'),
     community: readString(body.community, 80, 'community'),
     deviceName: readString(body.deviceName, 80, 'deviceName'),
@@ -183,6 +194,45 @@ function toAlert(body, now, ackMinutes) {
   const photo = readPhoto(body.photo);
   if (photo) alert.photo = photo;
   return alert;
+}
+
+function toBiodiversityReport(body, now) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new HttpError(400, 'invalid_body');
+  }
+  const id = readString(body.id, 80, 'id');
+  if (!/^[A-Za-z0-9_-]{8,80}$/.test(id)) {
+    throw new HttpError(400, 'invalid_id');
+  }
+  if (!BIODIVERSITY_CATEGORIES.has(body.category)) {
+    throw new HttpError(400, 'invalid_category');
+  }
+  const title = readString(body.title, 120, 'title');
+  const description = readString(body.description, 2000, 'description');
+  const reportedBy = readString(body.reportedBy, 100, 'reportedBy');
+  if (!title) throw new HttpError(400, 'title_required');
+  if (!description) throw new HttpError(400, 'description_required');
+  if (!reportedBy) throw new HttpError(400, 'reported_by_required');
+  const receivedAt = now();
+  const createdAt = new Date(body.clientCreatedAt ?? receivedAt);
+  const report = {
+    id,
+    category: body.category,
+    title,
+    description,
+    community: readString(body.community, 120, 'community'),
+    reportedBy,
+    clientCreatedAt: Number.isNaN(createdAt.getTime())
+      ? receivedAt
+      : createdAt.toISOString(),
+    serverReceivedAt: receivedAt,
+    state: 'sent',
+  };
+  const location = readLocation(body.location);
+  if (location) report.location = location;
+  const photo = readPhoto(body.photo);
+  if (photo) report.photo = photo;
+  return report;
 }
 
 async function serveStatic(req, res, pathname, staticDir) {
@@ -244,6 +294,7 @@ async function serveStatic(req, res, pathname, staticDir) {
 
 export function createHandler({
   store,
+  biodiversityStore,
   staticDir,
   now = () => new Date().toISOString(),
   auth = null,
@@ -366,6 +417,111 @@ export function createHandler({
         return;
       }
 
+      if (pathname === '/api/biodiversity') {
+        if (!biodiversityStore) {
+          sendJson(res, 503, { error: 'biodiversity_unavailable' });
+          return;
+        }
+        if (req.method === 'GET') {
+          if (auth?.enabled && !sessionFor(req)) {
+            sendJson(res, 401, { error: 'authentication_required' });
+            return;
+          }
+          sendJson(res, 200, { reports: await biodiversityStore.list() });
+          return;
+        }
+        if (req.method === 'POST') {
+          const limit = alertLimiter(`biodiversity:${clientIp(req)}`);
+          if (!limit.allowed) {
+            sendJson(
+              res,
+              429,
+              { error: 'too_many_requests' },
+              { 'Retry-After': String(limit.retryAfter) },
+            );
+            return;
+          }
+          const report = toBiodiversityReport(await readJsonBody(req), now);
+          const result = await biodiversityStore.add(report);
+          sendJson(res, result.created ? 201 : 200, { report: result.report });
+          return;
+        }
+        sendJson(res, 405, { error: 'method_not_allowed' });
+        return;
+      }
+
+      const biodiversityStatusMatch = pathname.match(/^\/api\/biodiversity\/([^/]+)\/status$/);
+      if (biodiversityStatusMatch) {
+        if (!biodiversityStore) {
+          sendJson(res, 503, { error: 'biodiversity_unavailable' });
+          return;
+        }
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        const report = await biodiversityStore.get(biodiversityStatusMatch[1]);
+        if (!report) {
+          sendJson(res, 404, { error: 'not_found' });
+          return;
+        }
+        sendJson(res, 200, {
+          report: {
+            id: report.id,
+            state: report.state,
+            serverReceivedAt: report.serverReceivedAt,
+            readAt: report.readAt,
+          },
+        });
+        return;
+      }
+
+      const biodiversityMatch = pathname.match(/^\/api\/biodiversity\/([^/]+)(\/read)?$/);
+      if (biodiversityMatch) {
+        if (!biodiversityStore) {
+          sendJson(res, 503, { error: 'biodiversity_unavailable' });
+          return;
+        }
+        const id = biodiversityMatch[1];
+        if (biodiversityMatch[2]) {
+          if (req.method !== 'POST') {
+            sendJson(res, 405, { error: 'method_not_allowed' });
+            return;
+          }
+          const session = sessionFor(req);
+          if (auth?.enabled && !session) {
+            sendJson(res, 401, { error: 'authentication_required' });
+            return;
+          }
+          const report = await biodiversityStore.markRead(
+            id,
+            now(),
+            session?.user ?? 'demostración',
+          );
+          if (!report) {
+            sendJson(res, 404, { error: 'not_found' });
+            return;
+          }
+          sendJson(res, 200, { report });
+          return;
+        }
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        if (auth?.enabled && !sessionFor(req)) {
+          sendJson(res, 401, { error: 'authentication_required' });
+          return;
+        }
+        const report = await biodiversityStore.get(id);
+        if (!report) {
+          sendJson(res, 404, { error: 'not_found' });
+          return;
+        }
+        sendJson(res, 200, { report });
+        return;
+      }
+
       if (pathname === '/api/alerts') {
         if (req.method === 'GET') {
           if (auth?.enabled && !sessionFor(req)) {
@@ -465,6 +621,23 @@ export function createHandler({
             return;
           }
           sendJson(res, 200, { alert });
+          return;
+        }
+        if (req.method === 'PATCH') {
+          const body = await readJsonBody(req);
+          const consentLocation = Boolean(body.consentLocation);
+          const updated = await store.updateDetails(id, {
+            note: readString(body.note, 1000, 'note'),
+            community: readString(body.community, 80, 'community'),
+            consentLocation,
+            location: consentLocation ? readLocation(body.location) : undefined,
+            photo: readPhoto(body.photo),
+          });
+          if (!updated) {
+            sendJson(res, 404, { error: 'not_found' });
+            return;
+          }
+          sendJson(res, 200, { alert: updated });
           return;
         }
         sendJson(res, 405, { error: 'method_not_allowed' });
