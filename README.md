@@ -227,6 +227,39 @@ abierta, pero no se instala ni recarga sin red. Para la demo final usa HTTPS
 
 ## Panel de la red de salud
 
+### ¿Para quién es?
+
+El panel es para el **lado receptor de la alerta**: la red de salud, el puesto de
+salud, el municipio o un promotor autorizado. No es para la persona que reporta
+la emergencia; esa usa la app móvil.
+
+En un piloto debe haber una persona responsable por turno que:
+
+- revise las alertas y confirme la recepción;
+- responda a la comunidad (“ambulancia en camino”, “acude a la posta”, etc.);
+- vigile las alertas **vencidas** y escale por SMS o llamada;
+- trate la ubicación y las fotos como datos sensibles.
+
+Hoy el panel tiene **un solo usuario** (`salud` por defecto) y no distingue roles
+ni turnos. Para un piloto hay que crear cuentas por responsable.
+
+### Enlaces y contraseñas de demo
+
+Los enlaces de túnel y las contraseñas de una demo **no se guardan en este
+README**: son temporales y el repositorio es público. Se comparten por el canal
+del equipo. Para levantar una demo protegida:
+
+```bash
+MANGUARE_PANEL_PASSWORD='una-clave-temporal' \
+MANGUARE_SESSION_SECRET="$(openssl rand -base64 48)" \
+npm start
+
+# en otra terminal
+cloudflared tunnel --url http://localhost:8787
+```
+
+El panel pide usuario (`salud` por defecto) y la contraseña que definas.
+
 `/panel` muestra alertas, filtros (Todas / En plazo / Vencidas / Recibidas),
 datos de contacto, ubicación aproximada si hubo consentimiento, y el botón
 **Marcar recibida**. Se actualiza cada 5 segundos y suena al llegar una alerta
