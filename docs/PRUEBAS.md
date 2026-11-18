@@ -186,3 +186,21 @@ pequeño. Registrar modelo, versión de Android, versión de Chrome y resultado.
 - HTTPS con un proxy real (se usó HTTP local).
 - Volumen alto de alertas y fotos (el almacén es un JSON).
 - Hablantes de Awajún y Shawi (las traducciones siguen marcadas como pendientes).
+
+## 9. Capturas de la revisión (2026-11-18)
+
+**SOS recibida, ahora con estado “Recibida” y tipo SOS:**
+
+![SOS recibida](capturas/sos-recibida.png)
+
+**Mapa con teselas de OpenStreetMap (CSP corregido):**
+
+![Mapa en línea](capturas/mapa-online.png)
+
+**Mapa sin conexión con aviso y lista disponible:**
+
+![Mapa sin conexión](capturas/mapa-offline.png)
+
+**Panel con alerta SOS y reportes de biodiversidad:**
+
+![Panel con biodiversidad](capturas/panel-biodiversidad.png)
