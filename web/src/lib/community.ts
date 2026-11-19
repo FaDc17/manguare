@@ -31,6 +31,10 @@ export interface CommunityListing {
   community: string;
   coordinates: { lat: number; lng: number };
   reviews: Array<{ name: string; date: string; rating: number; comment: string }>;
+  /** Solo publicaciones propias: false = aún no llegó al servidor. */
+  synced?: boolean;
+  /** El servidor marca las publicaciones del usuario actual. */
+  mine?: boolean;
 }
 
 /** Datos de demostración tomados del prototipo de Figma. */
@@ -88,6 +92,74 @@ export const COMMUNITY_LISTINGS: CommunityListing[] = [
         comment: 'Viaje puntual y seguro.',
       },
     ],
+  },
+  {
+    id: 'cesteria-rosa',
+    category: 'vestimenta',
+    title: 'Cestería y bolsos de fibra natural',
+    description:
+      'Bolsos, cestas y collares tejidos a mano. Pedidos por encargo con 15 días de anticipación.',
+    location: 'Balsapuerto',
+    rating: 4.8,
+    priceRange: 'S/ 35 – 90',
+    author: 'Rosa Wajajai',
+    department: 'Loreto',
+    province: 'Alto Amazonas',
+    district: 'Balsapuerto',
+    community: 'Shawi',
+    coordinates: { lat: -5.83, lng: -76.57 },
+    reviews: [],
+  },
+  {
+    id: 'yuca-elena',
+    category: 'alimentos',
+    title: 'Yuca, plátano y frutas de chacra',
+    description:
+      'Cosecha semanal. Avisa con dos días de anticipación y preparo tu pedido.',
+    location: 'Nazareth, Imaza',
+    rating: 4.6,
+    priceRange: 'S/ 5 – 15',
+    author: 'Elena Mayanchi',
+    department: 'Amazonas',
+    province: 'Bagua',
+    district: 'Imaza',
+    community: 'Awajún',
+    coordinates: { lat: -5.20, lng: -78.31 },
+    reviews: [],
+  },
+  {
+    id: 'hamaca-tejida',
+    category: 'hogar',
+    title: 'Hamacas tejidas a mano',
+    description:
+      'Hamacas resistentes de algodón, hechas por encargo. Entrega coordinada con el transporte fluvial.',
+    location: 'Santa María de Nieva',
+    rating: 4.5,
+    priceRange: 'S/ 60 – 120',
+    author: 'Teresa Jempekit',
+    department: 'Amazonas',
+    province: 'Condorcanqui',
+    district: 'Nieva',
+    community: 'Wampis',
+    coordinates: { lat: -4.60, lng: -77.85 },
+    reviews: [],
+  },
+  {
+    id: 'reparacion-motores',
+    category: 'otros',
+    title: 'Reparación de motores peque-peque',
+    description:
+      'Mantenimiento y repuestos para motores fuera de borda. Atiendo en el puerto o en tu comunidad.',
+    location: 'Puerto de Nieva',
+    rating: 4.7,
+    priceRange: 'S/ 40 – 150',
+    author: 'Wilson Chumpi',
+    department: 'Amazonas',
+    province: 'Condorcanqui',
+    district: 'Nieva',
+    community: 'Wampis',
+    coordinates: { lat: -4.59, lng: -77.87 },
+    reviews: [],
   },
 ];
 

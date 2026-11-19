@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSession } from '../app/SessionContext';
 import {
   ChevronRight,
   Leaf,
@@ -10,6 +11,7 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
+import { PublishListingSheet } from '../components/PublishListingSheet';
 import { SubHeader } from '../components/SubHeader';
 import {
   COMMUNITY_CATEGORIES,
@@ -18,6 +20,8 @@ import {
   SUPPORT_CENTERS,
   type CommunityListing,
 } from '../lib/community';
+import { loadUserListings, mergeListings, saveUserListings } from '../lib/social';
+import { syncListings } from '../lib/social-sync';
 import type { BiodiversityCategory } from '../lib/types';
 
 type View = 'home' | 'all' | 'detail';
@@ -196,22 +200,54 @@ export function CommunityScreen({
   const [province, setProvince] = useState('');
   const [district, setDistrict] = useState('');
   const [community, setCommunity] = useState('');
+  const [userListings, setUserListings] = useState<CommunityListing[]>(() => loadUserListings());
+  const [publishOpen, setPublishOpen] = useState(false);
+  const { session } = useSession();
+  const listingsRef = useRef(userListings);
+  listingsRef.current = userListings;
+  const pendingListings = userListings.some((item) => item.synced === false);
+
+  useEffect(() => {
+    let alive = true;
+    const run = async () => {
+      if (!navigator.onLine) return;
+      const { server } = await syncListings(session.phone, listingsRef.current);
+      if (!alive || !server) return;
+      setUserListings((previous) => {
+        const next = mergeListings(previous, server);
+        saveUserListings(next);
+        return next;
+      });
+    };
+    void run();
+    const timer = window.setInterval(() => void run(), 30_000);
+    window.addEventListener('online', run);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+      window.removeEventListener('online', run);
+    };
+  }, [session.phone, pendingListings]);
+  const allListings = useMemo(
+    () => [...userListings, ...COMMUNITY_LISTINGS],
+    [userListings],
+  );
 
   const provinces = useMemo(
-    () => [...new Set(COMMUNITY_LISTINGS.filter((item) => !department || item.department === department).map((item) => item.province))],
-    [department],
+    () => [...new Set(allListings.filter((item) => !department || item.department === department).map((item) => item.province))],
+    [allListings, department],
   );
   const districts = useMemo(
-    () => [...new Set(COMMUNITY_LISTINGS.filter((item) => (!department || item.department === department) && (!province || item.province === province)).map((item) => item.district))],
-    [department, province],
+    () => [...new Set(allListings.filter((item) => (!department || item.department === department) && (!province || item.province === province)).map((item) => item.district))],
+    [allListings, department, province],
   );
   const communities = useMemo(
-    () => [...new Set(COMMUNITY_LISTINGS.filter((item) => (!department || item.department === department) && (!province || item.province === province) && (!district || item.district === district)).map((item) => item.community))],
-    [department, province, district],
+    () => [...new Set(allListings.filter((item) => (!department || item.department === department) && (!province || item.province === province) && (!district || item.district === district)).map((item) => item.community))],
+    [allListings, department, province, district],
   );
   const listings = useMemo(
     () =>
-      COMMUNITY_LISTINGS.filter(
+      allListings.filter(
         (item) =>
           (category === 'todos' || item.category === category) &&
           (view !== 'all' || !department || item.department === department) &&
@@ -219,9 +255,9 @@ export function CommunityScreen({
           (view !== 'all' || !district || item.district === district) &&
           (view !== 'all' || !community || item.community === community),
       ),
-    [category, community, department, district, province, view],
+    [allListings, category, community, department, district, province, view],
   );
-  const selectedListing = COMMUNITY_LISTINGS.find((item) => item.id === selectedId);
+  const selectedListing = allListings.find((item) => item.id === selectedId);
 
   if (view === 'detail' && selectedListing) {
     return <ListingDetail listing={selectedListing} onBack={() => setView('all')} />;
@@ -263,7 +299,8 @@ export function CommunityScreen({
             <button
               type="button"
               className="btn btn-secondary"
-              onClick={() => showToast('La publicación estará disponible en el piloto con la comunidad.', 'warn')}
+              data-testid="listing-open-publish"
+              onClick={() => setPublishOpen(true)}
             >
               <Plus size={17} aria-hidden="true" /> Publicar
             </button>
@@ -310,7 +347,7 @@ export function CommunityScreen({
               }}
             >
               <option value="">Todos</option>
-              {[...new Set(COMMUNITY_LISTINGS.map((item) => item.department))].map((value) => (
+              {[...new Set(allListings.map((item) => item.department))].map((value) => (
                 <option key={value} value={value}>{value}</option>
               ))}
             </select>
@@ -455,6 +492,18 @@ export function CommunityScreen({
           </p>
         </>
       ) : null}
+      <PublishListingSheet
+        open={publishOpen}
+        onClose={() => setPublishOpen(false)}
+        onPublish={(listing) => {
+          const next = [listing, ...userListings];
+          setUserListings(next);
+          saveUserListings(next);
+          setPublishOpen(false);
+          setCategory('todos');
+          showToast('Publicado. Se envía al mercado compartido cuando haya conexión.', 'ok');
+        }}
+      />
     </div>
   );
 }

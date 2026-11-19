@@ -14,3 +14,5 @@ server/data/*.corrupt-*
 .env.*
 !.env.example
 .DS_Store
+server/data/social.json
+art/

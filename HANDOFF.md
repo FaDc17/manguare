@@ -59,6 +59,22 @@ baja; el protocolo está listo en `docs/PRUEBAS.md`.
 - Documentación de operación, respaldos, HTTPS y protocolo de respuesta en
   `docs/OPERACION.md`; verificación y protocolo Android en `docs/PRUEBAS.md`.
 
+### Red Manguaré (2026-11-19)
+Nueva pestaña **Red** con tres secciones, todo local (localStorage) y con datos de
+demostración; no hay backend nuevo.
+- **Muro**: publicaciones con foto comprimida, «me gusta», comentarios y borrar las propias.
+- **Match** productor↔comprador↔voluntario: perfiles de demo, «Me interesa» / «Pasar»,
+  match solo si el perfil ya se interesó, chat con respuestas automáticas de demo.
+- **Asistente**: reglas locales (no es un modelo de IA, no da consejos médicos). Ante una
+  emergencia dirige a crear la alerta.
+- **Mercado**: Comunidad → Publicar ahora crea publicaciones propias con foto; 4 publicaciones
+  de demo nuevas.
+- Código: `web/src/lib/social.ts`, `lib/assistant.ts`, `screens/NetworkScreen.tsx`,
+  `components/PublishListingSheet.tsx`, `styles/network.css`. Pruebas: `web/test/social.test.ts`
+  y bloque 8b de `scripts/e2e.mjs`.
+- Pendiente: sincronizar el muro y el mercado con el servidor, moderación, audio tipo Spotify
+  y video corto tipo TikTok (no se hicieron). Sin commit ni push todavía.
+
 ### Integración del prototipo de Figma (2026-11-18)
 - Acceso con **número + PIN de 6 dígitos** y teclado numérico, con dos cuentas de
   demostración: usuario `992066275` (Juan) y admin `987654321`; PIN `123456`.
@@ -215,3 +231,12 @@ siguientes pasos son de validación y operación, no de más funcionalidad:
 3. Conseguir hablantes para textos/audios en Awajún y Shawi.
 4. Definir receptor, protocolo de respuesta y cuentas del panel.
 5. Actualizar la propuesta con supuestos confirmados/refutados de la entrevista.
+
+## Backend social + intro (2026-11-19)
+- Servidor: `server/src/social-store.js` + rutas `/api/social/*` (muro, likes, comentarios, mercado). Identidad = cabecera `x-manguare-phone` (demo, NO es auth real; endurecer después). Datos en `server/data/social.json` (`MANGUARE_SOCIAL_FILE`).
+- Cliente: `web/src/lib/social-sync.ts` + `applySync/mergeListings` en `social.ts`. Offline-first: lo propio queda `synced:false`, se envía al volver la red (cada 20 s, evento `online`, o 0,8 s tras un cambio). El servidor manda al fusionar.
+- Agente: reglas offline (`lib/assistant.ts`), sin API por ahora.
+- Intro: `components/Splash.tsx` (4 fondos Krea2 en `web/public/art/*.webp`, logo en `web/public/brand/devut-logo.png`, una vez por sesión, toque para saltar, respeta reduced-motion). Originales 1152x2048 en `art/v1/`. Scripts: `scripts/art/gen_fondos.py`, `scripts/art/logo_alpha.py`.
+- Nota: `krea2_lib.UNET` por defecto está obsoleto; `gen_fondos.py` lo sobrescribe con el DaSiWa Krea2 Turbo instalado.
+- Pruebas: `npm test` (33 API + 30 web) y `npm run test:e2e` pasan.
+- Pendiente: video H3 de cierre (opcional), fondos dentro de login/home, seguridad real (auth, límites), commit (sin hacer).

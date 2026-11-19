@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createHandler } from './app.js';
 import { createAuth } from './auth.js';
 import { BiodiversityStore } from './biodiversity-store.js';
+import { SocialStore } from './social-store.js';
 import { AlertStore } from './store.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -16,10 +17,13 @@ const host = process.env.HOST ?? '0.0.0.0';
 const dataFile = process.env.MANGUARE_DATA_FILE ?? path.join(root, 'server', 'data', 'alerts.json');
 const biodiversityFile =
   process.env.MANGUARE_BIODIVERSITY_FILE ?? path.join(root, 'server', 'data', 'biodiversity.json');
+const socialFile =
+  process.env.MANGUARE_SOCIAL_FILE ?? path.join(root, 'server', 'data', 'social.json');
 const staticDir = process.env.MANGUARE_STATIC_DIR ?? path.join(root, 'web', 'dist');
 
 const store = new AlertStore(dataFile);
 const biodiversityStore = new BiodiversityStore(biodiversityFile);
+const socialStore = new SocialStore(socialFile);
 const panelPassword = process.env.MANGUARE_PANEL_PASSWORD ?? '';
 const sessionHours = Number(process.env.MANGUARE_SESSION_HOURS ?? 12);
 const rawAckMinutes = process.env.MANGUARE_ACK_MINUTES;
@@ -37,7 +41,7 @@ const auth = createAuth({
   secureCookies: process.env.MANGUARE_SECURE_COOKIES === '1',
 });
 const server = http.createServer(
-  createHandler({ store, biodiversityStore, staticDir, auth, ackMinutes, escalationPhone }),
+  createHandler({ store, biodiversityStore, socialStore, staticDir, auth, ackMinutes, escalationPhone }),
 );
 
 function lanAddresses() {
@@ -60,6 +64,7 @@ server.listen(port, host, () => {
   }
   console.log(`  Datos:  ${dataFile}`);
   console.log(`  Biodiversidad: ${biodiversityFile}`);
+  console.log(`  Red social: ${socialFile}`);
   console.log(`  Web:    ${staticDir}`);
   console.log(
     auth.enabled

@@ -1,0 +1,360 @@
+/* Red Manguaré: muro, match, asistente y publicar producto */
+
+.bottom-nav {
+  grid-template-columns: repeat(6, 1fr);
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.bottom-nav .nav-item {
+  font-size: 9.5px;
+  min-width: 0;
+}
+
+.net-tabs {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 14px;
+  padding: 4px;
+  background: var(--surface-3);
+  border-radius: var(--radius);
+}
+
+.net-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.net-tab.is-active {
+  background: var(--surface);
+  color: var(--green-800);
+  box-shadow: var(--shadow-sm);
+}
+
+.net-compose-btn {
+  margin-bottom: 14px;
+}
+
+.net-feed {
+  display: grid;
+  gap: 12px;
+}
+
+.net-avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.net-post-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.net-post-who {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.net-post-who span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.net-post-text {
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.net-post-photo {
+  display: block;
+  width: 100%;
+  max-height: 340px;
+  margin-top: 12px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+}
+
+.net-post-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.net-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-soft);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.net-action.is-on {
+  border-color: var(--clay-500);
+  background: var(--clay-50);
+  color: var(--clay-700);
+}
+
+.net-comments {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.net-comment {
+  margin: 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.net-inline-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.net-inline-form input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.net-photo-preview {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.net-photo-preview img {
+  display: block;
+  width: 100%;
+  max-height: 260px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.net-photo-preview .icon-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(255, 253, 248, 0.92);
+}
+
+/* Match */
+
+.net-profile {
+  padding: 0;
+  overflow: hidden;
+}
+
+.net-profile-cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 150px;
+}
+
+.net-profile-initials {
+  font-size: 44px;
+  font-weight: 800;
+  color: rgba(23, 37, 30, 0.55);
+}
+
+.net-role {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 253, 248, 0.92);
+  color: var(--green-800);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.net-profile-body {
+  padding: 16px;
+}
+
+.net-profile-body h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.net-profile-where {
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.net-profile-headline {
+  margin: 0 0 6px;
+  font-weight: 700;
+}
+
+.net-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.net-tags li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--green-50);
+  color: var(--green-800);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.net-swipe-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.net-count {
+  text-align: center;
+}
+
+.net-match-list {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.net-match-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.net-match-modal {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
+
+/* Chat y asistente */
+
+.net-chat {
+  display: grid;
+  gap: 8px;
+  max-height: 46vh;
+  min-height: 80px;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.net-agent-chat {
+  max-height: 42vh;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.net-agent-row {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+}
+
+.net-agent-row.is-me {
+  justify-items: end;
+}
+
+.net-bubble {
+  max-width: 86%;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 18px 18px 18px 6px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.net-bubble.is-me {
+  justify-self: end;
+  border: 0;
+  border-radius: 18px 18px 6px 18px;
+  background: var(--green-700);
+  color: #fff;
+}
+
+.net-bubble-action {
+  min-height: 40px;
+}
+
+.net-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+/* Publicar producto */
+
+.net-listing-form {
+  display: grid;
+  gap: 14px;
+}
+
+.net-listing-form select,
+.net-listing-form input[type='text'] {
+  width: 100%;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}

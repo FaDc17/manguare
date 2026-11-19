@@ -17,6 +17,10 @@ const BIODIVERSITY_CATEGORIES = new Set([
 const RESPONSE_CODES = new Set(['en_camino', 'acudir_posta', 'sin_medico', 'otra']);
 const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const MAX_PHOTO_CHARS = 2_500_000;
+const MAX_SOCIAL_PHOTO_CHARS = 400_000;
+const SOCIAL_CATEGORIES = new Set(['transporte', 'vestimenta', 'hogar', 'alimentos', 'otros']);
+const PHOTO_PREFIX = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const SOCIAL_ID = /^[A-Za-z0-9_-]{3,80}$/;
 const DEFAULT_ACK_MINUTES = 10;
 
 const MIME = {
@@ -309,9 +313,76 @@ async function serveStatic(req, res, pathname, staticDir) {
   res.end(content);
 }
 
+
+function readSocialId(value, field = 'id') {
+  if (typeof value !== 'string' || !SOCIAL_ID.test(value)) throw new HttpError(400, `invalid_${field}`);
+  return value;
+}
+
+function readSocialPhoto(value) {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || value.length > MAX_SOCIAL_PHOTO_CHARS || !PHOTO_PREFIX.test(value)) {
+    throw new HttpError(400, 'invalid_photo');
+  }
+  return value;
+}
+
+export function toSocialPost(input, phone, now) {
+  const text = readString(input.text, 280, 'text');
+  const photo = readSocialPhoto(input.photo);
+  if (!text && !photo) throw new HttpError(400, 'empty_post');
+  const author = readString(input.author, 60, 'author');
+  if (!author) throw new HttpError(400, 'invalid_author');
+  return {
+    id: readSocialId(input.id),
+    authorPhone: phone,
+    author,
+    community: readString(input.community, 60, 'community') || 'Mi comunidad',
+    text,
+    photo,
+    createdAt: now(),
+    likedBy: [],
+    comments: [],
+  };
+}
+
+export function toSocialComment(input, now) {
+  const text = readString(input.text, 160, 'text');
+  const author = readString(input.author, 60, 'author');
+  if (!text || !author) throw new HttpError(400, 'invalid_comment');
+  return { id: readSocialId(input.id), author, text, createdAt: now() };
+}
+
+export function toSocialListing(input, phone, now) {
+  const title = readString(input.title, 80, 'title');
+  if (!title) throw new HttpError(400, 'invalid_title');
+  const category = readString(input.category, 20, 'category');
+  if (!SOCIAL_CATEGORIES.has(category)) throw new HttpError(400, 'invalid_category');
+  return {
+    id: readSocialId(input.id),
+    ownerPhone: phone,
+    category,
+    title,
+    description: readString(input.description, 400, 'description') || 'Sin descripción.',
+    photo: readSocialPhoto(input.photo),
+    location: readString(input.location, 80, 'location') || 'Mi comunidad',
+    rating: 0,
+    priceRange: readString(input.priceRange, 30, 'priceRange') || 'A convenir',
+    author: readString(input.author, 60, 'author') || 'Anónimo',
+    department: 'Amazonas',
+    province: 'Bagua',
+    district: 'Imaza',
+    community: 'Mi comunidad',
+    coordinates: { lat: -5.15, lng: -78.29 },
+    reviews: [],
+    createdAt: now(),
+  };
+}
+
 export function createHandler({
   store,
   biodiversityStore,
+  socialStore,
   staticDir,
   now = () => new Date().toISOString(),
   auth = null,
@@ -319,6 +390,7 @@ export function createHandler({
   escalationPhone = '',
 }) {
   const alertLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 120 });
+  const socialLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 240 });
   const loginLimiter = createRateLimiter({ windowMs: 15 * 60 * 1000, max: 8 });
   const effectiveAckMinutes =
     Number.isFinite(ackMinutes) && ackMinutes >= 0 ? ackMinutes : DEFAULT_ACK_MINUTES;
@@ -431,6 +503,108 @@ export function createHandler({
           { authenticated: false },
           cookie ? { 'Set-Cookie': cookie } : {},
         );
+        return;
+      }
+
+      if (pathname.startsWith('/api/social/')) {
+        if (!socialStore) {
+          sendJson(res, 503, { error: 'social_unavailable' });
+          return;
+        }
+        const phoneHeader = req.headers['x-manguare-phone'];
+        const phone =
+          typeof phoneHeader === 'string' && /^[0-9]{6,15}$/.test(phoneHeader) ? phoneHeader : '';
+        const isAdmin = Boolean(auth?.enabled && sessionFor(req));
+        const isWrite = req.method !== 'GET' && req.method !== 'HEAD';
+        if (isWrite) {
+          if (!phone) {
+            sendJson(res, 401, { error: 'identity_required' });
+            return;
+          }
+          const limit = socialLimiter(`social:${phone}:${clientIp(req)}`);
+          if (!limit.allowed) {
+            sendJson(res, 429, { error: 'too_many_requests' }, { 'Retry-After': String(limit.retryAfter) });
+            return;
+          }
+        }
+
+        if (pathname === '/api/social/posts') {
+          if (req.method === 'GET') {
+            sendJson(res, 200, { posts: await socialStore.listPosts(phone) });
+            return;
+          }
+          if (req.method === 'POST') {
+            const post = toSocialPost(await readJsonBody(req), phone, now);
+            const result = await socialStore.addPost(post, phone);
+            if (result.quota) {
+              sendJson(res, 429, { error: 'quota_exceeded' });
+              return;
+            }
+            sendJson(res, result.created ? 201 : 200, { post: result.post });
+            return;
+          }
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+
+        const postMatch = pathname.match(/^\/api\/social\/posts\/([^/]+)(?:\/(like|comments))?$/);
+        if (postMatch) {
+          const id = readSocialId(postMatch[1]);
+          const action = postMatch[2];
+          if (!action && req.method === 'DELETE') {
+            const outcome = await socialStore.deletePost(id, phone, isAdmin);
+            if (outcome === 'missing') sendJson(res, 404, { error: 'not_found' });
+            else if (outcome === 'forbidden') sendJson(res, 403, { error: 'forbidden' });
+            else sendJson(res, 200, { deleted: true });
+            return;
+          }
+          if (action === 'like' && req.method === 'POST') {
+            const body = await readJsonBody(req);
+            if (typeof body.on !== 'boolean') throw new HttpError(400, 'invalid_on');
+            const post = await socialStore.setLike(id, phone, body.on);
+            if (!post) sendJson(res, 404, { error: 'not_found' });
+            else sendJson(res, 200, { post });
+            return;
+          }
+          if (action === 'comments' && req.method === 'POST') {
+            const comment = toSocialComment(await readJsonBody(req), now);
+            const post = await socialStore.addComment(id, comment, phone);
+            if (!post) sendJson(res, 404, { error: 'not_found' });
+            else sendJson(res, 200, { post });
+            return;
+          }
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+
+        if (pathname === '/api/social/listings') {
+          if (req.method === 'GET') {
+            sendJson(res, 200, { listings: await socialStore.listListings(phone) });
+            return;
+          }
+          if (req.method === 'POST') {
+            const listing = toSocialListing(await readJsonBody(req), phone, now);
+            const result = await socialStore.addListing(listing, phone);
+            if (result.quota) {
+              sendJson(res, 429, { error: 'quota_exceeded' });
+              return;
+            }
+            sendJson(res, result.created ? 201 : 200, { listing: result.listing });
+            return;
+          }
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+
+        const listingMatch = pathname.match(/^\/api\/social\/listings\/([^/]+)$/);
+        if (listingMatch && req.method === 'DELETE') {
+          const outcome = await socialStore.deleteListing(readSocialId(listingMatch[1]), phone, isAdmin);
+          if (outcome === 'missing') sendJson(res, 404, { error: 'not_found' });
+          else if (outcome === 'forbidden') sendJson(res, 403, { error: 'forbidden' });
+          else sendJson(res, 200, { deleted: true });
+          return;
+        }
+        sendJson(res, 404, { error: 'not_found' });
         return;
       }
 

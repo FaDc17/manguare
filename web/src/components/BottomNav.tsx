@@ -1,7 +1,7 @@
-import { History, House, Map, Settings2, Store } from 'lucide-react';
+import { History, House, Map, Settings2, Store, Users } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 
-export type Tab = 'home' | 'community' | 'map' | 'history' | 'settings';
+export type Tab = 'home' | 'community' | 'network' | 'map' | 'history' | 'settings';
 
 export function BottomNav({
   active,
@@ -34,6 +34,16 @@ export function BottomNav({
       >
         <Store size={22} aria-hidden="true" />
         <span>Comunidad</span>
+      </button>
+      <button
+        type="button"
+        className={`nav-item ${active === 'network' ? 'is-active' : ''}`}
+        data-testid="nav-network"
+        onClick={() => onChange('network')}
+        aria-current={active === 'network' ? 'page' : undefined}
+      >
+        <Users size={22} aria-hidden="true" />
+        <span>Red</span>
       </button>
       <button
         type="button"

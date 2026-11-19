@@ -1,9 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { Splash } from './components/Splash';
 import './styles/base.css';
 import './styles/app.css';
 import './styles/features.css';
+import './styles/network.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) throw new Error('No se encontró el contenedor de la app.');
@@ -11,6 +13,7 @@ if (!rootElement) throw new Error('No se encontró el contenedor de la app.');
 createRoot(rootElement).render(
   <StrictMode>
     <App />
+    <Splash />
   </StrictMode>,
 );
 

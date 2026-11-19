@@ -15,6 +15,7 @@ import { CommunityScreen } from './screens/CommunityScreen';
 import { HistoryScreen } from './screens/HistoryScreen';
 import { HomeScreen } from './screens/HomeScreen';
 import { LoginScreen } from './screens/LoginScreen';
+import { NetworkScreen } from './screens/NetworkScreen';
 import { NewAlertScreen } from './screens/NewAlertScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -27,6 +28,7 @@ const MapScreen = lazy(() =>
 type Screen =
   | { name: 'home' }
   | { name: 'community' }
+  | { name: 'network' }
   | { name: 'map' }
   | { name: 'biodiversity'; category?: BiodiversityCategory }
   | { name: 'history' }
@@ -49,6 +51,7 @@ function AppShell() {
   const goTab = (tab: Tab) => {
     if (tab === 'home') setScreen({ name: 'home' });
     else if (tab === 'community') setScreen({ name: 'community' });
+    else if (tab === 'network') setScreen({ name: 'network' });
     else if (tab === 'map') setScreen({ name: 'map' });
     else if (tab === 'history') setScreen({ name: 'history' });
     else setScreen({ name: 'settings' });
@@ -59,7 +62,9 @@ function AppShell() {
       ? 'home'
       : screen.name === 'community'
         ? 'community'
-        : screen.name === 'map'
+        : screen.name === 'network'
+          ? 'network'
+          : screen.name === 'map'
           ? 'map'
             : screen.name === 'history'
               ? 'history'
@@ -91,6 +96,13 @@ function AppShell() {
               onReportBiodiversity={(category) =>
                 setScreen({ name: 'biodiversity', category })
               }
+            />
+          ) : null}
+
+          {screen.name === 'network' ? (
+            <NetworkScreen
+              onNewAlert={() => setScreen({ name: 'new' })}
+              onOpenCommunity={goCommunity}
             />
           ) : null}
 

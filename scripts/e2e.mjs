@@ -112,6 +112,9 @@ async function main() {
 
     const started = Date.now();
     await app.goto(`${base}/`, { waitUntil: 'domcontentloaded' });
+    await app.waitForSelector('[data-testid="splash"]', { timeout: 15000 });
+    await app.click('[data-testid="splash"]');
+    await app.waitForSelector('[data-testid="splash"]', { hidden: true, timeout: 5000 });
     await app.waitForSelector('[data-testid="login-phone"]', { timeout: 15000 });
     await app.click('[data-testid="demo-user"]');
     await app.click('[data-testid="login-submit"]');
@@ -395,6 +398,62 @@ async function main() {
     );
     results.publicationDetails = true;
     results.biodiversityAvailableAndRead = true;
+
+    // 8b. Red Manguaré: muro con likes y publicación, match con chat, asistente y mercado.
+    await app.click('[data-testid="nav-network"]');
+    await app.waitForSelector('[data-testid="net-post"]', { timeout: 10000 });
+    await app.click('[data-testid="net-like"]');
+    assert.equal(
+      await app.$eval('[data-testid="net-like"]', (element) => element.getAttribute('aria-pressed')),
+      'true',
+    );
+    await app.click('[data-testid="net-compose"]');
+    await app.type('#net-text', 'Cosecha de cacao lista para la feria');
+    await app.click('[data-testid="net-publish"]');
+    await app.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-testid="net-post"]')
+          ?.textContent?.includes('Cosecha de cacao lista para la feria'),
+      { timeout: 10000 },
+    );
+    await app.click('[data-testid="net-tab-match"]');
+    await app.waitForSelector('[data-testid="net-profile"]', { timeout: 10000 });
+    await app.click('[data-testid="net-interest"]');
+    await app.waitForFunction(
+      () => document.body.textContent?.includes('¡Hicieron match!'),
+      { timeout: 10000 },
+    );
+    await app.evaluate(() => {
+      const button = [...document.querySelectorAll('button')].find((item) =>
+        item.textContent?.includes('Enviar mensaje'),
+      );
+      button?.click();
+    });
+    await app.waitForSelector('[data-testid="net-chat-input"]', { timeout: 10000 });
+    await app.type('[data-testid="net-chat-input"]', 'Hola, ¿tienes miel disponible?');
+    await app.keyboard.press('Enter');
+    await app.waitForFunction(
+      () => document.querySelectorAll('.net-bubble').length >= 2,
+      { timeout: 10000 },
+    );
+    await app.keyboard.press('Escape');
+    await app.click('[data-testid="net-tab-agent"]');
+    await app.type('[data-testid="net-agent-input"]', 'Tengo una emergencia');
+    await app.keyboard.press('Enter');
+    await app.waitForFunction(
+      () => document.querySelector('[data-testid="net-agent-chat"]')?.textContent?.includes('Crear alerta'),
+      { timeout: 10000 },
+    );
+    await app.click('[data-testid="nav-community"]');
+    await app.click('[data-testid="listing-open-publish"]');
+    await app.type('[data-testid="listing-title"]', 'Cacao orgánico de chacra');
+    await app.click('[data-testid="listing-publish"]');
+    await app.waitForFunction(
+      () => document.body.textContent?.includes('Cacao orgánico de chacra'),
+      { timeout: 10000 },
+    );
+    results.networkWallMatchAgentMarket = true;
 
     // 9. Mapa: solo Conecta y centros de apoyo; ubica y enfoca resultados.
     await app.click('[data-testid="nav-map"]');
