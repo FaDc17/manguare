@@ -12,6 +12,7 @@
     "dev:api": "node --watch server/src/index.js",
     "dev:web": "vite --config web/vite.config.ts",
     "build": "vite build --config web/vite.config.ts",
+    "build:beta": "vite build --config web/vite.config.ts --mode beta-visual",
     "start": "node server/src/index.js",
     "seed": "node server/scripts/seed.js",
     "test": "npm run test:api && npm run test:web",

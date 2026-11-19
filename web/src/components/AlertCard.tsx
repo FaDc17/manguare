@@ -1,3 +1,6 @@
+// Presenta el tipo, el estado y la fecha de la alerta en el idioma activo.
+
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { ChevronRight, Image as ImageIcon, MapPin, TriangleAlert } from 'lucide-react';
 import { EMERGENCY_META } from '../lib/emergency';
 import { formatRelative } from '../lib/format';
@@ -12,6 +15,7 @@ export function AlertCard({
   alert: AlertRecord;
   onOpen: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const meta = EMERGENCY_META[alert.type];
   const Icon = meta.icon;
 
@@ -27,11 +31,11 @@ export function AlertCard({
       </span>
       <span className="alert-main">
         <span className="alert-title">
-          {meta.label}
+          <LocalizedText id={`emergency.${alert.type}`} />
           {alert.community ? <span className="alert-community"> · {alert.community}</span> : null}
         </span>
         <span className="alert-meta">
-          {formatRelative(alert.createdAt)}
+          {formatRelative(alert.createdAt, t)}
           {alert.location ? (
             <span className="alert-flag">
               <MapPin size={12} aria-hidden="true" /> GPS
@@ -39,12 +43,12 @@ export function AlertCard({
           ) : null}
           {alert.photo ? (
             <span className="alert-flag">
-              <ImageIcon size={12} aria-hidden="true" /> Foto
+              <ImageIcon size={12} aria-hidden="true" />{' '}{t('common.photo')}
             </span>
           ) : null}
           {isOverdue(alert) ? (
             <span className="alert-flag alert-flag--overdue">
-              <TriangleAlert size={12} aria-hidden="true" /> Plazo vencido
+              <TriangleAlert size={12} aria-hidden="true" />{' '}{t('alertCard.plazoVencido')}
             </span>
           ) : null}
         </span>
@@ -52,7 +56,7 @@ export function AlertCard({
       <StatusChip
         state={alert.state}
         compact
-        label={alert.isSos && alert.state === 'received' ? 'Leída' : undefined}
+        label={alert.isSos && alert.state === 'received' ? t('status.read') : undefined}
       />
       <ChevronRight size={18} className="alert-chevron" aria-hidden="true" />
     </button>

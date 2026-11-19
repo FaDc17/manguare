@@ -1,3 +1,6 @@
+// Muestra el saludo, los accesos y la guía de audio según el idioma activo.
+
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import {
   ChevronRight,
   Clock3,
@@ -18,10 +21,10 @@ import { useApp } from '../app/AppContext';
 import { useSession } from '../app/SessionContext';
 import { AlertCard } from '../components/AlertCard';
 import { EmptyState } from '../components/EmptyState';
-import { canSpeak, speakSpanish } from '../lib/audio';
+import { canSpeak, guideText, MIXED_AUDIO_NOTE, speakSpanish } from '../lib/audio';
 import { isOverdue } from '../lib/sla';
-import { LANGUAGES } from '../lib/settings';
-import { formatPhone, roleLabel } from '../lib/session';
+import { isLanguageComplete, LANGUAGES } from '../i18n/catalog';
+import { formatPhone } from '../lib/session';
 
 const HOME_AUDIO =
   'Manguaré guarda tu alerta en el teléfono. Si no hay señal, la envía automáticamente cuando vuelve la conexión. ' +
@@ -42,19 +45,22 @@ export function HomeScreen({
   onOpenLanguage: () => void;
   onOpenHelp: () => void;
 }) {
-  const { alerts, online, syncing, settings, syncNow, showToast } = useApp();
+  const { t, language: activeLanguage, visualSimulation } = useTranslation();
+  const { alerts, online, syncing, syncNow, showToast } = useApp();
   const { session } = useSession();
   const pending = alerts.filter((alert) => alert.state === 'pending');
   const awaiting = alerts.filter((alert) => alert.state === 'sent' && !alert.acknowledgedAt);
   const overdue = awaiting.some((alert) => isOverdue(alert));
   const recent = alerts.slice(0, 2);
-  const language = LANGUAGES.find((item) => item.id === settings.language);
+  const language = LANGUAGES.find((item) => item.id === activeLanguage);
 
   const playGuide = () => {
-    if (!speakSpanish(HOME_AUDIO)) {
-      showToast('Este dispositivo no tiene audio disponible.', 'warn');
-    } else if (settings.language !== 'es') {
-      showToast('Por ahora la guía de audio está en castellano.', 'warn');
+    if (!speakSpanish(guideText(HOME_AUDIO, activeLanguage, visualSimulation))) {
+      showToast(t('home.esteDispositivoNoTieneAudioDisponible'), 'warn');
+    } else if (visualSimulation) {
+      showToast(MIXED_AUDIO_NOTE, 'warn');
+    } else if (activeLanguage !== 'es') {
+      showToast(t('home.porAhoraLaGuiaDeAudio'), 'warn');
     }
   };
 
@@ -62,19 +68,18 @@ export function HomeScreen({
     <div className="screen home">
       <section className="hero">
         <p className="eyebrow">
-          <span className="eyebrow-dot" /> Red de salud comunitaria
+          <span className="eyebrow-dot" />{' '}{t('home.redDeSaludComunitaria')}
         </p>
         <p className="home-hello" data-testid="home-hello">
-          Hola, {session.name}
+          <LocalizedText id="home.greeting" values={{ name: session.name }} />
           <span>
             {' '}
-            · {roleLabel(session.role)} · {formatPhone(session.phone)}
+            · {t(`role.${session.role}`)} · {formatPhone(session.phone)}
           </span>
         </p>
-        <h1>Pide ayuda sin esperar señal.</h1>
+        <h1>{t('home.pideAyudaSinEsperarSenal')}</h1>
         <p className="hero-copy">
-          Tu alerta se guarda en el teléfono y se envía en cuanto vuelve la conexión. Verás siempre
-          si sigue pendiente.
+          {t('home.tuAlertaSeGuardaEnEl')}
         </p>
 
         <button type="button" className="sos-button" data-testid="sos-button" onClick={onSOS}>
@@ -82,36 +87,34 @@ export function HomeScreen({
           <span className="sos-ring sos-ring-2" aria-hidden="true" />
           <span className="sos-inner">
             <TriangleAlert size={46} strokeWidth={2.1} aria-hidden="true" />
-            <span className="sos-label">Emergencia</span>
-            <span className="sos-hint">Toca para pedir ayuda</span>
+            <span className="sos-label"><LocalizedText id="home.emergencia" /></span>
+            <span className="sos-hint">{t('home.tocaParaPedirAyuda')}</span>
           </span>
         </button>
 
         <p className={`connection-line ${online ? 'is-online' : 'is-offline'}`}>
           {online ? (
             <>
-              <Wifi size={16} aria-hidden="true" /> Con conexión: la alerta se envía ahora.
+              <Wifi size={16} aria-hidden="true" />{' '}{t('home.conConexionLaAlertaSeEnvia')}
             </>
           ) : (
             <>
-              <WifiOff size={16} aria-hidden="true" /> Sin conexión: la alerta se guarda en tu
-              teléfono.
+              <WifiOff size={16} aria-hidden="true" />{' '}{t('home.sinConexionLaAlertaSeGuarda')}
             </>
           )}
         </p>
       </section>
 
-      {language && language.id !== 'es' ? (
+      {language && !visualSimulation && !isLanguageComplete(language.id) ? (
         <div className="banner banner-warn">
           <Info size={19} aria-hidden="true" />
           <div>
-            <strong>Interfaz en español como respaldo</strong>
+            <strong>{t('home.interfazEnEspanolComoRespaldo')}</strong>
             <p>
-              La traducción al {language.label.toLowerCase()} se validará y grabará con hablantes de
-              la comunidad. Aún no está activa.
+              {t('home.partialLanguage', { language: language.label })}
             </p>
             <button type="button" className="text-btn" onClick={onOpenLanguage}>
-              Revisar idioma <ChevronRight size={14} aria-hidden="true" />
+              {t('home.revisarIdioma')}{' '}<ChevronRight size={14} aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -126,13 +129,13 @@ export function HomeScreen({
           <div className="pending-copy">
             <strong>
               {pending.length === 1
-                ? '1 alerta esperando envío'
-                : `${pending.length} alertas esperando envío`}
+                ? t('home.1AlertaEsperandoEnvio')
+                : t('home.alertasEsperandoEnvio', { count: pending.length })}
             </strong>
             <span>
               {online
-                ? 'Hay conexión. Se están enviando automáticamente.'
-                : 'Se enviarán solas cuando vuelva la señal.'}
+                ? t('home.hayConexionSeEstanEnviandoAutomaticamente')
+                : t('home.seEnviaranSolasCuandoVuelvaLa')}
             </span>
           </div>
           <button
@@ -146,11 +149,11 @@ export function HomeScreen({
             {online ? (
               <>
                 <RefreshCw size={14} className={syncing ? 'spin' : ''} aria-hidden="true" />
-                {syncing ? 'Enviando' : 'Reintentar'}
+                {syncing ? t('home.enviando') : t('common.retry')}
               </>
             ) : (
               <>
-                Ver <ChevronRight size={14} aria-hidden="true" />
+                {t('common.view')}{' '}<ChevronRight size={14} aria-hidden="true" />
               </>
             )}
           </button>
@@ -169,67 +172,67 @@ export function HomeScreen({
           <div className="confirmation-copy">
             <strong>
               {overdue
-                ? 'La red no confirmó en el plazo'
+                ? t('home.laRedNoConfirmoEnEl')
                 : awaiting.length === 1
-                  ? '1 alerta esperando confirmación'
-                  : `${awaiting.length} alertas esperando confirmación`}
+                  ? t('home.1AlertaEsperandoConfirmacion')
+                  : t('home.alertasEsperandoConfirmacion', { count: awaiting.length })}
             </strong>
             <span>
               {overdue
-                ? 'Puedes avisar por SMS o llamar al 106. La alerta sigue registrada.'
-                : 'La red de salud todavía no confirma que la recibió.'}
+                ? t('home.puedesAvisarPorSmsOLlamar')
+                : t('home.laRedDeSaludTodaviaNo')}
             </span>
           </div>
           <button type="button" className="text-btn" onClick={onHistory}>
-            Ver <ChevronRight size={14} aria-hidden="true" />
+            {t('common.view')}{' '}<ChevronRight size={14} aria-hidden="true" />
           </button>
         </div>
       ) : null}
 
-      <section className="quick-grid" aria-label="Accesos rápidos">
+      <section className="quick-grid" aria-label={t('home.accesosRapidos')}>
         <button type="button" className="quick-card" onClick={onHistory}>
           <span className="quick-icon quick-icon--green">
             <History size={21} aria-hidden="true" />
           </span>
-          <span className="quick-title">Mis alertas</span>
+          <span className="quick-title">{t('navigation.history')}</span>
           <span className="quick-sub">
             {alerts.length > 0
-              ? `${alerts.length} en este teléfono`
-              : 'Historial y estado de envío'}
+              ? t('home.enEsteTelefono', { count: alerts.length })
+              : t('home.historialYEstadoDeEnvio')}
           </span>
         </button>
         <button type="button" className="quick-card" onClick={onOpenHelp}>
           <span className="quick-icon quick-icon--clay">
             <Phone size={21} aria-hidden="true" />
           </span>
-          <span className="quick-title">Números de ayuda</span>
-          <span className="quick-sub">SAMU · Bomberos · Policía</span>
+          <span className="quick-title"><LocalizedText id="common.help" /></span>
+          <span className="quick-sub">{t('home.samuBomberosPolicia')}</span>
         </button>
         <button type="button" className="quick-card" onClick={onCommunity}>
           <span className="quick-icon quick-icon--green">
             <Store size={21} aria-hidden="true" />
           </span>
-          <span className="quick-title">Conecta Amazonía</span>
-          <span className="quick-sub">Servicios y centros de apoyo</span>
+          <span className="quick-title">{t('home.conectaAmazonia')}</span>
+          <span className="quick-sub">{t('home.serviciosYCentrosDeApoyo')}</span>
         </button>
         <button
           type="button"
           className="quick-card"
-          onClick={() => showToast('El asistente estará disponible en el piloto.', 'warn')}
+          onClick={() => showToast(t('home.elAsistenteEstaraDisponibleEnEl'), 'warn')}
         >
           <span className="quick-icon quick-icon--sand">
             <Sparkles size={21} aria-hidden="true" />
           </span>
-          <span className="quick-title">Asistente IA</span>
-          <span className="quick-sub">Próximamente</span>
+          <span className="quick-title">{t('home.asistenteIa')}</span>
+          <span className="quick-sub">{t('home.proximamente')}</span>
         </button>
         {session.role === 'admin' ? (
           <a className="quick-card" href="/panel" target="_blank" rel="noreferrer">
             <span className="quick-icon quick-icon--clay">
               <ShieldCheck size={21} aria-hidden="true" />
             </span>
-            <span className="quick-title">Panel de la red</span>
-            <span className="quick-sub">Alertas y confirmaciones</span>
+            <span className="quick-title">{t('home.panelDeLaRed')}</span>
+            <span className="quick-sub">{t('home.alertasYConfirmaciones')}</span>
           </a>
         ) : null}
         {canSpeak() ? (
@@ -237,8 +240,8 @@ export function HomeScreen({
             <span className="quick-icon quick-icon--sand">
               <Volume2 size={21} aria-hidden="true" />
             </span>
-            <span className="quick-title">¿Cómo funciona?</span>
-            <span className="quick-sub">Escuchar guía en castellano</span>
+            <span className="quick-title">{t('home.comoFunciona')}</span>
+            <span className="quick-sub">{visualSimulation ? 'Escuchar audio de prueba' : t('home.escucharGuiaEnCastellano')}</span>
             <span className="quick-play" aria-hidden="true">
               <Volume2 size={14} />
             </span>
@@ -248,18 +251,18 @@ export function HomeScreen({
             <span className="quick-icon quick-icon--sand">
               <Globe2 size={21} aria-hidden="true" />
             </span>
-            <span className="quick-title">¿Cómo funciona?</span>
-            <span className="quick-sub">Guía y canales de ayuda</span>
+            <span className="quick-title">{t('home.comoFunciona')}</span>
+            <span className="quick-sub">{t('home.guiaYCanalesDeAyuda')}</span>
           </button>
         )}
       </section>
 
       <section className="recent">
         <div className="section-head">
-          <h2>Últimas alertas</h2>
+          <h2>{t('home.ultimasAlertas')}</h2>
           {alerts.length > 0 ? (
             <button type="button" className="text-btn" onClick={onHistory}>
-              Ver todas <ChevronRight size={14} aria-hidden="true" />
+              {t('home.verTodas')}{' '}<ChevronRight size={14} aria-hidden="true" />
             </button>
           ) : null}
         </div>
@@ -270,15 +273,14 @@ export function HomeScreen({
             ))}
           </div>
         ) : (
-          <EmptyState icon={TriangleAlert} title="Todavía no enviaste alertas">
-            Cuando envíes una emergencia verás aquí su estado: pendiente, enviada o recibida.
+          <EmptyState icon={TriangleAlert} title={t('home.todaviaNoEnviasteAlertas')}>
+            {t('home.cuandoEnviesUnaEmergenciaVerasAqui')}
           </EmptyState>
         )}
       </section>
 
       <p className="disclaimer">
-        Manguaré complementa a los servicios de emergencia y a la radio del puesto de salud. No los
-        reemplaza.
+        {t('home.manguareComplementaALosServiciosDe')}
       </p>
     </div>
   );

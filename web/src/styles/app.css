@@ -249,6 +249,15 @@
   color: var(--green-800);
 }
 
+.nav-item > span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.nav-item > svg {
+  flex-shrink: 0;
+}
+
 .nav-item:hover {
   color: var(--green-700);
 }
@@ -471,6 +480,18 @@
   letter-spacing: 0.09em;
   text-transform: uppercase;
   line-height: 1.1;
+}
+
+/* Ajusta los rótulos largos al ancho del botón de emergencia. */
+.sos-label > [lang="agr"] {
+  display: block;
+  max-inline-size: 6.8em;
+}
+
+.sos-label > [lang="cni"] {
+  display: block;
+  font-size: 0.82em;
+  max-inline-size: 8.8em;
 }
 
 .sos-hint {
@@ -2663,6 +2684,7 @@
 
 .lang-name {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 7px;
   font-size: 12.5px;
@@ -2821,6 +2843,10 @@
     opacity: 1;
     transform: translate(-50%, 0);
   }
+}
+
+.toast-behind-sheet {
+  z-index: 99;
 }
 
 .toast > svg {
@@ -3296,7 +3322,7 @@
   color: var(--green-800);
 }
 
-.home-hello span {
+.home-hello > span:not([lang]) {
   font-weight: 600;
   color: var(--muted);
 }

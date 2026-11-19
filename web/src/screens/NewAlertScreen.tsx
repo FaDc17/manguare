@@ -1,3 +1,7 @@
+// Traduce las instrucciones y opciones del formulario de alertas.
+
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
+import { InterfaceError } from '../i18n/catalog';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
@@ -44,6 +48,7 @@ export function NewAlertScreen({
   onCancel: () => void;
   onCreated: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const { settings, online, createAlert, showToast } = useApp();
   const { session } = useSession();
   const [step, setStep] = useState<Step>(1);
@@ -59,7 +64,7 @@ export function NewAlertScreen({
 
   const requestLocation = useCallback(() => {
     if (typeof navigator === 'undefined' || !('geolocation' in navigator)) {
-      setGeo({ status: 'unsupported', message: 'Este dispositivo no tiene GPS disponible.' });
+      setGeo({ status: 'unsupported', message: t('newAlert.esteDispositivoNoTieneGpsDisponible') });
       return;
     }
     setGeo({ status: 'locating' });
@@ -78,15 +83,15 @@ export function NewAlertScreen({
       (error) => {
         const message =
           error.code === 1
-            ? 'No diste permiso de ubicación. Puedes continuar sin GPS y escribir una referencia.'
+            ? t('newAlert.noDistePermisoDeUbicacionPuedes')
             : error.code === 2
-              ? 'No se pudo obtener la ubicación. Intenta al aire libre o continúa sin GPS.'
-              : 'La ubicación tardó demasiado. Inténtalo otra vez.';
+              ? t('newAlert.noSePudoObtenerLaUbicacion')
+              : t('newAlert.laUbicacionTardoDemasiadoIntentaloOtra');
         setGeo({ status: 'error', message });
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 120000 },
     );
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (step === 2 && geo.status === 'idle') requestLocation();
@@ -116,7 +121,7 @@ export function NewAlertScreen({
       setPhoto(compressed);
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : 'No se pudo procesar la foto.',
+        t(error instanceof InterfaceError ? error.key : 'newAlert.noSePudoProcesarLaFoto'),
         'error',
       );
     } finally {
@@ -140,11 +145,11 @@ export function NewAlertScreen({
         consentLocation: consent,
       });
       if (!online) {
-        showToast('Alerta guardada. Se enviará al recuperar señal.', 'warn');
+        showToast(t('newAlert.alertaGuardadaSeEnviaraAlRecuperar'), 'warn');
       }
       onCreated(alert.id);
     } catch {
-      showToast('No se pudo guardar la alerta en este teléfono. Inténtalo de nuevo.', 'error');
+      showToast(t('newAlert.noSePudoGuardarLaAlerta'), 'error');
       setSubmitting(false);
     }
   };
@@ -152,32 +157,32 @@ export function NewAlertScreen({
   return (
     <div className="screen wizard">
       <header className="wizard-head">
-        <button type="button" className="icon-btn" onClick={goBack} aria-label="Volver">
+        <button type="button" className="icon-btn" onClick={goBack} aria-label={t('common.back')}>
           <ArrowLeft size={22} aria-hidden="true" />
         </button>
         <div className="wizard-head-copy">
-          <span className="wizard-step">Paso {step} de 3</span>
+          <span className="wizard-step">{t('newAlert.pasoDe3', { step })}</span>
           <div
             className="progress"
             role="progressbar"
             aria-valuemin={1}
             aria-valuemax={3}
             aria-valuenow={step}
-            aria-label={`Paso ${step} de 3`}
+            aria-label={t('newAlert.pasoDe3', { step })}
           >
             <span style={{ width: `${(step / 3) * 100}%` }} />
           </div>
         </div>
-        <span className="wizard-tag">Nueva alerta</span>
+        <span className="wizard-tag">{t('newAlert.nuevaAlerta')}</span>
       </header>
 
       {step === 1 ? (
         <section className="wizard-body">
-          <h1>¿Qué está pasando?</h1>
+          <h1>{t('newAlert.queEstaPasando')}</h1>
           <p className="lead">
-            Elige la opción más parecida. No necesitas escribir nada para continuar.
+            {t('newAlert.eligeLaOpcionMasParecidaNo')}
           </p>
-          <AudioButton text={TYPE_AUDIO} label="Escuchar las opciones" />
+          <AudioButton text={TYPE_AUDIO} label={t('newAlert.escucharLasOpciones')} />
 
           <div className="type-grid">
             {EMERGENCY_TYPES.map((item) => {
@@ -197,8 +202,8 @@ export function NewAlertScreen({
                     <Icon size={26} aria-hidden="true" />
                   </span>
                   <span className="type-card-copy">
-                    <span className="type-card-title">{itemMeta.label}</span>
-                    <span className="type-card-hint">{itemMeta.hint}</span>
+                    <span className="type-card-title"><LocalizedText id={`emergency.${item}`} /></span>
+                    <span className="type-card-hint">{t(`emergency.hint.${item}`)}</span>
                   </span>
                   <ChevronRight size={18} className="type-card-arrow" aria-hidden="true" />
                 </button>
@@ -207,8 +212,7 @@ export function NewAlertScreen({
           </div>
 
           <p className="wizard-note">
-            <TriangleAlert size={16} aria-hidden="true" /> Si hay peligro inmediato y tienes señal,
-            llama también al 106.
+            <TriangleAlert size={16} aria-hidden="true" />{' '}{t('newAlert.siHayPeligroInmediatoYTienes')}
           </p>
         </section>
       ) : null}
@@ -226,31 +230,31 @@ export function NewAlertScreen({
               <meta.icon size={24} aria-hidden="true" />
             </span>
             <div>
-              <span className="step-type-label">Emergencia</span>
-              <strong>{meta.label}</strong>
+              <span className="step-type-label">{t('newAlert.emergencia')}</span>
+              <strong><LocalizedText id={`emergency.${type!}`} /></strong>
             </div>
             <button type="button" className="text-btn" onClick={() => setStep(1)}>
-              Cambiar
+              {t('newAlert.cambiar')}
             </button>
           </div>
 
-          <h1>Cuéntanos un poco más</h1>
-          <p className="lead">Todo es opcional. La alerta se puede enviar solo con el tipo.</p>
+          <h1>{t('newAlert.cuentanosUnPocoMas')}</h1>
+          <p className="lead">{t('newAlert.todoEsOpcionalLaAlertaSe')}</p>
 
           <label className="field">
-            <span className="field-label">¿Qué observas?</span>
+            <span className="field-label">{t('newAlert.queObservas')}</span>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
-              placeholder="Ej. Fiebre alta desde ayer, no puede caminar."
+              placeholder={t('newAlert.ejFiebreAltaDesdeAyerNo')}
               rows={3}
               maxLength={1000}
             />
-            <span className="field-help">No escribas nombres si no es necesario.</span>
+            <span className="field-help">{t('newAlert.noEscribasNombresSiNoEs')}</span>
           </label>
 
           <div className="field">
-            <span className="field-label">Foto (opcional)</span>
+            <span className="field-label">{t('newAlert.fotoOpcional')}</span>
             <input
               ref={fileRef}
               type="file"
@@ -265,17 +269,17 @@ export function NewAlertScreen({
             />
             {photo ? (
               <div className="photo-preview">
-                <img src={photo} alt="Foto adjunta a la alerta" />
+                <img src={photo} alt={t('newAlert.fotoAdjuntaALaAlerta')} />
                 <button
                   type="button"
                   className="photo-remove"
                   onClick={() => setPhoto(undefined)}
-                  aria-label="Quitar foto"
+                  aria-label={t('newAlert.quitarFoto')}
                 >
                   <X size={16} aria-hidden="true" />
                 </button>
                 <span className="photo-ready">
-                  <Check size={14} aria-hidden="true" /> Comprimida y lista
+                  <Check size={14} aria-hidden="true" />{' '}{t('newAlert.comprimidaYLista')}
                 </span>
               </div>
             ) : (
@@ -291,15 +295,15 @@ export function NewAlertScreen({
                   <ImagePlus size={22} aria-hidden="true" />
                 )}
                 <span>
-                  {photoBusy ? 'Preparando foto…' : 'Tomar o elegir una foto'}
-                  <small>Se guarda en el teléfono y se envía con la alerta.</small>
+                  {photoBusy ? t('newAlert.preparandoFoto') : t('newAlert.tomarOElegirUnaFoto')}
+                  <small>{t('newAlert.seGuardaEnElTelefonoY')}</small>
                 </span>
               </button>
             )}
           </div>
 
           <div className="field">
-            <span className="field-label">Ubicación</span>
+            <span className="field-label">{t('common.location')}</span>
             <div className={`geo-card geo-${geo.status}`}>
               <span className="geo-icon">
                 {geo.status === 'locating' ? (
@@ -313,17 +317,17 @@ export function NewAlertScreen({
               <div className="geo-copy">
                 <strong>
                   {geo.status === 'idle' || geo.status === 'locating'
-                    ? 'Buscando ubicación…'
+                    ? t('newAlert.buscandoUbicacion')
                     : geo.status === 'ok'
-                      ? 'Ubicación lista'
-                      : 'Sin ubicación GPS'}
+                      ? t('newAlert.ubicacionLista')
+                      : t('newAlert.sinUbicacionGps')}
                 </strong>
                 <span>
                   {geo.status === 'ok' && geo.location
-                    ? `Precisión aproximada de ${geo.location.accuracy} m. El GPS no usa datos móviles.`
+                    ? t('newAlert.precisionAproximadaDeMElGps', { accuracy: geo.location.accuracy })
                     : geo.status === 'error' || geo.status === 'unsupported'
                       ? geo.message
-                      : 'El GPS funciona sin datos móviles. Puede tardar unos segundos.'}
+                      : t('newAlert.elGpsFuncionaSinDatosMoviles')}
                 </span>
               </div>
               {geo.status === 'ok' ? (
@@ -332,7 +336,7 @@ export function NewAlertScreen({
                 </span>
               ) : geo.status === 'idle' || geo.status === 'locating' ? null : (
                 <button type="button" className="geo-retry" onClick={requestLocation}>
-                  <RotateCcw size={15} aria-hidden="true" /> Reintentar
+                  <RotateCcw size={15} aria-hidden="true" />{' '}{t('common.retry')}
                 </button>
               )}
             </div>
@@ -344,43 +348,42 @@ export function NewAlertScreen({
                   onChange={(event) => setConsent(event.target.checked)}
                 />
                 <span>
-                  <strong>Compartir mi ubicación con la red de salud</strong>
-                  <small>No se muestra públicamente. Puedes desactivarlo.</small>
+                  <strong>{t('newAlert.compartirMiUbicacionConLaRed')}</strong>
+                  <small>{t('newAlert.noSeMuestraPublicamentePuedesDesactivarlo')}</small>
                 </span>
               </label>
             ) : (
               <p className="field-help">
-                Si no hay GPS, escribe una referencia de tu comunidad para que puedan ubicarte.
+                {t('newAlert.siNoHayGpsEscribeUna')}
               </p>
             )}
           </div>
 
           <label className="field">
-            <span className="field-label">Comunidad o referencia</span>
+            <span className="field-label">{t('newAlert.comunidadOReferencia')}</span>
             <input
               type="text"
               value={community}
               onChange={(event) => setCommunity(event.target.value)}
-              placeholder="Ej. Nueva Esperanza, río Paranapura"
+              placeholder={t('newAlert.ejNuevaEsperanzaRioParanapura')}
               maxLength={80}
             />
           </label>
 
           <button type="submit" className="btn btn-primary btn-lg btn-block" data-testid="continue-button">
-            Continuar <ChevronRight size={19} aria-hidden="true" />
+            {t('newAlert.continuar')}{' '}<ChevronRight size={19} aria-hidden="true" />
           </button>
           <p className="wizard-note">
-            <Camera size={16} aria-hidden="true" /> La foto y la ubicación solo se comparten con la
-            red de salud.
+            <Camera size={16} aria-hidden="true" />{' '}{t('newAlert.laFotoYLaUbicacionSolo')}
           </p>
         </form>
       ) : null}
 
       {step === 3 && meta ? (
         <section className="wizard-body">
-          <h1>Revisa y envía</h1>
+          <h1>{t('newAlert.revisaYEnvia')}</h1>
           <p className="lead">
-            Esta es la información que saldrá del teléfono hacia la red de salud.
+            {t('newAlert.estaEsLaInformacionQueSaldra')}
           </p>
 
           <div className="review-card">
@@ -389,32 +392,32 @@ export function NewAlertScreen({
                 <meta.icon size={24} aria-hidden="true" />
               </span>
               <div>
-                <span className="review-kicker">Tipo de emergencia</span>
-                <strong>{meta.label}</strong>
+                <span className="review-kicker">{t('newAlert.tipoDeEmergencia')}</span>
+                <strong><LocalizedText id={`emergency.${type!}`} /></strong>
               </div>
             </div>
             <dl className="review-list">
               <div>
-                <dt>Detalle</dt>
-                <dd>{note.trim() || 'Sin detalle'}</dd>
+                <dt>{t('newAlert.detalle')}</dt>
+                <dd>{note.trim() || t('newAlert.sinDetalle')}</dd>
               </div>
               <div>
-                <dt>Comunidad</dt>
-                <dd>{community.trim() || 'No indicada'}</dd>
+                <dt>{t('common.community')}</dt>
+                <dd>{community.trim() || t('newAlert.noIndicada')}</dd>
               </div>
               <div>
-                <dt>Ubicación</dt>
+                <dt>{t('common.location')}</dt>
                 <dd>
                   {!consent
-                    ? 'No se comparte'
+                    ? t('newAlert.noSeComparte')
                     : geo.status === 'ok' && geo.location
-                      ? `GPS listo (±${geo.location.accuracy} m)`
-                      : 'Sin GPS: se usará la referencia'}
+                      ? t('newAlert.gpsListoM', { accuracy: geo.location.accuracy })
+                      : t('newAlert.sinGpsSeUsaraLaReferencia')}
                 </dd>
               </div>
               <div>
-                <dt>Foto</dt>
-                <dd>{photo ? 'Adjunta y comprimida' : 'Sin foto'}</dd>
+                <dt>{t('common.photo')}</dt>
+                <dd>{photo ? t('newAlert.adjuntaYComprimida') : t('newAlert.sinFoto')}</dd>
               </div>
             </dl>
           </div>
@@ -422,11 +425,11 @@ export function NewAlertScreen({
           <div className={`banner ${online ? 'banner-ok' : 'banner-warn'}`}>
             {online ? <Wifi size={19} aria-hidden="true" /> : <WifiOff size={19} aria-hidden="true" />}
             <div>
-              <strong>{online ? 'Se enviará ahora' : 'Se guardará en el teléfono'}</strong>
+              <strong>{online ? t('newAlert.seEnviaraAhora') : t('newAlert.seGuardaraEnElTelefono')}</strong>
               <p>
                 {online
-                  ? 'La alerta saldrá hacia la red de salud en cuanto toques el botón.'
-                  : 'No hay conexión. La alerta se enviará automáticamente cuando vuelva la señal.'}
+                  ? t('newAlert.laAlertaSaldraHaciaLaRed')
+                  : t('newAlert.noHayConexionLaAlertaSe')}
               </p>
             </div>
           </div>
@@ -440,23 +443,21 @@ export function NewAlertScreen({
           >
             {submitting ? (
               <>
-                <LoaderCircle size={20} className="spin" aria-hidden="true" /> Guardando…
+                <LoaderCircle size={20} className="spin" aria-hidden="true" />{' '}{t('newAlert.guardando')}
               </>
             ) : online ? (
               <>
-                <Send size={20} aria-hidden="true" /> Enviar alerta
+                <Send size={20} aria-hidden="true" />{' '}{t('newAlert.enviarAlerta')}
               </>
             ) : (
               <>
-                <WifiOff size={20} aria-hidden="true" /> Guardar alerta
+                <WifiOff size={20} aria-hidden="true" />{' '}{t('newAlert.guardarAlerta')}
               </>
             )}
           </button>
 
           <p className="wizard-note">
-            <TriangleAlert size={16} aria-hidden="true" /> Manguaré no es un servicio de rescate. Si
-            tienes señal, llama también al <a href="tel:106">106</a> o a la radio del puesto de
-            salud.
+            <TriangleAlert size={16} aria-hidden="true" />{' '}{t('newAlert.manguareNoEsUnServicioDe')}{' '}<a href="tel:106">106</a>{' '}{t('newAlert.oALaRadioDelPuesto')}
           </p>
         </section>
       ) : null}

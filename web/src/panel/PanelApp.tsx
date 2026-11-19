@@ -1,3 +1,6 @@
+// Traduce los avisos, filtros y estados visibles del panel de salud.
+
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -23,15 +26,18 @@ import {
   X,
 } from 'lucide-react';
 import { BrandMark } from '../components/BrandMark';
-import { EMERGENCY_META } from '../lib/emergency';
+import { LanguageSelect } from '../components/LanguageSelect';
+import type { MessageKey } from '../i18n/catalog';
+import { EMERGENCY_META, SOS_DEFAULT_NOTE } from '../lib/emergency';
 import { formatDateTime, formatRelative, formatTime, shortId } from '../lib/format';
-import { RESPONSE_OPTIONS, responseText } from '../lib/sla';
+import { responseLabel, translatedResponse } from '../i18n/labels';
+import { RESPONSE_OPTIONS } from '../lib/sla';
 import type { ServerAlert } from '../lib/types';
 
 type PanelFilter = 'all' | 'pending' | 'overdue' | 'received';
 
 interface PanelToastState {
-  message: string;
+  message: MessageKey;
   tone: 'ok' | 'error';
 }
 
@@ -87,23 +93,24 @@ function escalationBody(alert: ServerAlert): string {
 }
 
 function PanelStatus({ alert }: { alert: ServerAlert }) {
+  const { t } = useTranslation();
   if (alert.acknowledgedAt) {
     return (
       <span className="panel-status is-received">
-        <CheckCircle2 size={14} aria-hidden="true" /> Recibida
+        <CheckCircle2 size={14} aria-hidden="true" />{' '}{t('status.received')}
       </span>
     );
   }
   if (isServerOverdue(alert)) {
     return (
       <span className="panel-status is-overdue">
-        <TriangleAlert size={14} aria-hidden="true" /> Vencida
+        <TriangleAlert size={14} aria-hidden="true" />{' '}{t('panel.vencida')}
       </span>
     );
   }
   return (
     <span className="panel-status is-pending">
-      <Clock3 size={14} aria-hidden="true" /> Por confirmar
+      <Clock3 size={14} aria-hidden="true" />{' '}{t('panel.porConfirmar')}
     </span>
   );
 }
@@ -119,6 +126,7 @@ function AlertRow({
   onAck: (id: string) => void;
   onOpen: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const meta = EMERGENCY_META[alert.type];
   const Icon = meta.icon;
 
@@ -133,41 +141,41 @@ function AlertRow({
       </span>
       <div className="panel-row-main">
         <div className="panel-row-title">
-          <strong>{meta.label}</strong>
+          <strong><LocalizedText id={`emergency.${alert.type}`} /></strong>
           {alert.community ? <span className="panel-row-community">{alert.community}</span> : null}
-          {!alert.acknowledgedAt ? <span className="panel-new">Nueva</span> : null}
+          {!alert.acknowledgedAt ? <span className="panel-new">{t('panel.nueva')}</span> : null}
         </div>
-        <p className="panel-row-note">{alert.note || 'Sin detalle adicional'}</p>
+        <p className="panel-row-note">{alert.isSos && alert.note === SOS_DEFAULT_NOTE ? t('sos.title') : alert.note || t('panel.sinDetalleAdicional')}</p>
         <p className="panel-row-meta">
-          <span>{formatRelative(alert.clientCreatedAt)}</span>
-          <span>{alert.deviceName || 'Equipo no indicado'}</span>
-          {alert.reportedBy ? <span>Reportó {alert.reportedBy}</span> : null}
+          <span>{formatRelative(alert.clientCreatedAt, t)}</span>
+          <span>{alert.deviceName || t('panel.equipoNoIndicado')}</span>
+          {alert.reportedBy ? <span>{t('panel.reporto')}{' '}{alert.reportedBy}</span> : null}
           <span>
-            {alert.location ? `GPS ±${alert.location.accuracy} m` : 'Sin GPS'}
+            {alert.location ? t('panel.gpsM', { accuracy: alert.location.accuracy }) : t('panel.sinGps')}
           </span>
           {alert.photo ? (
             <span>
-              <ImageIcon size={13} aria-hidden="true" /> Foto
+              <ImageIcon size={13} aria-hidden="true" />{' '}{t('common.photo')}
             </span>
           ) : null}
           {!alert.acknowledgedAt && alert.ackDeadlineAt ? (
             <span className={isServerOverdue(alert) ? 'panel-late' : ''}>
               {isServerOverdue(alert)
-                ? `Vencida ${formatRelative(alert.ackDeadlineAt)}`
-                : `Plazo ${formatTime(alert.ackDeadlineAt)}`}
+                ? t('panel.vencida2', { relativeTime: formatRelative(alert.ackDeadlineAt, t) })
+                : t('panel.plazo', { time: formatTime(alert.ackDeadlineAt, t) })}
             </span>
           ) : null}
           {alert.responses?.length ? (
             <span className="panel-response-flag">
-              <MessageSquareText size={13} aria-hidden="true" /> Respuesta
+              <MessageSquareText size={13} aria-hidden="true" />{' '}{t('panel.respuesta')}
             </span>
           ) : null}
-          <span className="mono">Ref {shortId(alert.id)}</span>
+          <span className="mono">{t('panel.ref')}{' '}{shortId(alert.id)}</span>
         </p>
       </div>
       <div className="panel-row-time">
-        <time dateTime={alert.clientCreatedAt}>{formatTime(alert.clientCreatedAt)}</time>
-        <span>{formatRelative(alert.clientCreatedAt)}</span>
+        <time dateTime={alert.clientCreatedAt}>{formatTime(alert.clientCreatedAt, t)}</time>
+        <span>{formatRelative(alert.clientCreatedAt, t)}</span>
       </div>
       <div className="panel-row-actions">
         <PanelStatus alert={alert} />
@@ -184,11 +192,11 @@ function AlertRow({
             ) : (
               <Check size={15} aria-hidden="true" />
             )}
-            Marcar recibida
+            {t('panel.marcarRecibida')}
           </button>
         ) : null}
         <button type="button" className="panel-detail" onClick={() => onOpen(alert.id)}>
-          Ver detalle <ChevronRight size={14} aria-hidden="true" />
+          {t('panel.verDetalle')}{' '}<ChevronRight size={14} aria-hidden="true" />
         </button>
       </div>
     </article>
@@ -214,6 +222,7 @@ function AlertModal({
   onRespond: (id: string, code: string, message: string) => void;
   onEscalate: (id: string, channel: string) => void;
 }) {
+  const { t } = useTranslation();
   const [custom, setCustom] = useState('');
   useEffect(() => {
     setCustom('');
@@ -252,22 +261,22 @@ function AlertModal({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="panel-modal" role="dialog" aria-modal="true" aria-label="Detalle de la alerta">
+      <div className="panel-modal" role="dialog" aria-modal="true" aria-label={t('panel.detalleDeLaAlerta')}>
         <header className="panel-modal-head">
           <div className="panel-modal-heading">
             <span className={`type-tile type-tile--${meta.tone}`}>
               <Icon size={24} aria-hidden="true" />
             </span>
             <div>
-              <h2>{meta.label}</h2>
+              <h2><LocalizedText id={`emergency.${alert.type}`} /></h2>
               <p>
-                {alert.community || 'Comunidad no indicada'} · Ref {shortId(alert.id)}
+                {alert.community || t('panel.comunidadNoIndicada')}{' '}{t('panel.ref2')}{' '}{shortId(alert.id)}
               </p>
             </div>
           </div>
           <div className="panel-modal-head-right">
             <PanelStatus alert={alert} />
-            <button type="button" className="panel-icon-btn" onClick={onClose} aria-label="Cerrar">
+            <button type="button" className="panel-icon-btn" onClick={onClose} aria-label={t('common.close')}>
               <X size={20} aria-hidden="true" />
             </button>
           </div>
@@ -277,27 +286,27 @@ function AlertModal({
           <div className="panel-modal-info">
             <dl className="panel-detail-list">
               <div>
-                <dt>Detalle</dt>
-                <dd>{alert.note || 'Sin detalle adicional'}</dd>
+                <dt>{t('panel.detalle')}</dt>
+                <dd>{alert.isSos && alert.note === SOS_DEFAULT_NOTE ? t('sos.title') : alert.note || t('panel.sinDetalleAdicional')}</dd>
               </div>
               <div>
-                <dt>Comunidad</dt>
-                <dd>{alert.community || 'No indicada'}</dd>
+                <dt>{t('common.community')}</dt>
+                <dd>{alert.community || t('panel.noIndicada')}</dd>
               </div>
               <div>
-                <dt>Equipo</dt>
-                <dd>{alert.deviceName || 'No indicado'}</dd>
+                <dt>{t('panel.equipo')}</dt>
+                <dd>{alert.deviceName || t('panel.noIndicado')}</dd>
               </div>
               <div>
-                <dt>Reportado por</dt>
+                <dt>{t('panel.reportadoPor')}</dt>
                 <dd>
                   {alert.reportedBy
                     ? `${alert.reportedBy}${alert.reporterPhone ? ` · ${alert.reporterPhone}` : ''}`
-                    : 'No indicado'}
+                    : t('panel.noIndicado')}
                 </dd>
               </div>
               <div>
-                <dt>Ubicación</dt>
+                <dt>{t('common.location')}</dt>
                 <dd>
                   {alert.location ? (
                     <>
@@ -307,77 +316,77 @@ function AlertModal({
                       </span>
                       {mapUrl ? (
                         <a className="panel-link" href={mapUrl} target="_blank" rel="noreferrer">
-                          Abrir mapa <ExternalLink size={13} aria-hidden="true" />
+                          {t('panel.abrirMapa')}{' '}<ExternalLink size={13} aria-hidden="true" />
                         </a>
                       ) : null}
                     </>
                   ) : (
-                    'Sin GPS'
+                    t('panel.sinGps')
                   )}
                 </dd>
               </div>
               <div>
-                <dt>Recibida por Manguaré</dt>
-                <dd>{formatDateTime(alert.serverReceivedAt)}</dd>
+                <dt>{t('panel.recibidaPorManguare')}</dt>
+                <dd>{formatDateTime(alert.serverReceivedAt, t)}</dd>
               </div>
               <div>
-                <dt>Confirmada por la red</dt>
+                <dt>{t('panel.confirmadaPorLaRed')}</dt>
                 <dd>
                   {alert.acknowledgedAt
-                    ? `${formatDateTime(alert.acknowledgedAt)}${
+                    ? `${formatDateTime(alert.acknowledgedAt, t)}${
                         alert.acknowledgedBy ? ` · ${alert.acknowledgedBy}` : ''
                       }`
-                    : 'Todavía no confirmada'}
+                    : t('panel.todaviaNoConfirmada')}
                 </dd>
               </div>
               <div>
-                <dt>Plazo de acuse</dt>
+                <dt>{t('panel.plazoDeAcuse')}</dt>
                 <dd>
                   {alert.ackDeadlineAt ? (
                     <span className={overdue ? 'panel-late' : ''}>
-                      {formatDateTime(alert.ackDeadlineAt)}
-                      {overdue ? ' · vencido' : ''}
+                      {formatDateTime(alert.ackDeadlineAt, t)}
+                      {overdue ? t('panel.vencido') : ''}
                     </span>
                   ) : (
-                    'Sin plazo definido'
+                    t('panel.sinPlazoDefinido')
                   )}
                 </dd>
               </div>
               <div>
-                <dt>Escalamiento</dt>
+                <dt>{t('panel.escalamiento')}</dt>
                 <dd>
                   {alert.escalatedAt
-                    ? `${formatDateTime(alert.escalatedAt)}${
-                        alert.escalationCount ? ` · ${alert.escalationCount} veces` : ''
+                    ? `${formatDateTime(alert.escalatedAt, t)}${
+                        alert.escalationCount ? t('panel.veces', { escalationCount: alert.escalationCount }) : ''
                       }`
-                    : 'No escalada'}
+                    : t('panel.noEscalada')}
                 </dd>
               </div>
               <div>
-                <dt>Enviada desde el teléfono</dt>
-                <dd>{formatDateTime(alert.clientCreatedAt)}</dd>
+                <dt>{t('panel.enviadaDesdeElTelefono')}</dt>
+                <dd>{formatDateTime(alert.clientCreatedAt, t)}</dd>
               </div>
               <div>
-                <dt>Consentimiento de ubicación</dt>
-                <dd>{alert.consentLocation ? 'Sí, autorizado' : 'No autorizado'}</dd>
+                <dt>{t('panel.consentimientoDeUbicacion')}</dt>
+                <dd>{alert.consentLocation ? t('panel.siAutorizado') : t('panel.noAutorizado')}</dd>
               </div>
               <div className="panel-detail-id">
-                <dt>Referencia completa</dt>
+                <dt>{t('panel.referenciaCompleta')}</dt>
                 <dd className="mono">{alert.id}</dd>
               </div>
             </dl>
 
             <div className="panel-responses">
-              <h3>Respuesta a la comunidad</h3>
+              <h3>{t('panel.respuestaALaComunidad')}</h3>
               {alert.responses?.length ? (
                 <ul className="panel-response-list">
                   {alert.responses.map((response) => (
                     <li key={`${response.at}-${response.code}`}>
                       <MessageSquareText size={14} aria-hidden="true" />
                       <span>
-                        <strong>{responseText(response)}</strong>
+                        <strong>{translatedResponse(t, response)}</strong>
                         <small>
-                          {formatDateTime(response.at)}
+                          {formatDateTime(response.at, t)}
                           {response.by ? ` · ${response.by}` : ''}
                         </small>
                       </span>
@@ -386,7 +395,7 @@ function AlertModal({
                 </ul>
               ) : (
                 <p className="panel-response-empty">
-                  Todavía no se envió una indicación. Responder también confirma la recepción.
+                  {t('panel.todaviaNoSeEnvioUnaIndicacion')}
                 </p>
               )}
 
@@ -405,7 +414,7 @@ function AlertModal({
                     ) : (
                       <MessageSquareText size={15} aria-hidden="true" />
                     )}
-                    {option.label}
+                    {t(responseLabel(option.code))}
                   </button>
                 ))}
               </div>
@@ -424,20 +433,20 @@ function AlertModal({
                   type="text"
                   value={custom}
                   maxLength={300}
-                  placeholder="Otra indicación para la comunidad"
+                  placeholder={t('panel.otraIndicacionParaLaComunidad')}
                   onChange={(event) => setCustom(event.target.value)}
                 />
                 <button type="submit" disabled={responding !== null || !custom.trim()}>
-                  Enviar
+                  {t('panel.enviar')}
                 </button>
               </form>
             </div>
           </div>
           {alert.photo ? (
             <div className="panel-modal-photo">
-              <span>Foto adjunta</span>
+              <span>{t('panel.fotoAdjunta')}</span>
               <a href={alert.photo} target="_blank" rel="noreferrer">
-                <img src={alert.photo} alt="Foto adjunta a la emergencia" />
+                <img src={alert.photo} alt={t('panel.fotoAdjuntaALaEmergencia')} />
               </a>
             </div>
           ) : null}
@@ -445,25 +454,24 @@ function AlertModal({
 
         <footer className="panel-modal-foot">
           <p>
-            <ShieldCheck size={15} aria-hidden="true" /> La ubicación es un dato personal: compártela
-            solo con el personal que responde.
+            <ShieldCheck size={15} aria-hidden="true" />{' '}{t('panel.laUbicacionEsUnDatoPersonal')}
           </p>
           {overdue ? (
             <div className="panel-escalate">
               <strong>
-                <TriangleAlert size={15} aria-hidden="true" /> Plazo vencido sin confirmación
+                <TriangleAlert size={15} aria-hidden="true" />{' '}{t('panel.plazoVencidoSinConfirmacion')}
               </strong>
               <a
                 href={smsUrl}
                 onClick={() => onEscalate(alert.id, cleanPhone ? 'sms' : 'llamada')}
               >
                 <MessageSquareText size={15} aria-hidden="true" />
-                {cleanPhone ? 'Abrir SMS de escalamiento' : 'Llamar al 106'}
+                {cleanPhone ? t('panel.abrirSmsDeEscalamiento') : t('panel.llamarAl106')}
               </a>
               <span>
                 {alert.escalatedAt
-                  ? `Escalada ${formatRelative(alert.escalatedAt)}`
-                  : 'El escalamiento quedará registrado.'}
+                  ? t('panel.escalada', { relativeTime: formatRelative(alert.escalatedAt, t) })
+                  : t('panel.elEscalamientoQuedaraRegistrado')}
               </span>
             </div>
           ) : null}
@@ -480,11 +488,11 @@ function AlertModal({
                 ) : (
                   <Check size={17} aria-hidden="true" />
                 )}
-                Marcar como recibida
+                {t('panel.marcarComoRecibida')}
               </button>
             ) : null}
             <button type="button" className="panel-detail panel-detail--large" onClick={onClose}>
-              Cerrar
+              {t('common.close')}
             </button>
           </div>
         </footer>
@@ -510,9 +518,10 @@ function PanelLogin({
   onLogin,
 }: {
   busy: boolean;
-  error: string | null;
+  error: MessageKey | null;
   onLogin: (user: string, password: string) => void;
 }) {
+  const { t } = useTranslation();
   const [user, setUser] = useState('salud');
   const [password, setPassword] = useState('');
 
@@ -523,18 +532,19 @@ function PanelLogin({
           <BrandMark size={52} />
           <div>
             <span className="panel-brand-name">Manguaré</span>
-            <span className="panel-brand-sub">Panel de la red de salud</span>
+            <span className="panel-brand-sub">{t('panel.panelDeLaRedDeSalud')}</span>
           </div>
         </div>
+
+        <LanguageSelect />
 
         <div className="panel-login-card">
           <span className="panel-login-icon">
             <KeyRound size={24} aria-hidden="true" />
           </span>
-          <h1>Acceso restringido</h1>
+          <h1>{t('panel.accesoRestringido')}</h1>
           <p>
-            Este panel muestra ubicaciones y datos personales. Ingresa con la cuenta de la red de
-            salud para ver y confirmar alertas.
+            {t('panel.estePanelMuestraUbicacionesYDatos')}
           </p>
 
           <form
@@ -545,7 +555,7 @@ function PanelLogin({
             }}
           >
             <label>
-              <span>Usuario</span>
+              <span>{t('panel.usuario')}</span>
               <span className="panel-login-input">
                 <UserRound size={17} aria-hidden="true" />
                 <input
@@ -559,7 +569,7 @@ function PanelLogin({
               </span>
             </label>
             <label>
-              <span>Contraseña</span>
+              <span>{t('panel.contrasena')}</span>
               <span className="panel-login-input">
                 <KeyRound size={17} aria-hidden="true" />
                 <input
@@ -577,7 +587,7 @@ function PanelLogin({
 
             {error ? (
               <p className="panel-login-error" role="alert">
-                <TriangleAlert size={16} aria-hidden="true" /> {error}
+                <TriangleAlert size={16} aria-hidden="true" /> {t(error)}
               </p>
             ) : null}
 
@@ -587,13 +597,12 @@ function PanelLogin({
               ) : (
                 <LogIn size={18} aria-hidden="true" />
               )}
-              {busy ? 'Ingresando…' : 'Ingresar al panel'}
+              {busy ? t('panel.ingresando') : t('panel.ingresarAlPanel')}
             </button>
           </form>
 
           <p className="panel-login-foot">
-            <ShieldCheck size={15} aria-hidden="true" /> La sesión dura 12 horas. Si no conoces la
-            contraseña, pídela al responsable del piloto.
+            <ShieldCheck size={15} aria-hidden="true" />{' '}{t('panel.laSesionDura12HorasSi')}
           </p>
         </div>
       </main>
@@ -602,10 +611,11 @@ function PanelLogin({
 }
 
 export function PanelApp() {
+  const { t } = useTranslation();
   const [alerts, setAlerts] = useState<ServerAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<MessageKey | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [filter, setFilter] = useState<PanelFilter>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -613,7 +623,7 @@ export function PanelApp() {
   const [responding, setResponding] = useState<string | null>(null);
   const [toast, setToast] = useState<PanelToastState | null>(null);
   const [session, setSession] = useState<PanelSessionState | null>(null);
-  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<MessageKey | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
   const [soundOn, setSoundOn] = useState(() => {
     try {
@@ -644,7 +654,7 @@ export function PanelApp() {
       } catch {
         if (!disposed) {
           setSession({ authRequired: false, authenticated: true });
-          setError('No se puede conectar con el servidor de alertas.');
+          setError('panel.noSePuedeConectarConEl');
         }
       }
     })();
@@ -683,7 +693,7 @@ export function PanelApp() {
       setError(null);
       setLastUpdated(new Date());
     } catch {
-      setError('No se puede conectar con el servidor de alertas.');
+      setError('panel.noSePuedeConectarConEl');
     } finally {
       inFlight.current = false;
       setLoading(false);
@@ -739,14 +749,14 @@ export function PanelApp() {
   const selected = alerts.find((alert) => alert.id === selectedId) ?? null;
 
   useEffect(() => {
-    document.title = `${pending.length > 0 ? `(${pending.length}) ` : ''}Manguaré · Panel de la red de salud`;
-  }, [pending.length]);
+    document.title = pending.length > 0 ? t('panel.titlePending', { count: pending.length }) : t('panel.title');
+  }, [pending.length, t]);
 
   useEffect(() => {
     return () => {
-      document.title = 'Manguaré · Panel de la red de salud';
+      document.title = t('panel.title');
     };
-  }, []);
+  }, [t]);
 
   const acknowledge = async (id: string) => {
     setAcking(id);
@@ -765,10 +775,10 @@ export function PanelApp() {
         current.map((alert) => (alert.id === id ? (data.alert as ServerAlert) : alert)),
       );
       setLastUpdated(new Date());
-      setToast({ message: 'Alerta marcada como recibida.', tone: 'ok' });
+      setToast({ message: 'panel.alertaMarcadaComoRecibida', tone: 'ok' });
     } catch {
       setToast({
-        message: 'No se pudo marcar la alerta. Revisa la conexión con el servidor.',
+        message: 'panel.noSePudoMarcarLaAlerta',
         tone: 'error',
       });
     } finally {
@@ -795,9 +805,9 @@ export function PanelApp() {
         current.map((alert) => (alert.id === id ? (data.alert as ServerAlert) : alert)),
       );
       setLastUpdated(new Date());
-      setToast({ message: 'Respuesta enviada y alerta confirmada.', tone: 'ok' });
+      setToast({ message: 'panel.respuestaEnviadaYAlertaConfirmada', tone: 'ok' });
     } catch {
-      setToast({ message: 'No se pudo enviar la respuesta a la comunidad.', tone: 'error' });
+      setToast({ message: 'panel.noSePudoEnviarLaRespuesta', tone: 'error' });
     } finally {
       setResponding(null);
     }
@@ -820,9 +830,9 @@ export function PanelApp() {
       setAlerts((current) =>
         current.map((alert) => (alert.id === id ? (data.alert as ServerAlert) : alert)),
       );
-      setToast({ message: 'Escalamiento registrado.', tone: 'ok' });
+      setToast({ message: 'panel.escalamientoRegistrado', tone: 'ok' });
     } catch {
-      setToast({ message: 'No se pudo registrar el escalamiento.', tone: 'error' });
+      setToast({ message: 'panel.noSePudoRegistrarElEscalamiento', tone: 'error' });
     }
   };
 
@@ -842,8 +852,8 @@ export function PanelApp() {
       if (!response.ok) {
         setSessionError(
           response.status === 429
-            ? 'Demasiados intentos. Espera unos minutos antes de volver a probar.'
-            : 'Usuario o contraseña incorrectos.',
+            ? 'panel.demasiadosIntentosEsperaUnosMinutosAntes'
+            : 'panel.usuarioOContrasenaIncorrectos',
         );
         return;
       }
@@ -851,7 +861,7 @@ export function PanelApp() {
       setLoading(true);
       setError(null);
     } catch {
-      setSessionError('No se pudo conectar con el servidor. Revisa la red.');
+      setSessionError('panel.noSePudoConectarConEl');
     } finally {
       setLoggingIn(false);
     }
@@ -881,7 +891,7 @@ export function PanelApp() {
     }
     if (next) playChime();
     setToast({
-      message: next ? 'Sonido activado para alertas nuevas.' : 'Sonido desactivado.',
+      message: next ? 'panel.sonidoActivadoParaAlertasNuevas' : 'panel.sonidoDesactivado',
       tone: 'ok',
     });
   };
@@ -892,10 +902,10 @@ export function PanelApp() {
   ).length;
 
   const filters: Array<{ id: PanelFilter; label: string; count: number }> = [
-    { id: 'all', label: 'Todas', count: alerts.length },
-    { id: 'pending', label: 'En plazo', count: awaiting.length },
-    { id: 'overdue', label: 'Vencidas', count: overdue.length },
-    { id: 'received', label: 'Recibidas', count: received.length },
+    { id: 'all', label: t('panel.todas'), count: alerts.length },
+    { id: 'pending', label: t('panel.enPlazo'), count: awaiting.length },
+    { id: 'overdue', label: t('panel.vencidas'), count: overdue.length },
+    { id: 'received', label: t('panel.recibidas'), count: received.length },
   ];
 
   if (!session) {
@@ -903,7 +913,7 @@ export function PanelApp() {
       <div className="panel-page panel-login-page">
         <main className="panel-login">
           <div className="panel-login-loading">
-            <LoaderCircle size={22} className="spin" aria-hidden="true" /> Comprobando sesión…
+            <LoaderCircle size={22} className="spin" aria-hidden="true" />{' '}{t('panel.comprobandoSesion')}
           </div>
         </main>
       </div>
@@ -923,23 +933,24 @@ export function PanelApp() {
           <BrandMark size={40} />
           <div>
             <span className="panel-brand-name">Manguaré</span>
-            <span className="panel-brand-sub">Panel de la red de salud</span>
+            <span className="panel-brand-sub">{t('panel.panelDeLaRedDeSalud')}</span>
           </div>
         </div>
         <div className="panel-top-actions">
+          <LanguageSelect />
           <span className={`panel-live ${error ? 'is-offline' : ''}`}>
             <span className="panel-live-dot" aria-hidden="true" />
-            {error ? 'Sin servidor' : 'En vivo · cada 5 s'}
+            {error ? t('panel.sinServidor') : t('panel.enVivoCada5S')}
           </span>
           <button
             type="button"
             className="panel-top-btn"
             onClick={toggleSound}
             aria-pressed={soundOn}
-            title={soundOn ? 'Desactivar sonido' : 'Activar sonido'}
+            title={soundOn ? t('panel.desactivarSonido') : t('panel.activarSonido')}
           >
             {soundOn ? <Bell size={17} aria-hidden="true" /> : <BellOff size={17} aria-hidden="true" />}
-            <span>{soundOn ? 'Sonido' : 'Silencio'}</span>
+            <span>{soundOn ? t('panel.sonido') : t('panel.silencio')}</span>
           </button>
           <button
             type="button"
@@ -948,17 +959,17 @@ export function PanelApp() {
             disabled={refreshing}
           >
             <RefreshCw size={17} className={refreshing ? 'spin' : ''} aria-hidden="true" />
-            <span>Actualizar</span>
+            <span>{t('panel.actualizar')}</span>
           </button>
           {session.authRequired ? (
             <button
               type="button"
               className="panel-top-btn"
               onClick={() => void handleLogout()}
-              title={`Cerrar sesión de ${session.user ?? 'la red de salud'}`}
+              title={session.user ? t('panel.cerrarSesionDe', { user: session.user }) : t('panel.logoutNetwork')}
             >
               <LogOut size={17} aria-hidden="true" />
-              <span>Salir</span>
+              <span>{t('panel.salir')}</span>
             </button>
           ) : null}
         </div>
@@ -967,40 +978,39 @@ export function PanelApp() {
       <main className="panel-main">
         <section className="panel-hero">
           <div>
-            <p className="panel-kicker">Red de salud · Amazonía</p>
-            <h1>Alertas de emergencia</h1>
+            <p className="panel-kicker">{t('panel.redDeSaludAmazonia')}</p>
+            <h1>{t('panel.alertasDeEmergencia')}</h1>
             <p className="panel-lead">
-              Las alertas llegan cuando el teléfono recupera conexión. Confirma antes del plazo; si
-              vence, el panel la marca como vencida y permite escalar por SMS o llamada.
+              {t('panel.lasAlertasLleganCuandoElTelefono')}
             </p>
           </div>
           <div className="panel-updated">
-            <span>Última actualización</span>
-            <strong>{lastUpdated ? formatTime(lastUpdated.toISOString()) : '—'}</strong>
-            <span>{lastUpdated ? formatRelative(lastUpdated.toISOString()) : 'Conectando…'}</span>
+            <span>{t('panel.ultimaActualizacion')}</span>
+            <strong>{lastUpdated ? formatTime(lastUpdated.toISOString(), t) : '—'}</strong>
+            <span>{lastUpdated ? formatRelative(lastUpdated.toISOString(), t) : t('panel.conectando')}</span>
           </div>
         </section>
 
-        <section className="panel-stats" aria-label="Resumen de alertas">
+        <section className="panel-stats" aria-label={t('panel.resumenDeAlertas')}>
           <div className="panel-stat panel-stat--amber">
-            <span className="panel-stat-label">En plazo</span>
+            <span className="panel-stat-label">{t('panel.enPlazo')}</span>
             <strong>{awaiting.length}</strong>
-            <span className="panel-stat-hint">Esperando confirmación</span>
+            <span className="panel-stat-hint">{t('panel.esperandoConfirmacion')}</span>
           </div>
           <div className="panel-stat panel-stat--red">
-            <span className="panel-stat-label">Vencidas</span>
+            <span className="panel-stat-label">{t('panel.vencidas')}</span>
             <strong>{overdue.length}</strong>
-            <span className="panel-stat-hint">Sin confirmar en el plazo</span>
+            <span className="panel-stat-hint">{t('panel.sinConfirmarEnElPlazo')}</span>
           </div>
           <div className="panel-stat panel-stat--green">
-            <span className="panel-stat-label">Recibidas</span>
+            <span className="panel-stat-label">{t('panel.recibidas')}</span>
             <strong>{received.length}</strong>
-            <span className="panel-stat-hint">Confirmadas desde el panel</span>
+            <span className="panel-stat-hint">{t('panel.confirmadasDesdeElPanel')}</span>
           </div>
           <div className="panel-stat panel-stat--teal">
-            <span className="panel-stat-label">Alertas hoy</span>
+            <span className="panel-stat-label">{t('panel.alertasHoy')}</span>
             <strong>{todayCount}</strong>
-            <span className="panel-stat-hint">Recibidas por el servidor</span>
+            <span className="panel-stat-hint">{t('panel.recibidasPorElServidor')}</span>
           </div>
         </section>
 
@@ -1008,18 +1018,18 @@ export function PanelApp() {
           <div className="panel-error" role="alert">
             <TriangleAlert size={20} aria-hidden="true" />
             <div>
-              <strong>No se puede conectar con el servidor</strong>
-              <p>Se muestran los últimos datos recibidos. Reintentando automáticamente cada 5 s.</p>
+              <strong>{t('panel.noSePuedeConectarConEl2')}</strong>
+              <p>{t('panel.seMuestranLosUltimosDatosRecibidos')}</p>
             </div>
             <button type="button" onClick={() => void load(true)}>
-              Reintentar
+              {t('common.retry')}
             </button>
           </div>
         ) : null}
 
-        <section className="panel-list-section" aria-label="Lista de alertas">
+        <section className="panel-list-section" aria-label={t('panel.listaDeAlertas')}>
           <div className="panel-list-head">
-            <div className="panel-filters" role="tablist" aria-label="Filtrar alertas">
+            <div className="panel-filters" role="tablist" aria-label={t('panel.filtrarAlertas')}>
               {filters.map((item) => (
                 <button
                   key={item.id}
@@ -1039,7 +1049,7 @@ export function PanelApp() {
           </div>
 
           {loading ? (
-            <div className="panel-skeleton-list" aria-label="Cargando alertas">
+            <div className="panel-skeleton-list" aria-label={t('panel.cargandoAlertas')}>
               <div className="panel-skeleton" />
               <div className="panel-skeleton" />
               <div className="panel-skeleton" />
@@ -1063,16 +1073,15 @@ export function PanelApp() {
               </span>
               <h2>
                 {filter === 'pending'
-                  ? 'No hay alertas en plazo'
+                  ? t('panel.noHayAlertasEnPlazo')
                   : filter === 'overdue'
-                    ? 'No hay alertas vencidas'
+                    ? t('panel.noHayAlertasVencidas')
                     : filter === 'received'
-                      ? 'Todavía no se confirmó ninguna alerta'
-                      : 'No hay alertas recibidas'}
+                      ? t('panel.todaviaNoSeConfirmoNingunaAlerta')
+                      : t('panel.noHayAlertasRecibidas')}
               </h2>
               <p>
-                Cuando una comunidad envíe una emergencia y el teléfono recupere conexión, la alerta
-                aparecerá aquí automáticamente.
+                {t('panel.cuandoUnaComunidadEnvieUnaEmergencia')}
               </p>
             </div>
           )}
@@ -1081,17 +1090,14 @@ export function PanelApp() {
         <footer className="panel-foot">
           {!session.authRequired ? (
             <p className="panel-demo-warning">
-              <TriangleAlert size={15} aria-hidden="true" /> Panel sin contraseña (modo
-              demostración). Define MANGUARE_PANEL_PASSWORD antes de exponerlo.
+              <TriangleAlert size={15} aria-hidden="true" />{' '}{t('panel.panelSinContrasenaModoDemostracionDefine')}
             </p>
           ) : null}
           <p>
-            <ShieldCheck size={15} aria-hidden="true" /> Prototipo Manguaré MVP · Datos de
-            demostración del piloto.
+            <ShieldCheck size={15} aria-hidden="true" />{' '}{t('panel.prototipoManguareMvpDatosDeDemostracion')}
           </p>
           <p>
-            <MapPin size={15} aria-hidden="true" /> La ubicación exacta solo debe compartirse con el
-            personal que responde.
+            <MapPin size={15} aria-hidden="true" />{' '}{t('panel.laUbicacionExactaSoloDebeCompartirse')}
           </p>
         </footer>
       </main>
@@ -1114,8 +1120,8 @@ export function PanelApp() {
           ) : (
             <CheckCircle2 size={18} aria-hidden="true" />
           )}
-          <span>{toast.message}</span>
-          <button type="button" onClick={() => setToast(null)} aria-label="Cerrar aviso">
+          <span>{t(toast.message)}</span>
+          <button type="button" onClick={() => setToast(null)} aria-label={t('common.closeNotice')}>
             <X size={15} aria-hidden="true" />
           </button>
         </div>

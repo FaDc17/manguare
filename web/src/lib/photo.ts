@@ -1,3 +1,6 @@
+// Los errores de imagen llevan la clave del mensaje que verá el usuario.
+import { InterfaceError } from '../i18n/catalog';
+
 /**
  * Comprime una foto en el propio teléfono antes de guardarla, para no gastar
  * datos ni llenar el almacenamiento. Devuelve un data URL JPEG.
@@ -10,7 +13,7 @@ export async function compressImage(
   const maxChars = options.maxChars ?? 650_000;
 
   if (!file.type.startsWith('image/')) {
-    throw new Error('El archivo no es una imagen.');
+    throw new InterfaceError('image.invalid');
   }
 
   const bitmap = await createImageBitmap(file);
@@ -24,7 +27,7 @@ export async function compressImage(
   const context = canvas.getContext('2d');
   if (!context) {
     bitmap.close?.();
-    throw new Error('No se pudo procesar la imagen.');
+    throw new InterfaceError('image.processingError');
   }
 
   context.drawImage(bitmap, 0, 0, width, height);
@@ -38,7 +41,7 @@ export async function compressImage(
   }
 
   if (data.length > maxChars * 1.8) {
-    throw new Error('La foto es demasiado grande. Intenta con otra.');
+    throw new InterfaceError('image.tooLarge');
   }
 
   return data;

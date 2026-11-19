@@ -1,3 +1,6 @@
+// Los errores de registro llevan una clave para traducir el aviso en el formulario.
+import { InterfaceError } from '../i18n/catalog';
+
 /**
  * Acceso de demostración del prototipo.
  *
@@ -115,15 +118,15 @@ export function loadLocalAccounts(): LocalAccount[] {
 export function registerLocalAccount(account: LocalAccount): Session {
   const accounts = loadLocalAccounts();
   if (accounts.some((saved) => saved.phone === account.phone)) {
-    throw new Error('Ese celular ya está registrado en este dispositivo.');
+    throw new InterfaceError('registration.phoneAlreadyRegistered');
   }
   if (accounts.some((saved) => saved.email.toLowerCase() === account.email.toLowerCase())) {
-    throw new Error('Ese correo ya está registrado en este dispositivo.');
+    throw new InterfaceError('registration.emailAlreadyRegistered');
   }
   try {
     localStorage.setItem(ACCOUNTS_STORAGE_KEY, JSON.stringify([...accounts, account]));
   } catch {
-    throw new Error('No se pudo guardar la cuenta en este dispositivo.');
+    throw new InterfaceError('registration.accountStorageError');
   }
   return {
     phone: account.phone,

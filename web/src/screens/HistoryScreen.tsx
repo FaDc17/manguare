@@ -1,3 +1,7 @@
+// Presenta los filtros y estados del historial de alertas y reportes.
+
+import { biodiversityLabels } from '../i18n/labels';
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { useMemo, useState } from 'react';
 import { Clock3, Inbox, Leaf, Plus, RefreshCw, TriangleAlert } from 'lucide-react';
 import { useApp } from '../app/AppContext';
@@ -8,12 +12,7 @@ import type { AlertState } from '../lib/types';
 
 type Filter = 'all' | 'pending' | 'sent' | 'received';
 
-const FILTERS: Array<{ id: Filter; label: string }> = [
-  { id: 'all', label: 'Todas' },
-  { id: 'pending', label: 'Pendientes' },
-  { id: 'sent', label: 'Enviadas' },
-  { id: 'received', label: 'Recibidas' },
-];
+const FILTERS: Filter[] = ['all', 'pending', 'sent', 'received'];
 
 function matches(state: AlertState, filter: Filter): boolean {
   if (filter === 'all') return true;
@@ -27,6 +26,7 @@ export function HistoryScreen({
   onOpenAlert: (id: string) => void;
   onNew: () => void;
 }) {
+  const { t } = useTranslation();
   const { alerts, biodiversityReports, online, syncing, syncNow } = useApp();
   const [filter, setFilter] = useState<Filter>('all');
   const pending = alerts.filter((alert) => alert.state === 'pending');
@@ -46,16 +46,16 @@ export function HistoryScreen({
     <div className="screen history">
       <header className="screen-head">
         <div>
-          <p className="eyebrow">Este teléfono</p>
-          <h1>Mis alertas</h1>
-          <p className="screen-lead">Revisa qué se envió y qué sigue pendiente.</p>
+          <p className="eyebrow">{t('history.esteTelefono')}</p>
+          <h1><LocalizedText id="navigation.history" /></h1>
+          <p className="screen-lead">{t('history.revisaQueSeEnvioYQue')}</p>
         </div>
         <button
           type="button"
           className="icon-btn"
           data-testid="history-refresh"
           onClick={() => void syncNow(true)}
-          aria-label="Actualizar estados"
+          aria-label={t('history.actualizarEstados')}
         >
           <RefreshCw size={20} className={syncing ? 'spin' : ''} aria-hidden="true" />
         </button>
@@ -68,12 +68,12 @@ export function HistoryScreen({
           </span>
           <div className="pending-copy">
             <strong>
-              {pending.length === 1 ? '1 alerta pendiente' : `${pending.length} alertas pendientes`}
+              {pending.length === 1 ? t('history.1AlertaPendiente') : t('history.alertasPendientes', { count: pending.length })}
             </strong>
             <span>
               {online
-                ? 'Con conexión: se reintenta automáticamente.'
-                : 'Sin conexión: saldrán al recuperar señal.'}
+                ? t('history.conConexionSeReintentaAutomaticamente')
+                : t('history.sinConexionSaldranAlRecuperarSenal')}
             </span>
           </div>
           <button
@@ -83,27 +83,27 @@ export function HistoryScreen({
             disabled={syncing}
           >
             <RefreshCw size={14} className={syncing ? 'spin' : ''} aria-hidden="true" />
-            {syncing ? 'Enviando' : 'Reintentar'}
+            {syncing ? t('history.enviando') : t('common.retry')}
           </button>
         </div>
       ) : null}
 
       <button type="button" className="btn btn-danger btn-block btn-lg" onClick={onNew}>
-        <TriangleAlert size={20} aria-hidden="true" /> Nueva emergencia
+        <TriangleAlert size={20} aria-hidden="true" />{' '}{t('history.nuevaEmergencia')}
       </button>
 
-      <div className="filter-tabs" role="tablist" aria-label="Filtrar alertas">
+      <div className="filter-tabs" role="tablist" aria-label={t('history.filtrarAlertas')}>
         {FILTERS.map((item) => (
           <button
-            key={item.id}
+            key={item}
             type="button"
             role="tab"
-            aria-selected={filter === item.id}
-            className={`filter-tab ${filter === item.id ? 'is-active' : ''}`}
-            onClick={() => setFilter(item.id)}
+            aria-selected={filter === item}
+            className={`filter-tab ${filter === item ? 'is-active' : ''}`}
+            onClick={() => setFilter(item)}
           >
-            {item.label}
-            <span>{counts[item.id]}</span>
+            {t(`history.filter.${item}`)}
+            <span>{counts[item]}</span>
           </button>
         ))}
       </div>
@@ -115,8 +115,10 @@ export function HistoryScreen({
               <AlertCard alert={alert} onOpen={onOpenAlert} />
               {alert.state === 'pending' && alert.lastAttemptAt ? (
                 <p className="attempt-note">
-                  Último intento {formatRelative(alert.lastAttemptAt)} · {alert.attempts}{' '}
-                  {alert.attempts === 1 ? 'intento' : 'intentos'}
+                  {t(alert.attempts === 1 ? 'history.attemptOne' : 'history.attemptOther', {
+                    relativeTime: formatRelative(alert.lastAttemptAt, t),
+                    count: alert.attempts,
+                  })}
                 </p>
               ) : null}
             </div>
@@ -127,26 +129,26 @@ export function HistoryScreen({
           icon={filter === 'all' ? Inbox : Clock3}
           title={
             filter === 'all'
-              ? 'No hay alertas en este teléfono'
-              : `No hay alertas ${FILTERS.find((item) => item.id === filter)?.label.toLowerCase()}`
+              ? t('history.noHayAlertasEnEsteTelefono')
+              : t(`history.empty.${filter}`)
           }
         >
           {filter === 'all' ? (
             <>
-              <p>Cuando envíes una emergencia verás aquí su estado y su recorrido.</p>
+              <p>{t('history.cuandoEnviesUnaEmergenciaVerasAqui')}</p>
               <button type="button" className="btn btn-primary" onClick={onNew}>
-                <Plus size={18} aria-hidden="true" /> Crear la primera alerta
+                <Plus size={18} aria-hidden="true" />{' '}{t('history.crearLaPrimeraAlerta')}
               </button>
             </>
           ) : (
-            <p>Prueba con otro filtro para ver el resto del historial.</p>
+            <p>{t('history.pruebaConOtroFiltroParaVer')}</p>
           )}
         </EmptyState>
       )}
 
       <section className="biodiversity-history" aria-labelledby="biodiversity-history-title">
         <div className="section-head">
-          <h2 id="biodiversity-history-title">Mis reportes de biodiversidad</h2>
+          <h2 id="biodiversity-history-title">{t('history.misReportesDeBiodiversidad')}</h2>
         </div>
         {biodiversityReports.length ? (
           <div className="biodiversity-history-list">
@@ -159,20 +161,20 @@ export function HistoryScreen({
                 <span className="biodiversity-history-icon"><Leaf size={18} aria-hidden="true" /></span>
                 <span className="biodiversity-history-copy">
                   <strong>{report.title}</strong>
-                  <small>{report.category} · {formatRelative(report.createdAt)}</small>
+                  <small>{t(biodiversityLabels[report.category] ?? 'emergency.otro')} · {formatRelative(report.createdAt, t)}</small>
                 </span>
                 <span className={`biodiversity-state is-${report.state}`}>
                   {report.state === 'read'
-                    ? 'Leída'
+                    ? t('status.read')
                     : report.state === 'sent'
-                      ? 'Enviada'
-                      : 'Pendiente'}
+                      ? t('status.sent')
+                      : t('status.pending')}
                 </span>
               </article>
             ))}
           </div>
         ) : (
-          <p className="biodiversity-history-empty">Aquí aparecerá el estado de tus reportes.</p>
+          <p className="biodiversity-history-empty">{t('history.aquiApareceraElEstadoDeTus')}</p>
         )}
       </section>
     </div>

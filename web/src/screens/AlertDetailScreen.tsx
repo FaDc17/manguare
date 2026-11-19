@@ -1,3 +1,7 @@
+// Muestra las instrucciones y el seguimiento de la alerta en el idioma elegido.
+
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
+import { InterfaceError } from '../i18n/catalog';
 import { useMemo, useRef, useState } from 'react';
 import {
   Camera,
@@ -24,17 +28,16 @@ import { Sheet } from '../components/Sheet';
 import { LocationPicker } from '../components/LocationPicker';
 import { StatusChip } from '../components/StatusChip';
 import { SubHeader } from '../components/SubHeader';
-import { EMERGENCY_META } from '../lib/emergency';
+import { EMERGENCY_META, SOS_DEFAULT_NOTE } from '../lib/emergency';
 import {
   formatCoords,
   formatDateTime,
   formatRelative,
   shortId,
-  STATE_DESCRIPTION,
-  STATE_LABEL,
 } from '../lib/format';
 import { copyText, buildSmsBody, smsHref } from '../lib/sms';
-import { deadlineText, isOverdue, responseText } from '../lib/sla';
+import { translatedResponse } from '../i18n/labels';
+import { deadlineText, isOverdue } from '../lib/sla';
 import { compressImage } from '../lib/photo';
 import type { AlertLocation, AlertState } from '../lib/types';
 
@@ -58,6 +61,7 @@ export function AlertDetailScreen({
   onBack: () => void;
   onHistory: () => void;
 }) {
+  const { t } = useTranslation();
   const {
     alerts,
     loading,
@@ -88,18 +92,18 @@ export function AlertDetailScreen({
   if (!alert) {
     return (
       <div className="screen">
-        <SubHeader title="Alerta" onBack={onBack} />
+        <SubHeader title={t('alertDetail.alerta')} onBack={onBack} />
         <div className="screen-pad">
           {loading ? (
             <div className="inline-loading">
-              <LoaderCircle size={20} className="spin" aria-hidden="true" /> Cargando alerta…
+              <LoaderCircle size={20} className="spin" aria-hidden="true" />{' '}{t('alertDetail.cargandoAlerta')}
             </div>
           ) : (
             <div className="empty-state">
-              <h3>No encontramos esta alerta</h3>
-              <p>Puede que se haya borrado de este teléfono.</p>
+              <h3>{t('alertDetail.noEncontramosEstaAlerta')}</h3>
+              <p>{t('alertDetail.puedeQueSeHayaBorradoDe')}</p>
               <button type="button" className="btn btn-secondary" onClick={onHistory}>
-                Ver mis alertas
+                {t('alertDetail.verMisAlertas')}
               </button>
             </div>
           )}
@@ -117,11 +121,11 @@ export function AlertDetailScreen({
   const deadline = deadlineText(alert);
   const latestResponse = alert.responses?.at(-1);
   const awaitingConfirmation = alert.state === 'sent' && !alert.acknowledgedAt;
-  const stateLabel = alert.isSos && isReceived ? 'Leída' : STATE_LABEL[alert.state];
+  const stateLabel = alert.isSos && isReceived ? t('status.read') : t(`status.${alert.state}`);
   const stateDescription =
     alert.isSos && isReceived
-      ? 'La red de salud ya leyó la alerta.'
-      : STATE_DESCRIPTION[alert.state];
+      ? t('alertDetail.laRedDeSaludYaLeyo')
+      : t(`status.description.${alert.state}`);
 
   const saveDetails = async () => {
     if (detailsSaving) return;
@@ -129,7 +133,7 @@ export function AlertDetailScreen({
     setDetailsError('');
     try {
       await updateAlertDetails(alert.id, {
-        note: detailsNote.trim() || 'Alerta SOS',
+        note: detailsNote.trim() || SOS_DEFAULT_NOTE,
         community: detailsCommunity.trim(),
         location: detailsLocation,
         photo: detailsPhoto,
@@ -137,12 +141,12 @@ export function AlertDetailScreen({
       setDetailsOpen(false);
       showToast(
         online
-          ? 'Detalle agregado a la misma alerta.'
-          : 'Detalle guardado; se enviará al recuperar conexión.',
+          ? t('alertDetail.detalleAgregadoALaMismaAlerta')
+          : t('alertDetail.detalleGuardadoSeEnviaraAlRecuperar'),
         online ? 'ok' : 'warn',
       );
     } catch (error) {
-      setDetailsError(error instanceof Error ? error.message : 'No se pudo guardar el detalle.');
+      setDetailsError(error instanceof Error ? error.message : t('alertDetail.noSePudoGuardarElDetalle'));
     } finally {
       setDetailsSaving(false);
     }
@@ -150,20 +154,20 @@ export function AlertDetailScreen({
 
   const steps = [
     {
-      label: 'Guardada en el teléfono',
-      detail: 'Queda en este teléfono aunque cierres la app.',
+      label: t('alertDetail.guardadaEnElTelefono'),
+      detail: t('alertDetail.quedaEnEsteTelefonoAunqueCierres'),
       time: alert.createdAt,
       done: true,
     },
     {
-      label: 'Enviada a Manguaré',
-      detail: 'Llegó al servidor que recibe las alertas.',
+      label: t('alertDetail.enviadaAManguare'),
+      detail: t('alertDetail.llegoAlServidorQueRecibeLas'),
       time: alert.serverReceivedAt,
       done: Boolean(alert.serverReceivedAt),
     },
     {
-      label: alert.isSos ? 'Leída por la red de salud' : 'Recibida por la red de salud',
-      detail: 'Alguien de la red confirmó que la recibió.',
+      label: alert.isSos ? t('alertDetail.leidaPorLaRedDeSalud') : t('alertDetail.recibidaPorLaRedDeSalud'),
+      detail: t('alertDetail.alguienDeLaRedConfirmoQue'),
       time: alert.acknowledgedAt,
       done: Boolean(alert.acknowledgedAt),
     },
@@ -173,14 +177,14 @@ export function AlertDetailScreen({
   return (
     <div className="screen detail">
       <SubHeader
-        title="Estado de la alerta"
-        subtitle={`Ref. ${shortId(alert.id)}`}
+        title={t('alertDetail.estadoDeLaAlerta')}
+        subtitle={t('alertDetail.ref', { reference: shortId(alert.id) })}
         onBack={onBack}
         right={
           <StatusChip
             state={alert.state}
             compact
-            label={alert.isSos && isReceived ? 'Leída' : undefined}
+            label={alert.isSos && isReceived ? t('status.read') : undefined}
           />
         }
       />
@@ -190,7 +194,7 @@ export function AlertDetailScreen({
           <StateIcon size={30} aria-hidden="true" />
         </span>
         <div className="status-hero-copy">
-          <span className="status-kicker">Estado actual</span>
+          <span className="status-kicker">{t('alertDetail.estadoActual')}</span>
           <h1 data-testid="alert-state">{stateLabel}</h1>
           <p>{stateDescription}</p>
         </div>
@@ -204,12 +208,12 @@ export function AlertDetailScreen({
           {online ? <RefreshCw size={19} aria-hidden="true" /> : <WifiOff size={19} aria-hidden="true" />}
           <div>
             <strong>
-              {online ? 'Hay conexión: puedes reintentar el envío' : 'Aún no sale de tu teléfono'}
+              {online ? t('alertDetail.hayConexionPuedesReintentarElEnvio') : t('alertDetail.aunNoSaleDeTuTelefono')}
             </strong>
             <p>
               {online
-                ? 'La app reintenta automáticamente. También puedes forzar un intento ahora.'
-                : 'No hay conexión. La alerta se enviará sola cuando vuelva la señal.'}
+                ? t('alertDetail.laAppReintentaAutomaticamenteTambienPuedes')
+                : t('alertDetail.noHayConexionLaAlertaSe')}
             </p>
           </div>
         </div>
@@ -218,12 +222,12 @@ export function AlertDetailScreen({
       {alert.isSos ? (
         <section className="card sos-detail-card">
           <div>
-            <span className="review-kicker">Alerta SOS</span>
-            <h2>{alert.note === 'Alerta SOS' ? 'Alerta mínima enviada' : 'Detalle de tu alerta'}</h2>
+            <span className="review-kicker">{t('sos.title')}</span>
+            <h2>{alert.note === SOS_DEFAULT_NOTE ? t('alertDetail.alertaMinimaEnviada') : t('alertDetail.detalleDeTuAlerta')}</h2>
             <p>
               {alert.serverReceivedAt
-                ? `Enviada ${formatDateTime(alert.serverReceivedAt)}.`
-                : 'La alerta se conserva en este teléfono hasta recuperar conexión.'}
+                ? t('alertDetail.enviada', { dateTime: formatDateTime(alert.serverReceivedAt, t) })
+                : t('alertDetail.laAlertaSeConservaEnEste')}
             </p>
           </div>
           {alert.state !== 'canceled' ? (
@@ -232,7 +236,7 @@ export function AlertDetailScreen({
               className="btn btn-secondary btn-block"
               data-testid="sos-detail-open"
               onClick={() => {
-                setDetailsNote(alert.note === 'Alerta SOS' ? '' : alert.note);
+                setDetailsNote(alert.note === SOS_DEFAULT_NOTE ? '' : alert.note);
                 setDetailsCommunity(alert.community);
                 setDetailsLocation(alert.location);
                 setDetailsPhoto(alert.photo);
@@ -241,9 +245,9 @@ export function AlertDetailScreen({
               }}
             >
               <ImagePlus size={18} aria-hidden="true" />
-              {alert.note === 'Alerta SOS' && !alert.photo && !alert.location
-                ? 'Enviar detalle'
-                : 'Agregar o editar detalle'}
+              {alert.note === SOS_DEFAULT_NOTE && !alert.photo && !alert.location
+                ? t('alertDetail.enviarDetalle')
+                : t('alertDetail.agregarOEditarDetalle')}
             </button>
           ) : null}
         </section>
@@ -259,15 +263,13 @@ export function AlertDetailScreen({
           <div>
             <strong>
               {overdue
-                ? 'Plazo de confirmación vencido'
-                : `La red tiene hasta ${deadline ?? 'su plazo'} para confirmar`}
+                ? t('alertDetail.plazoDeConfirmacionVencido')
+                : (deadline ? t('alertDetail.deadline', { deadline }) : t('alertDetail.deadlineUnspecified'))}
             </strong>
             <p>
               {overdue
-                ? `La red no confirmó en el plazo. ${
-                    alert.escalatedAt ? 'La alerta fue escalada. ' : ''
-                  }Puedes avisar por SMS o llamar al 106 mientras sigues esperando.`
-                : 'Si no confirma a tiempo, la alerta se marca como vencida y el panel puede escalarla.'}
+                ? t(alert.escalatedAt ? 'alertDetail.escalated' : 'alertDetail.overdueAdvice')
+                : t('alertDetail.siNoConfirmaATiempoLa')}
             </p>
           </div>
         </div>
@@ -275,14 +277,14 @@ export function AlertDetailScreen({
 
       {alert.lastError ? (
         <details className="tech-details">
-          <summary>Detalles técnicos del último intento</summary>
-          <p>Intentos de envío: {alert.attempts}</p>
-          <p>Error: {alert.lastError}</p>
+          <summary>{t('alertDetail.detallesTecnicosDelUltimoIntento')}</summary>
+          <p>{t('alertDetail.intentosDeEnvio')}{' '}{alert.attempts}</p>
+          <p>{t('alertDetail.error')}{' '}{alert.lastError}</p>
         </details>
       ) : null}
 
       <section className="card timeline-card">
-        <h2 className="card-title">Recorrido de la alerta</h2>
+        <h2 className="card-title">{t('alertDetail.recorridoDeLaAlerta')}</h2>
         <ol className="timeline">
           {steps.map((item, index) => {
             const isCurrent = index === currentStep;
@@ -305,11 +307,11 @@ export function AlertDetailScreen({
                   <span>{item.detail}</span>
                   {item.time ? (
                     <time dateTime={item.time}>
-                      {formatDateTime(item.time)} · {formatRelative(item.time)}
+                      {formatDateTime(item.time, t)} · {formatRelative(item.time, t)}
                     </time>
                   ) : (
                     <span className="timeline-pending">
-                      {isCurrent && isPending && !online ? 'Esperando señal' : 'Pendiente'}
+                      {isCurrent && isPending && !online ? t('alertDetail.esperandoSenal') : t('status.pending')}
                     </span>
                   )}
                 </div>
@@ -324,8 +326,8 @@ export function AlertDetailScreen({
           <div className="banner banner-warn">
             <X size={19} aria-hidden="true" />
             <div>
-              <strong>Alerta anulada en este teléfono</strong>
-              <p>No se envió a la red de salud. Puedes crear una alerta nueva si la necesitas.</p>
+              <strong>{t('alertDetail.alertaAnuladaEnEsteTelefono')}</strong>
+              <p>{t('alertDetail.noSeEnvioALaRed')}</p>
             </div>
           </div>
         ) : (
@@ -335,21 +337,19 @@ export function AlertDetailScreen({
               <MessageSquareText size={21} aria-hidden="true" />
             </span>
             <div>
-              <h2 className="card-title">¿Tienes señal para SMS?</h2>
+              <h2 className="card-title">{t('alertDetail.tienesSenalParaSms')}</h2>
               <p>
-                Puedes avisar también por mensaje de texto al número de respaldo. El SMS no confirma
-                la entrega; Manguaré seguirá intentando enviar la alerta por internet.
+                {t('alertDetail.puedesAvisarTambienPorMensajeDe')}
               </p>
             </div>
           </div>
           {alert.smsOpenedAt ? (
             <p className="sms-opened">
-              Abriste la app de mensajes {formatRelative(alert.smsOpenedAt)}. No podemos confirmar si
-              el SMS se envió.
+              {t('alertDetail.abristeLaAppDeMensajes')}{' '}{formatRelative(alert.smsOpenedAt, t)}{t('alertDetail.noPodemosConfirmarSiElSms')}
             </p>
           ) : null}
           <button type="button" className="btn btn-secondary" onClick={() => setSmsOpen(true)}>
-            <MessageSquareText size={18} aria-hidden="true" /> Avisar por SMS
+            <MessageSquareText size={18} aria-hidden="true" />{' '}{t('alertDetail.avisarPorSms')}
           </button>
         </section>
         )
@@ -357,11 +357,11 @@ export function AlertDetailScreen({
         <div className="banner banner-ok">
           <ShieldCheck size={19} aria-hidden="true" />
           <div>
-            <strong>Confirmación recibida</strong>
+            <strong>{t('alertDetail.confirmacionRecibida')}</strong>
             <p>
               {alert.acknowledgedAt
-                ? `La red de salud confirmó esta alerta el ${formatDateTime(alert.acknowledgedAt)}.`
-                : 'La red de salud confirmó esta alerta.'}
+                ? t('alertDetail.laRedDeSaludConfirmoEsta', { dateTime: formatDateTime(alert.acknowledgedAt, t) })
+                : t('alertDetail.laRedDeSaludConfirmoEsta2')}
             </p>
           </div>
         </div>
@@ -374,10 +374,10 @@ export function AlertDetailScreen({
               <MessageSquareText size={20} aria-hidden="true" />
             </span>
             <div>
-              <span className="response-kicker">Respuesta de la red de salud</span>
-              <strong>{responseText(latestResponse)}</strong>
+              <span className="response-kicker">{t('alertDetail.respuestaDeLaRedDeSalud')}</span>
+              <strong>{translatedResponse(t, latestResponse)}</strong>
               <span className="response-meta">
-                {formatDateTime(latestResponse.at)}
+                {formatDateTime(latestResponse.at, t)}
                 {latestResponse.by ? ` · ${latestResponse.by}` : ''}
               </span>
             </div>
@@ -389,8 +389,8 @@ export function AlertDetailScreen({
                 .reverse()
                 .map((response) => (
                   <li key={`${response.at}-${response.code}`}>
-                    <span>{responseText(response)}</span>
-                    <time dateTime={response.at}>{formatRelative(response.at)}</time>
+                    <span>{translatedResponse(t, response)}</span>
+                    <time dateTime={response.at}>{formatRelative(response.at, t)}</time>
                   </li>
                 ))}
             </ol>
@@ -399,37 +399,37 @@ export function AlertDetailScreen({
       ) : null}
 
       <section className="card">
-        <h2 className="card-title">Datos de la alerta</h2>
+        <h2 className="card-title">{t('alertDetail.datosDeLaAlerta')}</h2>
         <div className="detail-type">
           <span className={`type-tile type-tile--${meta.tone}`}>
             <Icon size={23} aria-hidden="true" />
           </span>
           <div>
-            <strong>{meta.label}</strong>
-            <span>{formatDateTime(alert.createdAt)}</span>
+            <strong><LocalizedText id={`emergency.${alert.type}`} /></strong>
+            <span>{formatDateTime(alert.createdAt, t)}</span>
           </div>
         </div>
 
         <dl className="detail-list">
           <div>
-            <dt>Detalle</dt>
-            <dd>{alert.note || 'Sin detalle'}</dd>
+            <dt>{t('alertDetail.detalle')}</dt>
+            <dd>{alert.isSos && alert.note === SOS_DEFAULT_NOTE ? t('sos.title') : alert.note || t('alertDetail.sinDetalle')}</dd>
           </div>
           <div>
-            <dt>Comunidad</dt>
-            <dd>{alert.community || 'No indicada'}</dd>
+            <dt>{t('common.community')}</dt>
+            <dd>{alert.community || t('alertDetail.noIndicada')}</dd>
           </div>
           <div>
-            <dt>Equipo</dt>
-            <dd>{alert.deviceName || 'No indicado'}</dd>
+            <dt>{t('alertDetail.equipo')}</dt>
+            <dd>{alert.deviceName || t('alertDetail.noIndicado')}</dd>
           </div>
           <div>
-            <dt>Ubicación</dt>
+            <dt>{t('common.location')}</dt>
             <dd>
               {alert.location && alert.consentLocation ? (
                 <>
                   <span className="location-line">
-                    <MapPin size={15} aria-hidden="true" /> GPS adjunto (±
+                    <MapPin size={15} aria-hidden="true" />{' '}{t('alertDetail.gpsAdjunto')}
                     {alert.location.accuracy} m)
                   </span>
                   <button
@@ -437,7 +437,7 @@ export function AlertDetailScreen({
                     className="text-btn"
                     onClick={() => setShowCoords((value) => !value)}
                   >
-                    {showCoords ? 'Ocultar coordenadas' : 'Ver coordenadas'}
+                    {showCoords ? t('alertDetail.ocultarCoordenadas') : t('alertDetail.verCoordenadas')}
                   </button>
                   {showCoords ? (
                     <span className="coords">
@@ -447,30 +447,30 @@ export function AlertDetailScreen({
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Ver mapa <ExternalLink size={12} aria-hidden="true" />
+                        {t('alertDetail.verMapa')}{' '}<ExternalLink size={12} aria-hidden="true" />
                       </a>
                     </span>
                   ) : null}
                 </>
               ) : (
-                'Sin ubicación GPS'
+                t('alertDetail.sinUbicacionGps')
               )}
             </dd>
           </div>
           <div>
-            <dt>Foto</dt>
+            <dt>{t('common.photo')}</dt>
             <dd>
               {alert.photo ? (
                 <>
                   <span className="location-line">
-                    <ImageIcon size={15} aria-hidden="true" /> Adjunta y comprimida
+                    <ImageIcon size={15} aria-hidden="true" />{' '}{t('alertDetail.adjuntaYComprimida')}
                   </span>
                   <a className="photo-link" href={alert.photo} target="_blank" rel="noreferrer">
-                    <img src={alert.photo} alt="Foto adjunta a la emergencia" />
+                    <img src={alert.photo} alt={t('alertDetail.fotoAdjuntaALaEmergencia')} />
                   </a>
                 </>
               ) : (
-                'Sin foto'
+                t('alertDetail.sinFoto')
               )}
             </dd>
           </div>
@@ -481,20 +481,19 @@ export function AlertDetailScreen({
           className="reference-row"
           onClick={() => {
             void copyText(alert.id).then((ok) =>
-              showToast(ok ? 'Referencia copiada.' : 'No se pudo copiar.', ok ? 'ok' : 'error'),
+              showToast(ok ? t('alertDetail.referenciaCopiada') : t('alertDetail.noSePudoCopiar'), ok ? 'ok' : 'error'),
             );
           }}
         >
           <span>
-            Referencia <strong>{shortId(alert.id)}</strong>
+            {t('alertDetail.referencia')}{' '}<strong>{shortId(alert.id)}</strong>
           </span>
           <Copy size={16} aria-hidden="true" />
         </button>
       </section>
 
       <p className="privacy-note">
-        <ShieldCheck size={16} aria-hidden="true" /> La ubicación y la foto se comparten solo con la
-        red de salud. No se muestran públicamente.
+        <ShieldCheck size={16} aria-hidden="true" />{' '}{t('alertDetail.laUbicacionYLaFotoSe')}
       </p>
 
       <div className="detail-actions">
@@ -506,26 +505,25 @@ export function AlertDetailScreen({
           disabled={syncing}
         >
           <RefreshCw size={18} className={syncing ? 'spin' : ''} aria-hidden="true" />
-          {syncing ? 'Actualizando…' : 'Actualizar estado'}
+          {syncing ? t('alertDetail.actualizando') : t('alertDetail.actualizarEstado')}
         </button>
         <button type="button" className="btn btn-ghost" onClick={onHistory}>
-          Ver todas las alertas
+          {t('alertDetail.verTodasLasAlertas')}
         </button>
         {isPending && !alert.serverReceivedAt ? (
           <button type="button" className="btn btn-danger-ghost" onClick={() => setCancelOpen(true)}>
-            <Ban size={17} aria-hidden="true" /> Anular alerta
+            <Ban size={17} aria-hidden="true" />{' '}{t('alertDetail.anularAlerta')}
           </button>
         ) : null}
       </div>
 
-      <Sheet open={cancelOpen} title="Anular alerta" onClose={() => setCancelOpen(false)}>
+      <Sheet open={cancelOpen} title={t('alertDetail.anularAlerta')} onClose={() => setCancelOpen(false)}>
         <p className="sheet-intro">
-          Esta alerta todavía no salió del teléfono. Si la anulas, se quedará en el historial como
-          anulada y no se enviará a la red de salud.
+          {t('alertDetail.estaAlertaTodaviaNoSalioDel')}
         </p>
         <div className="notice-box">
-          <strong>No se puede deshacer</strong>
-          <p>Si la emergencia sigue, crea una alerta nueva en lugar de esperar.</p>
+          <strong>{t('alertDetail.noSePuedeDeshacer')}</strong>
+          <p>{t('alertDetail.siLaEmergenciaSigueCreaUna')}</p>
         </div>
         <div className="sheet-actions">
           <button
@@ -533,7 +531,7 @@ export function AlertDetailScreen({
             className="btn btn-secondary"
             onClick={() => setCancelOpen(false)}
           >
-            Conservar alerta
+            {t('alertDetail.conservarAlerta')}
           </button>
           <button
             type="button"
@@ -545,14 +543,14 @@ export function AlertDetailScreen({
               });
             }}
           >
-            <Ban size={18} aria-hidden="true" /> Sí, anular
+            <Ban size={18} aria-hidden="true" />{' '}{t('alertDetail.siAnular')}
           </button>
         </div>
       </Sheet>
 
       <Sheet
         open={detailsOpen}
-        title="Completar alerta SOS"
+        title={t('alertDetail.completarAlertaSos')}
         onClose={() => {
           if (!detailsSaving) setDetailsOpen(false);
         }}
@@ -564,46 +562,46 @@ export function AlertDetailScreen({
             disabled={detailsSaving}
             onClick={() => void saveDetails()}
           >
-            {detailsSaving ? 'Guardando…' : 'Guardar detalle'}
+            {detailsSaving ? t('alertDetail.guardando') : t('alertDetail.guardarDetalle')}
           </button>
         }
       >
         <p className="sheet-intro">
-          La alerta ya existe. Estos datos se agregarán a la misma alerta, no crearán otra.
+          {t('alertDetail.laAlertaYaExisteEstosDatos')}
         </p>
         <label className="field">
-          <span className="field-label">Referencia de ubicación</span>
+          <span className="field-label">{t('alertDetail.referenciaDeUbicacion')}</span>
           <input
             value={detailsCommunity}
             data-testid="sos-detail-reference"
             onChange={(event) => setDetailsCommunity(event.target.value)}
-            placeholder="Comunidad, río o punto conocido"
+            placeholder={t('alertDetail.comunidadRioOPuntoConocido')}
             maxLength={80}
           />
         </label>
         <div className="field">
-          <span className="field-label">Confirma o ajusta la ubicación</span>
+          <span className="field-label">{t('alertDetail.confirmaOAjustaLaUbicacion')}</span>
           <LocationPicker value={detailsLocation} onChange={setDetailsLocation} />
           {detailsLocation ? (
             <button type="button" className="text-btn" onClick={() => setDetailsLocation(undefined)}>
-              Quitar ubicación
+              {t('alertDetail.quitarUbicacion')}
             </button>
           ) : null}
-          <small className="field-help">La ubicación solo se envía al servidor de alertas.</small>
+          <small className="field-help">{t('alertDetail.laUbicacionSoloSeEnviaAl')}</small>
         </div>
         <label className="field">
-          <span className="field-label">Descripción (opcional)</span>
+          <span className="field-label">{t('alertDetail.descripcionOpcional')}</span>
           <textarea
             value={detailsNote}
             data-testid="sos-detail-description"
             onChange={(event) => setDetailsNote(event.target.value)}
-            placeholder="Agrega información útil para quienes te ayudarán."
+            placeholder={t('alertDetail.agregaInformacionUtilParaQuienesTe')}
             rows={3}
             maxLength={1000}
           />
         </label>
         <div className="field">
-          <span className="field-label">Imagen (opcional)</span>
+          <span className="field-label">{t('alertDetail.imagenOpcional')}</span>
           <input
             ref={detailsFileRef}
             type="file"
@@ -619,18 +617,18 @@ export function AlertDetailScreen({
                   setDetailsError('');
                 })
                 .catch((error: unknown) =>
-                  setDetailsError(error instanceof Error ? error.message : 'No se pudo procesar la imagen.'),
+                  setDetailsError(t(error instanceof InterfaceError ? error.key : 'alertDetail.noSePudoProcesarLaImagen')),
                 );
             }}
           />
           {detailsPhoto ? (
             <div className="photo-preview">
-              <img src={detailsPhoto} alt="Imagen adjunta al SOS" />
+              <img src={detailsPhoto} alt={t('alertDetail.imagenAdjuntaAlSos')} />
               <button
                 type="button"
                 className="photo-remove"
                 onClick={() => setDetailsPhoto(undefined)}
-                aria-label="Quitar imagen"
+                aria-label={t('alertDetail.quitarImagen')}
               >
                 <X size={16} aria-hidden="true" />
               </button>
@@ -641,17 +639,16 @@ export function AlertDetailScreen({
               className="photo-add"
               onClick={() => detailsFileRef.current?.click()}
             >
-              <Camera size={20} aria-hidden="true" /> Adjuntar imagen
+              <Camera size={20} aria-hidden="true" />{' '}{t('alertDetail.adjuntarImagen')}
             </button>
           )}
         </div>
         {detailsError ? <p className="field-error" role="alert">{detailsError}</p> : null}
       </Sheet>
 
-      <Sheet open={smsOpen} title="Avisar por SMS" onClose={() => setSmsOpen(false)}>
+      <Sheet open={smsOpen} title={t('alertDetail.avisarPorSms')} onClose={() => setSmsOpen(false)}>
         <p className="sheet-intro">
-          Se abrirá la app de mensajes de tu teléfono con este texto. Envíalo al número de respaldo
-          del promotor o puesto de salud.
+          {t('alertDetail.seAbriraLaAppDeMensajes')}
         </p>
         <div className="sms-preview">
           <span>{smsBody}</span>
@@ -659,16 +656,16 @@ export function AlertDetailScreen({
             type="button"
             onClick={() => {
               void copyText(smsBody).then((ok) =>
-                showToast(ok ? 'Mensaje copiado.' : 'No se pudo copiar.', ok ? 'ok' : 'error'),
+                showToast(ok ? t('alertDetail.mensajeCopiado') : t('alertDetail.noSePudoCopiar'), ok ? 'ok' : 'error'),
               );
             }}
           >
-            <Copy size={15} aria-hidden="true" /> Copiar
+            <Copy size={15} aria-hidden="true" />{' '}{t('alertDetail.copiar')}
           </button>
         </div>
         <div className="sms-number">
-          <span>Número de respaldo</span>
-          <strong>{settings.smsNumber || 'No configurado'}</strong>
+          <span>{t('alertDetail.numeroDeRespaldo')}</span>
+          <strong>{settings.smsNumber || t('alertDetail.noConfigurado')}</strong>
         </div>
         {settings.smsNumber ? (
           <a
@@ -676,17 +673,16 @@ export function AlertDetailScreen({
             href={smsHref(settings.smsNumber, smsBody)}
             onClick={() => void markSms(alert.id)}
           >
-            <MessageSquareText size={18} aria-hidden="true" /> Abrir app de mensajes
+            <MessageSquareText size={18} aria-hidden="true" />{' '}{t('alertDetail.abrirAppDeMensajes')}
           </a>
         ) : (
           <div className="notice-box">
-            <strong>Configura un número de prueba</strong>
-            <p>Ve a Ajustes y escribe el número del promotor o puesto de salud para la demo.</p>
+            <strong>{t('alertDetail.configuraUnNumeroDePrueba')}</strong>
+            <p>{t('alertDetail.veAAjustesYEscribeEl')}</p>
           </div>
         )}
         <p className="sheet-footnote">
-          El SMS no nos confirma la entrega. La alerta por internet seguirá en cola hasta que la red
-          de salud la reciba.
+          {t('alertDetail.elSmsNoNosConfirmaLa')}
         </p>
       </Sheet>
     </div>

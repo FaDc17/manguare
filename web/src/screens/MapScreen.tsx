@@ -1,3 +1,9 @@
+// Traduce los rótulos de búsqueda, filtros y permisos del mapa.
+
+import { communityLabel } from '../i18n/labels';
+import { translate, type MessageKey } from '../i18n/catalog';
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
+import { MapZoom } from '../components/MapZoom';
 import { useEffect, useMemo, useState } from 'react';
 import {
   CircleMarker,
@@ -7,7 +13,7 @@ import {
   useMap,
 } from 'react-leaflet';
 import { LocateFixed, Map as MapIcon, MapPin, Search, TriangleAlert } from 'lucide-react';
-import { COMMUNITY_CATEGORIES, COMMUNITY_LISTINGS, SUPPORT_CENTERS } from '../lib/community';
+import { COMMUNITY_LISTINGS, SUPPORT_CENTERS } from '../lib/community';
 import type { AlertLocation } from '../lib/types';
 import 'leaflet/dist/leaflet.css';
 
@@ -18,7 +24,7 @@ interface MapResult {
   id: string;
   kind: MapKind;
   name: string;
-  category: string;
+  category: MessageKey;
   description: string;
   location: string;
   coordinates: { lat: number; lng: number };
@@ -29,7 +35,7 @@ const RESULTS: MapResult[] = [
     id: listing.id,
     kind: 'conecta' as const,
     name: listing.title,
-    category: COMMUNITY_CATEGORIES.find((item) => item.id === listing.category)?.label ?? 'Conecta',
+    category: communityLabel(listing.category, 'map.conecta'),
     description: listing.description,
     location: listing.location,
     coordinates: listing.coordinates,
@@ -38,7 +44,7 @@ const RESULTS: MapResult[] = [
     id: center.id,
     kind: 'support' as const,
     name: center.name,
-    category: 'Centro de apoyo',
+    category: 'map.centroDeApoyo' as const,
     description: center.note,
     location: center.distance,
     coordinates: center.coordinates,
@@ -64,6 +70,7 @@ function MapFocus({
 }
 
 export function MapScreen({ onSOS }: { onSOS: () => void }) {
+  const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [activeFilters, setActiveFilters] = useState<Record<Filter, boolean>>({
     conecta: true,
@@ -79,16 +86,16 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
     return RESULTS.filter((item) => {
       if (!activeFilters[item.kind]) return false;
       if (!query) return true;
-      return `${item.name} ${item.category} ${item.location}`
-        .toLocaleLowerCase('es')
-        .includes(query);
+      return [t(item.category), translate('es', item.category)].some((category) =>
+        `${item.name} ${category} ${item.location}`.toLocaleLowerCase('es').includes(query),
+      );
     });
-  }, [activeFilters, search]);
+  }, [activeFilters, search, t]);
   const selected = results.find((item) => item.id === selectedId);
 
   const activateLocation = () => {
     if (!navigator.geolocation) {
-      setLocationMessage('Este navegador no ofrece geolocalización.');
+      setLocationMessage(t('map.esteNavegadorNoOfreceGeolocalizacion'));
       return;
     }
     setLocating(true);
@@ -104,7 +111,7 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
         setLocating(false);
       },
       () => {
-        setLocationMessage('No se pudo obtener tu ubicación. Revisa el permiso del navegador.');
+        setLocationMessage(t('map.noSePudoObtenerTuUbicacion'));
         setLocating(false);
       },
       { enableHighAccuracy: true, timeout: 12_000, maximumAge: 60_000 },
@@ -120,15 +127,15 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
     <div className="screen map-screen">
       <header className="map-screen-head">
         <div>
-          <p className="eyebrow"><span className="eyebrow-dot" /> Explora tu zona</p>
-          <h1>Mapa</h1>
+          <p className="eyebrow"><span className="eyebrow-dot" />{' '}{t('map.exploraTuZona')}</p>
+          <h1><LocalizedText id="navigation.map" /></h1>
         </div>
         <button type="button" className="map-sos" onClick={onSOS}>
           <TriangleAlert size={16} aria-hidden="true" /> SOS
         </button>
       </header>
 
-      <section className="map-controls" aria-label="Buscar y filtrar en el mapa">
+      <section className="map-controls" aria-label={t('map.buscarYFiltrarEnElMapa')}>
         <button
           type="button"
           className="btn btn-secondary btn-block map-location-button"
@@ -136,7 +143,7 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
           disabled={locating}
         >
           <LocateFixed size={19} aria-hidden="true" />
-          {locating ? 'Buscando ubicación…' : userLocation ? 'Actualizar mi ubicación' : 'Activar mi ubicación'}
+          {locating ? t('map.buscandoUbicacion') : userLocation ? t('map.actualizarMiUbicacion') : t('map.activarMiUbicacion')}
         </button>
         {locationMessage ? <p className="field-error" role="status">{locationMessage}</p> : null}
         <label className="map-search">
@@ -149,11 +156,11 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
               setSearch(event.target.value);
               setSelectedId(null);
             }}
-            placeholder="Busca por nombre o categoría"
-            aria-label="Buscar por nombre o categoría"
+            placeholder={t('map.buscaPorNombreOCategoria')}
+            aria-label={t('map.buscarPorNombreOCategoria')}
           />
         </label>
-        <div className="map-filters" aria-label="Filtros">
+        <div className="map-filters" aria-label={t('map.filtros')}>
           <button
             type="button"
             data-testid="map-filter-conecta"
@@ -161,7 +168,7 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
             aria-pressed={activeFilters.conecta}
             onClick={() => toggleFilter('conecta')}
           >
-            Conecta
+            {t('map.conecta')}
           </button>
           <button
             type="button"
@@ -170,11 +177,11 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
             aria-pressed={activeFilters.support}
             onClick={() => toggleFilter('support')}
           >
-            Centro de apoyo
+            {t('map.centroDeApoyo')}
           </button>
         </div>
         {results.length ? (
-          <div className="map-result-list" aria-label="Resultados de búsqueda">
+          <div className="map-result-list" aria-label={t('map.resultadosDeBusqueda')}>
             {results.map((item) => (
               <button
                 type="button"
@@ -183,20 +190,22 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
                 onClick={() => selectResult(item)}
               >
                 <span>{item.name}</span>
-                <small>{item.kind === 'conecta' ? 'Conecta' : 'Centro de apoyo'}</small>
+                <small>{item.kind === 'conecta' ? t('map.conecta') : t('map.centroDeApoyo')}</small>
               </button>
             ))}
           </div>
         ) : null}
       </section>
 
-      <section className="map-results" aria-label="Mapa de publicaciones y centros de apoyo">
+      <section className="map-results" aria-label={t('map.mapaDePublicacionesYCentrosDe')}>
         <MapContainer
           className="map-canvas"
           center={[-5.0, -77.95]}
           zoom={8}
+          zoomControl={false}
           scrollWheelZoom
         >
+          <MapZoom />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -218,7 +227,7 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
               <Popup>
                 <strong>{item.name}</strong>
                 <br />
-                {item.category}
+                {t(item.category)}
                 <br />
                 {item.location}
               </Popup>
@@ -230,13 +239,13 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
               radius={8}
               pathOptions={{ color: '#fff', fillColor: '#236e8a', fillOpacity: 1, weight: 3 }}
             >
-              <Popup>Tu ubicación (solo visible en este dispositivo)</Popup>
+              <Popup>{t('map.tuUbicacionSoloVisibleEnEste')}</Popup>
             </CircleMarker>
           ) : null}
         </MapContainer>
         <p className="map-privacy">
           <MapIcon size={14} aria-hidden="true" />
-          Solo muestra publicaciones y centros de apoyo; no incluye alertas ni datos personales.
+          {t('map.soloMuestraPublicacionesYCentrosDe')}
         </p>
         {selected ? (
           <article className="map-selected" data-testid="map-selected">
@@ -245,20 +254,20 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
             </span>
             <div>
               <strong>{selected.name}</strong>
-              <span>{selected.category} · {selected.location}</span>
-              <p>{selected.description}</p>
+              <span>{t(selected.category)} · {selected.location}</span>
+              <p>{selected.kind === 'support' ? t('community.supportNote') : selected.description}</p>
             </div>
           </article>
         ) : null}
         {results.length === 0 ? (
-          <p className="map-empty">No encontramos resultados con esos filtros.</p>
+          <p className="map-empty">{t('map.noEncontramosResultadosConEsosFiltros')}</p>
         ) : null}
       </section>
 
       <section className="map-suggestions" aria-labelledby="map-suggestions-title">
         <div className="section-head">
-          <h2 id="map-suggestions-title">Centros de apoyo</h2>
-          <span className="demo-badge">Ubicación aproximada</span>
+          <h2 id="map-suggestions-title">{t('map.centrosDeApoyo')}</h2>
+          <span className="demo-badge">{t('map.ubicacionAproximada')}</span>
         </div>
         {SUPPORT_CENTERS.map((center) => (
           <button
@@ -273,7 +282,7 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
             <span className="center-icon"><MapPin size={18} aria-hidden="true" /></span>
             <span>
               <strong>{center.name}</strong>
-              <small>{center.distance} · {center.note}</small>
+              <small>{center.distance} · {t('community.supportNote')}</small>
             </span>
           </button>
         ))}

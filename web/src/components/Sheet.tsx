@@ -1,3 +1,6 @@
+// Muestra un diálogo con un botón de cierre localizado y accesible.
+
+import { useTranslation } from '../i18n/LanguageContext';
 import { X } from 'lucide-react';
 import { useEffect, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,6 +18,7 @@ export function Sheet({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const { t } = useTranslation();
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -42,7 +46,7 @@ export function Sheet({
         <div className="sheet-grab" aria-hidden="true" />
         <header className="sheet-head">
           <h2>{title}</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label="Cerrar">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label={t('common.close')}>
             <X size={20} aria-hidden="true" />
           </button>
         </header>

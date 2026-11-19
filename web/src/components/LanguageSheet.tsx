@@ -1,32 +1,38 @@
+// Muestra los idiomas disponibles, el idioma activo y la disponibilidad de textos y audio.
+
 import { Check, Languages } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { LANGUAGES } from '../lib/settings';
+import { isLanguageComplete, LANGUAGES, message } from '../i18n/catalog';
+import { useTranslation } from '../i18n/LanguageContext';
+import { MIXED_AUDIO_NOTE } from '../lib/audio';
 import { Sheet } from './Sheet';
 
 export function LanguageSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { settings, updateSettings, showToast } = useApp();
+  const { showToast } = useApp();
+  const { language, setLanguage, t, visualMessages } = useTranslation();
 
   return (
-    <Sheet open={open} title="Idioma" onClose={onClose}>
+    <Sheet open={open} title={t('settings.language')} onClose={onClose}>
       <p className="sheet-intro">
-        Elige el idioma de la interfaz. Los textos y audios en lenguas locales deben validarse con
-        hablantes de la comunidad antes de usarse.
+        {t(LANGUAGES.every(({ id }) => isLanguageComplete(id)) ? 'language.completeIntro' : 'language.intro')}
+        {visualMessages ? <span lang="es">{' La beta mezcla español, términos del idioma elegido y rótulos simulados.'}</span> : null}
       </p>
       <div className="lang-list">
-        {LANGUAGES.map((language) => {
-          const active = settings.language === language.id;
+        {LANGUAGES.map((option) => {
+          const active = language === option.id;
+          const complete = isLanguageComplete(option.id);
           return (
             <button
-              key={language.id}
+              key={option.id}
               type="button"
               className={`lang-option ${active ? 'is-active' : ''}`}
+              aria-pressed={active}
+              data-testid={`language-${option.id}`}
               onClick={() => {
-                updateSettings({ language: language.id });
+                setLanguage(option.id);
                 showToast(
-                  language.id === 'es'
-                    ? 'Idioma: español.'
-                    : `${language.label}: traducción pendiente. Se muestra español como respaldo.`,
-                  language.id === 'es' ? 'ok' : 'warn',
+                  message(complete ? 'language.selected' : 'language.selectedPartial', { language: option.label }),
+                  complete ? 'ok' : 'warn',
                 );
                 onClose();
               }}
@@ -36,12 +42,12 @@ export function LanguageSheet({ open, onClose }: { open: boolean; onClose: () =>
               </span>
               <span className="lang-copy">
                 <span className="lang-name">
-                  {language.label}
-                  <span className={`lang-badge ${language.status === 'listo' ? 'is-ready' : ''}`}>
-                    {language.status === 'listo' ? 'Disponible' : 'Pendiente'}
+                  {option.label}
+                  <span className={`lang-badge ${complete ? 'is-ready' : ''}`}>
+                    {t(complete ? 'language.complete' : 'language.partial')}
                   </span>
                 </span>
-                <span className="lang-note">{language.note}</span>
+                {complete ? null : <span className="lang-note">{t('language.partialNote')}</span>}
               </span>
               {active ? <Check size={20} className="lang-check" aria-hidden="true" /> : null}
             </button>
@@ -49,11 +55,8 @@ export function LanguageSheet({ open, onClose }: { open: boolean; onClose: () =>
         })}
       </div>
       <div className="notice-box">
-        <strong>Sin voces sintéticas</strong>
-        <p>
-          Los audios en awajún y shawi se grabarán con hablantes de la comunidad. Mientras tanto, la
-          app muestra español y un audio de demostración en castellano.
-        </p>
+        <strong>{t('language.audioTitle')}</strong>
+        <p>{visualMessages ? MIXED_AUDIO_NOTE : t('language.audioNote')}</p>
       </div>
     </Sheet>
   );

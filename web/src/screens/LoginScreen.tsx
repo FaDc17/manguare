@@ -1,6 +1,11 @@
+// Permite elegir el idioma antes de iniciar sesión y traduce los avisos del PIN.
+
+import { useTranslation } from '../i18n/LanguageContext';
 import { useMemo, useState } from 'react';
 import { ArrowRight, Delete, ShieldCheck, UserRound } from 'lucide-react';
 import { BrandMark } from '../components/BrandMark';
+import { LanguageSelect } from '../components/LanguageSelect';
+import type { MessageKey } from '../i18n/catalog';
 import {
   authenticate,
   DEMO_ACCOUNTS,
@@ -19,10 +24,11 @@ export function LoginScreen({
   onLogin: (session: Session) => void;
   onRegister: () => void;
 }) {
+  const { t } = useTranslation();
   const [identifier, setIdentifier] = useState('');
   const [pin, setPin] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<MessageKey | null>(null);
+  const [notice, setNotice] = useState<MessageKey | null>(null);
 
   const canSubmit = useMemo(
     () =>
@@ -52,7 +58,7 @@ export function LoginScreen({
   const submit = () => {
     const session = authenticate(identifier, pin);
     if (!session) {
-      setError('Número o PIN incorrecto. Usa uno de los accesos de demo.');
+      setError('login.numeroOPinIncorrectoUsaUno');
       setPin('');
       return;
     }
@@ -67,16 +73,18 @@ export function LoginScreen({
           <BrandMark size={56} />
           <div>
             <strong>Manguaré</strong>
-            <span>DevUT · comunidad amazónica</span>
+            <span>{t('login.devutComunidadAmazonica')}</span>
           </div>
         </div>
 
-        <p className="login-eyebrow">Bienvenido a tu comunidad</p>
-        <h1>Ingresa a DevUT</h1>
-        <p className="login-lead">Conecta, pide ayuda y cuida la Amazonía.</p>
+        <LanguageSelect />
+
+        <p className="login-eyebrow">{t('login.bienvenidoATuComunidad')}</p>
+        <h1>{t('login.ingresaADevut')}</h1>
+        <p className="login-lead">{t('login.conectaPideAyudaYCuidaLa')}</p>
 
         <label className="login-field">
-          <span>Correo o celular</span>
+          <span>{t('login.correoOCelular')}</span>
           <span className="login-phone">
             <UserRound size={17} aria-hidden="true" />
             <input
@@ -84,7 +92,7 @@ export function LoginScreen({
               inputMode="text"
               autoComplete="username"
               data-testid="login-phone"
-              placeholder="Ej. 992 066 275"
+              placeholder={t('login.ej992066275')}
               value={identifier}
               onChange={(event) => {
                 setError(null);
@@ -96,15 +104,15 @@ export function LoginScreen({
         </label>
 
         <div className="login-pin-head">
-          <span>PIN de 6 dígitos</span>
-          <div className="login-dots" aria-label={`${pin.length} de 6 dígitos`}>
+          <span>{t('login.pinDe6Digitos')}</span>
+          <div className="login-dots" aria-label={t('login.de6Digitos', { count: pin.length })}>
             {Array.from({ length: 6 }, (_, index) => (
               <i key={index} className={index < pin.length ? 'is-filled' : ''} />
             ))}
           </div>
         </div>
 
-        <div className="login-keypad" role="group" aria-label="Teclado numérico del PIN">
+        <div className="login-keypad" role="group" aria-label={t('login.tecladoNumericoDelPin')}>
           {KEYS.map((digit) => (
             <button
               key={digit}
@@ -115,14 +123,14 @@ export function LoginScreen({
               {digit}
             </button>
           ))}
-          <button type="button" className="login-erase" onClick={erase} aria-label="Borrar un dígito">
-            <Delete size={17} aria-hidden="true" /> Borrar
+          <button type="button" className="login-erase" onClick={erase} aria-label={t('login.borrarUnDigito')}>
+            <Delete size={17} aria-hidden="true" />{' '}{t('login.borrar')}
           </button>
         </div>
 
         {error ? (
           <p className="login-error" role="alert" data-testid="login-error">
-            {error}
+            {t(error)}
           </p>
         ) : null}
 
@@ -133,23 +141,23 @@ export function LoginScreen({
           onClick={submit}
           disabled={!canSubmit}
         >
-          Ingresar <ArrowRight size={19} aria-hidden="true" />
+          {t('login.ingresar')}{' '}<ArrowRight size={19} aria-hidden="true" />
         </button>
 
         <button
           type="button"
           className="login-link"
           onClick={() =>
-            setNotice('En este prototipo el PIN es 123456 para los dos accesos de demo.')
+            setNotice('login.enEstePrototipoElPinEs')
           }
         >
-          ¿Olvidaste tu PIN?
+          {t('login.olvidasteTuPin')}
         </button>
 
-        {notice ? <p className="login-notice">{notice}</p> : null}
+        {notice ? <p className="login-notice">{t(notice)}</p> : null}
 
         <div className="demo-access">
-          <strong>Accesos de demo</strong>
+          <strong>{t('login.accesosDeDemo')}</strong>
           {DEMO_ACCOUNTS.map((account) => (
             <button
               key={account.phone}
@@ -159,28 +167,28 @@ export function LoginScreen({
               onClick={() => fillDemo(account.phone)}
             >
               <span>
-                <b>{account.label}</b> · {formatPhone(account.phone)}
+                <b>{t(account.role === 'admin' ? 'settings.admin' : 'settings.usuario')}</b> · {formatPhone(account.phone)}
               </span>
-              <span>{account.description}</span>
+              <span>{t(account.role === 'admin' ? 'login.adminDescription' : 'role.user')}</span>
             </button>
           ))}
-          <span className="demo-access-pin">PIN para ambos: {DEMO_PIN}</span>
+          <span className="demo-access-pin">{t('login.pinParaAmbos')}{' '}{DEMO_PIN}</span>
         </div>
 
         <p className="login-register">
-          ¿Aún no tienes una cuenta?{' '}
+          {t('login.aunNoTienesUnaCuenta')}{' '}
           <button
             type="button"
             data-testid="register-link"
             onClick={onRegister}
           >
-            Regístrate
+            {t('login.registrate')}
           </button>
         </p>
 
         <p className="login-foot">
           <ShieldCheck size={15} aria-hidden="true" />
-          Acceso de demostración. No uses este PIN en un piloto real.
+          {t('login.accesoDeDemostracionNoUsesEste')}
         </p>
       </main>
     </div>

@@ -1,8 +1,21 @@
+// Prepara las guías y las reproduce con la síntesis de voz del dispositivo.
+
+import { translate, type Language } from '../i18n/catalog';
+
 let warned = false;
 
+export const MIXED_AUDIO_NOTE = 'Audio de prueba. La voz en castellano lee una mezcla con términos del idioma elegido.';
+
+// Presenta una frase mixta y conserva completo el guion de la guía.
+export function guideText(text: string, language: Language, mixed: boolean): string {
+  if (!mixed || language === 'es') return text;
+  const help = translate(language, 'common.help');
+  const community = translate(language, 'common.community');
+  return `Audio de prueba. ${help} para tu ${community}. ${text}`;
+}
+
 /**
- * Audio de demostración en castellano. Las lenguas awajún y shawi no usan
- * voz sintética: sus audios deben ser grabados por hablantes de la comunidad.
+ * Voz de demostración en castellano para el texto original o la guía mixta.
  */
 export function speakSpanish(text: string): boolean {
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) {

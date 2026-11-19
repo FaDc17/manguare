@@ -1,6 +1,8 @@
+// Convierte el estado interno de una alerta en una etiqueta visible.
+
 import { CheckCircle2, Clock3, Send, XCircle } from 'lucide-react';
 import type { AlertState } from '../lib/types';
-import { STATE_LABEL } from '../lib/format';
+import { useTranslation } from '../i18n/LanguageContext';
 
 const ICONS = {
   pending: Clock3,
@@ -18,11 +20,12 @@ export function StatusChip({
   compact?: boolean;
   label?: string;
 }) {
+  const { t } = useTranslation();
   const Icon = ICONS[state];
   return (
     <span className={`status-chip status-${state} ${compact ? 'is-compact' : ''}`}>
       <Icon size={compact ? 13 : 14} aria-hidden="true" />
-      {label ?? STATE_LABEL[state]}
+      {label ?? t(`status.${state}`)}
     </span>
   );
 }

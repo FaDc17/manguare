@@ -1,3 +1,6 @@
+// Muestra las etiquetas de navegación y el contador de alertas pendientes.
+
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { History, House, Map, Settings2, Store } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 
@@ -10,11 +13,12 @@ export function BottomNav({
   active: Tab | null;
   onChange: (tab: Tab) => void;
 }) {
+  const { t } = useTranslation();
   const { alerts } = useApp();
   const pending = alerts.filter((alert) => alert.state === 'pending').length;
 
   return (
-    <nav className="bottom-nav" aria-label="Navegación principal">
+    <nav className="bottom-nav" aria-label={t('navigation.navegacionPrincipal')}>
       <button
         type="button"
         className={`nav-item ${active === 'home' ? 'is-active' : ''}`}
@@ -23,7 +27,7 @@ export function BottomNav({
         aria-current={active === 'home' ? 'page' : undefined}
       >
         <House size={22} aria-hidden="true" />
-        <span>Inicio</span>
+        <LocalizedText id="navigation.home" />
       </button>
       <button
         type="button"
@@ -33,7 +37,7 @@ export function BottomNav({
         aria-current={active === 'community' ? 'page' : undefined}
       >
         <Store size={22} aria-hidden="true" />
-        <span>Comunidad</span>
+        <LocalizedText id="common.community" />
       </button>
       <button
         type="button"
@@ -43,7 +47,7 @@ export function BottomNav({
         aria-current={active === 'map' ? 'page' : undefined}
       >
         <Map size={22} aria-hidden="true" />
-        <span>Mapa</span>
+        <LocalizedText id="navigation.map" />
       </button>
       <button
         type="button"
@@ -56,7 +60,7 @@ export function BottomNav({
           <History size={22} aria-hidden="true" />
           {pending > 0 ? <span className="nav-badge">{pending}</span> : null}
         </span>
-        <span>Mis alertas</span>
+        <LocalizedText id="navigation.history" />
       </button>
       <button
         type="button"
@@ -66,7 +70,7 @@ export function BottomNav({
         aria-current={active === 'settings' ? 'page' : undefined}
       >
         <Settings2 size={22} aria-hidden="true" />
-        <span>Ajustes</span>
+        <span>{t('navigation.settings')}</span>
       </button>
     </nav>
   );
