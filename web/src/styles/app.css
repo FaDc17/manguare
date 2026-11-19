@@ -3885,3 +3885,5 @@
     url('/art/rio_maranon.webp') center 30% / cover no-repeat;
   pointer-events: none;
 }
+
+.splash-shot.splash-video.is-on { animation: none; }

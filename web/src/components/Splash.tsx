@@ -1,13 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-const SHOTS = [
-  '/art/selva_amanecer.webp',
-  '/art/rio_maranon.webp',
-  '/art/manguare_tambor.webp',
-  '/art/cacao_miel.webp',
+interface Shot {
+  src: string;
+  /** Clip H3 opcional: si no carga, se queda la imagen. */
+  video?: string;
+  ms: number;
+}
+
+const SHOTS: Shot[] = [
+  { src: '/art/selva_amanecer.webp', ms: 1700 },
+  { src: '/art/rio_maranon.webp', ms: 1700 },
+  { src: '/art/manguare_tambor.webp', video: '/art/manguare_tambor.mp4', ms: 3000 },
+  { src: '/art/cacao_miel.webp', ms: 1700 },
 ];
+const TOTAL_MS = SHOTS.reduce((sum, shot) => sum + shot.ms, 0);
 const SEEN_KEY = 'manguare.splash.v1';
-const SHOT_MS = 1700;
 
 function alreadySeen(): boolean {
   try {
@@ -38,12 +45,14 @@ export function Splash() {
 
   useEffect(() => {
     if (!open) return;
-    const rotate = window.setInterval(() => setShot((value) => (value + 1) % SHOTS.length), SHOT_MS);
-    const auto = window.setTimeout(finish, reduced ? 2200 : SHOT_MS * SHOTS.length + 400);
-    return () => {
-      window.clearInterval(rotate);
-      window.clearTimeout(auto);
-    };
+    const timers: number[] = [];
+    let elapsed = 0;
+    SHOTS.forEach((item, index) => {
+      if (index > 0) timers.push(window.setTimeout(() => setShot(index), elapsed));
+      elapsed += item.ms;
+    });
+    timers.push(window.setTimeout(finish, reduced ? 2200 : TOTAL_MS + 400));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -61,14 +70,8 @@ export function Splash() {
         if (event.key === 'Enter' || event.key === ' ' || event.key === 'Escape') finish();
       }}
     >
-      {SHOTS.map((src, index) => (
-        <img
-          key={src}
-          src={src}
-          alt=""
-          className={`splash-shot ${index === shot ? 'is-on' : ''}`}
-          decoding="async"
-        />
+      {SHOTS.map((item, index) => (
+        <ShotLayer key={item.src} shot={item} on={index === shot} reduced={reduced} />
       ))}
       <div className="splash-shade" />
       <div className="splash-content">
@@ -78,5 +81,42 @@ export function Splash() {
       </div>
       <p className="splash-skip">Toca para entrar</p>
     </div>
+  );
+}
+
+function ShotLayer({ shot, on, reduced }: { shot: Shot; on: boolean; reduced: boolean }) {
+  const [videoOk, setVideoOk] = useState(true);
+  const ref = useRef<HTMLVideoElement>(null);
+  const useVideo = Boolean(shot.video) && videoOk && !reduced;
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video || !on) return;
+    video.currentTime = 0;
+    void video.play().catch(() => setVideoOk(false));
+  }, [on]);
+
+  if (useVideo) {
+    return (
+      <video
+        ref={ref}
+        className={`splash-shot splash-video ${on ? 'is-on' : ''}`}
+        src={shot.video}
+        poster={shot.src}
+        muted
+        playsInline
+        preload="auto"
+        aria-hidden="true"
+        onError={() => setVideoOk(false)}
+      />
+    );
+  }
+  return (
+    <img
+      src={shot.src}
+      alt=""
+      className={`splash-shot ${on ? 'is-on' : ''}`}
+      decoding="async"
+    />
   );
 }

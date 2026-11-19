@@ -239,4 +239,5 @@ siguientes pasos son de validación y operación, no de más funcionalidad:
 - Intro: `components/Splash.tsx` (4 fondos Krea2 en `web/public/art/*.webp`, logo en `web/public/brand/devut-logo.png`, una vez por sesión, toque para saltar, respeta reduced-motion). Originales 1152x2048 en `art/v1/`. Scripts: `scripts/art/gen_fondos.py`, `scripts/art/logo_alpha.py`.
 - Nota: `krea2_lib.UNET` por defecto está obsoleto; `gen_fondos.py` lo sobrescribe con el DaSiWa Krea2 Turbo instalado.
 - Pruebas: `npm test` (33 API + 30 web) y `npm run test:e2e` pasan.
-- Pendiente: video H3 de cierre (opcional), fondos dentro de login/home, seguridad real (auth, límites), commit (sin hacer).
+- Clip H3 del tambor: `scripts/art/render_clip.py <shot> "<movimiento>"` -> art/v1/clips (local) y `web/public/art/manguare_tambor.mp4` (3 s, sin audio) usado en el Splash. `krea2_lib.UNET` ya apunta al DaSiWa instalado.
+- Pendiente: auth real (cuentas en servidor), más clips H3 (otros fondos), push.
