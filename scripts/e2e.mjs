@@ -451,11 +451,11 @@ async function main() {
     }, { timeout: 15000 });
     await app.click('[data-testid="refresh-status"]');
     await app.waitForFunction(
-      () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Leída',
+      () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Recibida',
       { timeout: 15000 },
     );
     await app.click('[data-testid="nav-history"]');
-    await app.waitForFunction(() => document.body.textContent?.includes('Leída'), {
+    await app.waitForFunction(() => document.body.textContent?.includes('Recibida'), {
       timeout: 10000,
     });
     results.sosReceivedStateInProfile = true;

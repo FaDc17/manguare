@@ -122,11 +122,8 @@ export function AlertDetailScreen({
   const deadline = deadlineText(alert);
   const latestResponse = alert.responses?.at(-1);
   const awaitingConfirmation = alert.state === 'sent' && !alert.acknowledgedAt;
-  const stateLabel = alert.isSos && isReceived ? t('status.read') : t(`status.${alert.state}`);
-  const stateDescription =
-    alert.isSos && isReceived
-      ? t('alertDetail.laRedDeSaludYaLeyo')
-      : t(`status.description.${alert.state}`);
+  const stateLabel = t(`status.${alert.state}`);
+  const stateDescription = t(`status.description.${alert.state}`);
 
   const saveDetails = async () => {
     if (detailsSaving) return;
@@ -167,7 +164,7 @@ export function AlertDetailScreen({
       done: Boolean(alert.serverReceivedAt),
     },
     {
-      label: alert.isSos ? t('alertDetail.leidaPorLaRedDeSalud') : t('alertDetail.recibidaPorLaRedDeSalud'),
+      label: t('alertDetail.recibidaPorLaRedDeSalud'),
       detail: t('alertDetail.alguienDeLaRedConfirmoQue'),
       time: alert.acknowledgedAt,
       done: Boolean(alert.acknowledgedAt),
@@ -182,11 +179,7 @@ export function AlertDetailScreen({
         subtitle={t('alertDetail.ref', { reference: shortId(alert.id) })}
         onBack={onBack}
         right={
-          <StatusChip
-            state={alert.state}
-            compact
-            label={alert.isSos && isReceived ? t('status.read') : undefined}
-          />
+          <StatusChip state={alert.state} compact />
         }
       />
 
