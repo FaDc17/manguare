@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from '../i18n/LanguageContext';
 
 interface Shot {
   src: string;
@@ -26,6 +27,7 @@ function alreadySeen(): boolean {
 
 /** Intro de marca: fondos de la selva que se funden, logo devUT y «Toca para entrar». Una vez por sesión. */
 export function Splash() {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(() => !alreadySeen());
   const [leaving, setLeaving] = useState(false);
   const [shot, setShot] = useState(0);
@@ -63,7 +65,7 @@ export function Splash() {
       className={`splash ${leaving ? 'is-leaving' : ''} ${reduced ? 'is-reduced' : ''}`}
       role="button"
       tabIndex={0}
-      aria-label="Manguaré. Toca para entrar"
+      aria-label={t('splash.manguareTocaParaEntrar')}
       data-testid="splash"
       onClick={finish}
       onKeyDown={(event) => {
@@ -77,9 +79,9 @@ export function Splash() {
       <div className="splash-content">
         <img className="splash-logo" src="/brand/devut-logo.png" alt="devUT" />
         <p className="splash-name">Manguaré</p>
-        <p className="splash-tag">Tu voz llega, incluso sin señal</p>
+        <p className="splash-tag">{t('splash.tuVozLlegaIncluso')}</p>
       </div>
-      <p className="splash-skip">Toca para entrar</p>
+      <p className="splash-skip">{t('splash.tocaParaEntrar')}</p>
     </div>
   );
 }

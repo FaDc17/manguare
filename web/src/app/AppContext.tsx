@@ -1,3 +1,4 @@
+import { message, type Message } from '../i18n/catalog';
 import {
   createContext,
   useCallback,
@@ -40,7 +41,7 @@ type ToastTone = 'ok' | 'warn' | 'error';
 
 interface ToastState {
   id: number;
-  message: string;
+  message: string | Message;
   tone: ToastTone;
 }
 
@@ -53,7 +54,7 @@ interface AppContextValue {
   realOnline: boolean;
   settings: Settings;
   toast: ToastState | null;
-  showToast: (message: string, tone?: ToastTone) => void;
+  showToast: (message: string | Message, tone?: ToastTone) => void;
   dismissToast: () => void;
   refresh: () => Promise<void>;
   createAlert: (draft: AlertDraft) => Promise<AlertRecord>;
@@ -69,7 +70,7 @@ interface AppContextValue {
   createBiodiversityReport: (draft: BiodiversityReportDraft) => Promise<BiodiversityReport>;
   cancelAlert: (id: string) => Promise<boolean>;
   syncNow: (manual?: boolean) => Promise<void>;
-  updateSettings: (patch: Partial<Settings>) => void;
+  updateSettings: (patch: Partial<Omit<Settings, 'language'>>) => void;
   markSms: (id: string) => Promise<void>;
   clearLocal: () => Promise<void>;
 }
@@ -91,7 +92,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const online = realOnline && !settings.simulateOffline;
 
-  const showToast = useCallback((message: string, tone: ToastTone = 'ok') => {
+  const showToast = useCallback((message: string | Message, tone: ToastTone = 'ok') => {
     setToast({ id: Date.now(), message, tone });
     if (toastTimer.current) window.clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 4200);
@@ -117,7 +118,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setAlerts(list);
       setBiodiversityReports(reports.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     } catch {
-      showToast('No se pudo leer el almacenamiento del teléfono.', 'error');
+      showToast(message('sync.noSePudoLeerElAlmacenamiento'), 'error');
     } finally {
       setLoading(false);
     }
@@ -128,7 +129,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (syncingRef.current) return;
       if (!isEffectivelyOnline()) {
         if (manual) {
-          showToast('Sin conexión. La alerta se enviará cuando vuelva la señal.', 'warn');
+          showToast(message('sync.sinConexionLaAlertaSeEnviara'), 'warn');
         }
         return;
       }
@@ -139,18 +140,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await refresh();
         if (manual) {
           if (!result) {
-            showToast('No se pudo conectar. Se reintentará automáticamente.', 'error');
+            showToast(message('sync.noSePudoConectarSeReintentara'), 'error');
           } else if (result.sent > 0) {
             showToast(
-              result.sent === 1 ? 'Alerta enviada.' : `${result.sent} alertas enviadas.`,
+              result.sent === 1 ? message('sync.alertaEnviada') : message('sync.alertasEnviadas', { sent: result.sent }),
               'ok',
             );
           } else if (result.failed > 0) {
-            showToast('No se pudo enviar. Se reintentará automáticamente.', 'warn');
+            showToast(message('sync.noSePudoEnviarSeReintentara'), 'warn');
           } else if (result.updated > 0) {
-            showToast('Estado actualizado.', 'ok');
+            showToast(message('sync.estadoActualizado'), 'ok');
           } else {
-            showToast('Todo está al día.', 'ok');
+            showToast(message('sync.todoEstaAlDia'), 'ok');
           }
         }
       } finally {
@@ -232,22 +233,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await refresh();
         notifyQueueChanged();
         if (!canceled) {
-          showToast('La alerta ya salió del teléfono y no se puede anular.', 'warn');
+          showToast(message('sync.laAlertaYaSalioDelTelefono'), 'warn');
           return false;
         }
-        showToast('Alerta anulada. No se enviará.', 'ok');
+        showToast(message('sync.alertaAnuladaNoSeEnviara'), 'ok');
         return true;
       } catch {
-        showToast('No se pudo anular la alerta.', 'error');
+        showToast(message('sync.noSePudoAnularLaAlerta'), 'error');
         return false;
       }
     },
     [refresh, showToast],
   );
 
-  const updateSettings = useCallback((patch: Partial<Settings>) => {
+  const updateSettings = useCallback((patch: Partial<Omit<Settings, 'language'>>) => {
     setSettings((current) => {
-      const next = { ...current, ...patch };
+      // Usa el idioma guardado más reciente al modificar otros ajustes.
+      const next = { ...current, ...patch, language: loadSettings().language };
       saveSettings(next);
       return next;
     });
@@ -268,7 +270,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearLocal = useCallback(async () => {
     await Promise.all([clearAlerts(), clearBiodiversityReports()]);
     await refresh();
-    showToast('Se borraron las alertas y reportes de este teléfono.', 'ok');
+    showToast(message('sync.seBorraronLosDatosLocales'), 'ok');
   }, [refresh, showToast]);
 
   const activeCount = alerts.filter((alert) => {

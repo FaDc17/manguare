@@ -167,7 +167,7 @@ etiqueta `prueba`. No publiques ubicaciones reales ni datos de personas.
 - El SMS de escalamiento abre la app de mensajes; no hay envío automático ni
   confirmación de entrega.
 - El panel tiene un solo usuario y no tiene roles.
-- Awajún y Shawi siguen pendientes de grabación con hablantes.
+- Awajún, shawi y asháninka tienen traducción parcial. Las grabaciones con hablantes están pendientes.
 - Falta la prueba en un Android físico de gama baja.
 - Más detalle: [`docs/OPERACION.md`](docs/OPERACION.md) y
   [`docs/PRUEBAS.md`](docs/PRUEBAS.md).
@@ -454,9 +454,9 @@ arráncalo de nuevo y ejecuta `npm run seed`.
   un modo invitado o una sesión persistente.
 - La sesión del panel vive en memoria: un reinicio cierra las sesiones. No hay
   roles ni historial de auditoría independiente de la alerta.
-- Awajún y Shawi aparecen como **Pendiente**: no se inventan traducciones ni
-  voces sintéticas. Los textos y audios deben ser validados/grabados por
-  hablantes de las comunidades.
+- En Ajustes se puede cambiar entre español, awajún, shawi y asháninka. Las
+  traducciones disponibles se incluyen en la PWA y las claves pendientes se
+  muestran en español. Fuentes y cobertura en [Idiomas de la aplicación](docs/IDIOMAS.md).
 - No se ha probado en Android de gama baja ni con la app cerrada durante horas;
   el sistema puede limitar la sincronización en segundo plano. El protocolo de
   prueba está en [`docs/PRUEBAS.md`](docs/PRUEBAS.md).

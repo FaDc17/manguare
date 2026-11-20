@@ -1,3 +1,7 @@
+// Organiza las pantallas y vincula el selector de idioma con los avisos y diálogos de la app.
+
+import { message } from './i18n/catalog';
+import { useTranslation } from './i18n/LanguageContext';
 import { lazy, Suspense, useState } from 'react';
 import { AppProvider, useApp } from './app/AppContext';
 import { SessionProvider, useSession } from './app/SessionContext';
@@ -8,6 +12,7 @@ import { Sheet } from './components/Sheet';
 import { Toast } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { clearSession, loadSession, saveSession, type Session } from './lib/session';
+import { SOS_DEFAULT_NOTE } from './lib/emergency';
 import type { AlertLocation, BiodiversityCategory } from './lib/types';
 import { AlertDetailScreen } from './screens/AlertDetailScreen';
 import { BiodiversityReportScreen } from './screens/BiodiversityReportScreen';
@@ -37,6 +42,7 @@ type Screen =
   | { name: 'alert'; id: string };
 
 function AppShell() {
+  const { t } = useTranslation();
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [languageOpen, setLanguageOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -107,7 +113,7 @@ function AppShell() {
           ) : null}
 
           {screen.name === 'map' ? (
-            <Suspense fallback={<div className="inline-loading">Cargando mapa…</div>}>
+            <Suspense fallback={<div className="inline-loading">{t('map.cargandoMapa')}</div>}>
               <MapScreen onSOS={() => setSosConfirmOpen(true)} />
             </Suspense>
           ) : null}
@@ -155,11 +161,11 @@ function AppShell() {
 
         <LanguageSheet open={languageOpen} onClose={() => setLanguageOpen(false)} />
         <HelpSheet open={helpOpen} onClose={() => setHelpOpen(false)} />
-        <Toast />
+        <Toast behindSheet={languageOpen || helpOpen || sosConfirmOpen} />
 
         <Sheet
           open={sosConfirmOpen}
-          title="¿Desea enviar una alerta de emergencia?"
+          title={t('sos.deseaEnviarUnaAlertaDeEmergencia')}
           onClose={() => {
             if (!sosSending) setSosConfirmOpen(false);
           }}
@@ -172,7 +178,7 @@ function AppShell() {
                 disabled={sosSending}
                 onClick={() => setSosConfirmOpen(false)}
               >
-                No
+                {t('common.no')}
               </button>
               <button
                 type="button"
@@ -181,14 +187,13 @@ function AppShell() {
                 disabled={sosSending}
                 onClick={() => void sendSosAlert()}
               >
-                {sosSending ? 'Enviando…' : 'Sí, enviar'}
+                {sosSending ? t('sos.enviando') : t('sos.siEnviar')}
               </button>
             </div>
           }
         >
           <p className="sheet-intro">
-            Enviaremos tu nombre, la hora y, si el GPS está disponible, tu ubicación. No tendrás
-            que llenar ningún formulario para pedir ayuda.
+            {t('sos.enviaremosTuNombreLaHoraY')}
           </p>
         </Sheet>
       </div>
@@ -206,7 +211,7 @@ function AppShell() {
     if (recentSos) {
       setSosConfirmOpen(false);
       setScreen({ name: 'alert', id: recentSos.id });
-      showToast('Ya hay una alerta SOS reciente. No se creó otra.', 'warn');
+      showToast(message('sos.yaHayUnaAlertaSosReciente'), 'warn');
       return;
     }
     setSosSending(true);
@@ -215,7 +220,7 @@ function AppShell() {
       const alert = await createAlert({
         type: 'otro',
         isSos: true,
-        note: 'Alerta SOS',
+        note: SOS_DEFAULT_NOTE,
         community: settings.community,
         deviceName: settings.deviceName,
         reportedBy: session.name,
@@ -226,13 +231,13 @@ function AppShell() {
       setSosConfirmOpen(false);
       setScreen({ name: 'alert', id: alert.id });
       if (!location) {
-        showToast('No se obtuvo el GPS. La alerta se guardó sin ubicación.', 'warn');
+        showToast(t('sos.noSeObtuvoElGpsLa'), 'warn');
       } else if (!isEffectivelyOnline()) {
-        showToast('Alerta pendiente. Se enviará al recuperar conexión.', 'warn');
+        showToast(t('sos.alertaPendienteSeEnviaraAlRecuperar'), 'warn');
       }
     } catch (error) {
       showToast(
-        error instanceof Error ? error.message : 'No se pudo guardar la alerta SOS.',
+        error instanceof Error ? error.message : t('sos.noSePudoGuardarLaAlerta'),
         'error',
       );
     } finally {

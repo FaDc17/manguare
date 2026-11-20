@@ -1,0 +1,128 @@
+<!doctype html>
+<!-- Compara el original y las propuestas por lote a distintos anchos. -->
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Revisión de traducciones</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f5f1e7; color: #17251e; font: 1rem/1.5 system-ui, sans-serif; }
+    main { max-width: 56rem; margin: auto; padding: 1rem; }
+    h1 { margin-block: .25rem 1rem; }
+    form { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; }
+    label { display: grid; gap: .25rem; min-width: 0; max-width: 100%; }
+    select, input { max-width: 100%; font: inherit; color: inherit; }
+    input[type="file"] { display: block; width: 100%; min-width: 0; }
+    select { padding: .35rem; }
+    #results { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; max-width: 100%; }
+    article { max-width: 100%; padding: .75rem; border: 1px solid #d9d0bd; border-radius: .6rem; background: #fffdf8; }
+    article > * { margin-block: 0 .5rem; }
+    h2 { overflow-wrap: anywhere; font-size: .85rem; color: #46534b; }
+    .text { white-space: pre-wrap; overflow-wrap: anywhere; }
+    .proposal { font-weight: 650; }
+    .status { font-size: .8rem; color: #46534b; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Revisión de traducciones</h1>
+    <form>
+      <label>Catálogo de preparación
+        <input id="file" type="file" accept="application/json,.json">
+      </label>
+      <label>Estado
+        <select id="filter">
+          <option value="borrador_ia">Borradores de IA</option>
+          <option value="verificada_documental">Respaldo documental</option>
+          <option value="pendiente">Pendientes</option>
+          <option value="">Todos</option>
+        </select>
+      </label>
+      <label>Lote
+        <select id="batch"><option value="">Todos</option></select>
+      </label>
+      <label>Ancho de vista
+        <select id="width">
+          <option value="320">320 px</option>
+          <option value="390">390 px</option>
+          <option value="640">640 px</option>
+        </select>
+      </label>
+    </form>
+    <p id="summary" role="status">Abre un JSON de la carpeta borradores.</p>
+    <section id="results" aria-label="Comparación de textos"></section>
+  </main>
+  <script>
+    const file = document.querySelector('#file');
+    const filter = document.querySelector('#filter');
+    const batch = document.querySelector('#batch');
+    const width = document.querySelector('#width');
+    const summary = document.querySelector('#summary');
+    const results = document.querySelector('#results');
+    const states = {
+      borrador_ia: 'Propuesta de IA para revisión',
+      verificada_documental: 'Equivalencia documentada',
+      pendiente: 'Sin propuesta',
+    };
+    const languages = new Set(['agr', 'cbt', 'cni']);
+    let entries = [];
+    let loadId = 0;
+
+    function element(tag, text, className) {
+      const node = document.createElement(tag);
+      node.textContent = text;
+      if (className) node.className = className;
+      return node;
+    }
+
+    function render() {
+      results.style.width = width.value + 'px';
+      const shown = entries.filter(([, entry]) =>
+        (!filter.value || entry.estado === filter.value) &&
+        (!batch.value || entry.lote === Number(batch.value)),
+      );
+      summary.textContent = shown.length + ' de ' + entries.length + ' textos';
+      results.replaceChildren(...shown.map(([key, entry]) => {
+        const article = document.createElement('article');
+        const proposal = element('p', entry.propuesta ?? 'Pendiente de traducción', 'text proposal');
+        proposal.lang = entry.propuesta === null ? 'es' : entry.idioma;
+        article.append(
+          element('h2', key),
+          element('p', entry.original, 'text'),
+          proposal,
+          element('p', states[entry.estado] + ' · Lote ' + entry.lote, 'status'),
+          element('p', entry.observaciones, 'status'),
+        );
+        return article;
+      }));
+    }
+
+    file.addEventListener('change', async () => {
+      const current = ++loadId;
+      const chosen = file.files[0];
+      if (!chosen) return;
+      try {
+        const loaded = Object.entries(JSON.parse(await chosen.text()));
+        if (current !== loadId) return;
+        if (!loaded.length || !loaded.every(([, entry]) =>
+          entry && languages.has(entry.idioma) && Object.hasOwn(states, entry.estado) &&
+          typeof entry.original === 'string' && Number.isInteger(entry.lote) &&
+          (entry.propuesta === null || typeof entry.propuesta === 'string')
+        )) throw new Error('Catálogo incorrecto');
+        entries = loaded;
+        const batches = [...new Set(entries.map(([, entry]) => entry.lote))].sort((a, b) => a - b);
+        batch.replaceChildren(new Option('Todos', ''), ...batches.map((number) => new Option(number, number)));
+        render();
+      } catch {
+        if (current !== loadId) return;
+        entries = [];
+        results.replaceChildren();
+        summary.textContent = 'Selecciona un archivo válido de la carpeta borradores.';
+      }
+    });
+
+    for (const control of [filter, batch, width]) control.addEventListener('change', render);
+  </script>
+</body>
+</html>
