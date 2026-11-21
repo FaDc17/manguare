@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from '../app/SessionContext';
+// Traduce los rótulos, categorías y filtros de Comunidad. Las publicaciones conservan su contenido original.
+
+import { message } from '../i18n/catalog';
+import { biodiversityLabels, communityLabel } from '../i18n/labels';
+import { useTranslation } from '../i18n/LanguageContext';
 import {
   ChevronRight,
   Leaf,
@@ -29,21 +34,21 @@ import type { BiodiversityCategory } from '../lib/types';
 type View = 'home' | 'all' | 'detail';
 
 function ListingPhoto({ listing, large = false }: { listing: CommunityListing; large?: boolean }) {
-  const category = COMMUNITY_CATEGORIES.find((item) => item.id === listing.category);
-  const Icon = category?.icon ?? Store;
+  const { t } = useTranslation();
+  const Icon = COMMUNITY_CATEGORIES.find((item) => item.id === listing.category)?.icon ?? Store;
   return listing.photo ? (
     <img
       className={`listing-photo ${large ? 'is-large' : ''}`}
       src={listing.photo}
-      alt={`Foto de ${listing.title}`}
+      alt={t('community.fotoDe', { title: listing.title })}
     />
   ) : (
     <span
       className={`listing-photo listing-photo-placeholder ${large ? 'is-large' : ''}`}
-      aria-label={`Imagen de demostración para ${listing.title}`}
+      aria-label={t('community.imagenDeDemostracionPara', { title: listing.title })}
     >
       <Icon size={large ? 42 : 27} aria-hidden="true" />
-      {large ? <small>{category?.label ?? 'Comunidad'}</small> : null}
+      {large ? <small>{t(communityLabel(listing.category))}</small> : null}
     </span>
   );
 }
@@ -55,7 +60,7 @@ function ListingCard({
   listing: CommunityListing;
   onOpen: () => void;
 }) {
-  const category = COMMUNITY_CATEGORIES.find((item) => item.id === listing.category);
+  const { t } = useTranslation();
   return (
     <button
       type="button"
@@ -66,7 +71,7 @@ function ListingCard({
       <ListingPhoto listing={listing} />
       <span className="community-card-content">
         <span className="community-card-top">
-          <span className="community-card-tag">{category?.label ?? 'Comunidad'}</span>
+          <span className="community-card-tag">{t(communityLabel(listing.category))}</span>
           <span className="community-rating">
             <Star size={13} aria-hidden="true" /> {listing.rating.toFixed(1)}
           </span>
@@ -75,7 +80,7 @@ function ListingCard({
         <span className="community-card-description">{listing.description}</span>
         <span className="community-card-foot">
           <span><MapPin size={14} aria-hidden="true" /> {listing.location}</span>
-          <span className="text-btn">Ver más <ChevronRight size={14} aria-hidden="true" /></span>
+          <span className="text-btn">{t('community.verMas')}{' '}<ChevronRight size={14} aria-hidden="true" /></span>
         </span>
       </span>
     </button>
@@ -83,7 +88,7 @@ function ListingCard({
 }
 
 function ListingDetail({ listing, onBack }: { listing: CommunityListing; onBack: () => void }) {
-  const category = COMMUNITY_CATEGORIES.find((item) => item.id === listing.category);
+  const { t } = useTranslation();
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState('');
   const [reviewPosted, setReviewPosted] = useState(false);
@@ -91,31 +96,31 @@ function ListingDetail({ listing, onBack }: { listing: CommunityListing; onBack:
 
   return (
     <div className="screen listing-detail-screen">
-      <SubHeader title="Detalle del servicio" onBack={onBack} />
+      <SubHeader title={t('community.detalleDelServicio')} onBack={onBack} />
       <div className="listing-detail-body">
         <ListingPhoto listing={listing} large />
         <div className="listing-detail-title-row">
           <div>
-            <p className="community-card-tag">{category?.label ?? 'Comunidad'}</p>
+            <p className="community-card-tag">{t(communityLabel(listing.category))}</p>
             <h1>{listing.title}</h1>
           </div>
           <span className="listing-detail-rating"><Star size={14} /> {listing.rating.toFixed(1)}</span>
         </div>
-        <p className="listing-author">Por {listing.author}</p>
+        <p className="listing-author">{t('community.por')}{' '}{listing.author}</p>
         <p className="listing-detail-description">{listing.description}</p>
 
         <div className="listing-info-grid">
-          <div><span>Rango de precio</span><strong>{listing.priceRange}</strong></div>
-          <div><span>Ubicación</span><strong>{listing.location}</strong></div>
+          <div><span>{t('community.rangoDePrecio')}</span><strong>{listing.priceRange}</strong></div>
+          <div><span>{t('common.location')}</span><strong>{listing.location}</strong></div>
         </div>
 
         <section className="listing-approx">
-          <h2>Ubicación aproximada</h2>
+          <h2>{t('community.ubicacionAproximada')}</h2>
           <div>
             <MapPin size={19} aria-hidden="true" />
             <span>{listing.community} · {listing.district}, {listing.province}</span>
           </div>
-          <small>El mapa no muestra una ubicación exacta de personas.</small>
+          <small>{t('community.elMapaNoMuestraUnaUbicacion')}</small>
         </section>
 
         <button
@@ -123,25 +128,25 @@ function ListingDetail({ listing, onBack }: { listing: CommunityListing; onBack:
           className="btn btn-primary btn-block btn-lg"
           onClick={() => setContactNotice(true)}
         >
-          Contactar
+          {t('community.contactar')}
         </button>
         {contactNotice ? (
-          <p className="field-help">Los contactos no están habilitados en esta demostración.</p>
+          <p className="field-help">{t('community.losContactosNoEstanHabilitadosEn')}</p>
         ) : null}
 
         <section className="listing-reviews">
           <div className="section-head">
-            <h2>Reseñas</h2>
-            <strong>{listing.rating.toFixed(1)} de 5</strong>
+            <h2>{t('community.resenas')}</h2>
+            <strong>{listing.rating.toFixed(1)}{' '}{t('community.de5')}</strong>
           </div>
           <div className="review-compose">
-            <strong>Tu calificación</strong>
-            <div className="review-stars" role="group" aria-label="Elige una calificación">
+            <strong>{t('community.tuCalificacion')}</strong>
+            <div className="review-stars" role="group" aria-label={t('community.eligeUnaCalificacion')}>
               {[1, 2, 3, 4, 5].map((value) => (
                 <button
                   type="button"
                   key={value}
-                  aria-label={`${value} estrellas`}
+                  aria-label={t('community.estrellas', { value })}
                   aria-pressed={rating === value}
                   onClick={() => setRating(value)}
                 >
@@ -152,7 +157,7 @@ function ListingDetail({ listing, onBack }: { listing: CommunityListing; onBack:
             <textarea
               value={review}
               onChange={(event) => setReview(event.target.value)}
-              placeholder="Escribe tu comentario"
+              placeholder={t('community.escribeTuComentario')}
               rows={3}
               maxLength={400}
             />
@@ -166,10 +171,10 @@ function ListingDetail({ listing, onBack }: { listing: CommunityListing; onBack:
                 setRating(0);
               }}
             >
-              Publicar comentario
+              {t('community.publicarComentario')}
             </button>
             {reviewPosted ? (
-              <p className="field-help">Gracias. La reseña solo se muestra en esta demostración.</p>
+              <p className="field-help">{t('community.graciasLaResenaSoloSeMuestra')}</p>
             ) : null}
           </div>
           {listing.reviews.map((item) => (
@@ -198,6 +203,7 @@ export function CommunityScreen({
   onOpenVoice: () => void;
   onVoiceControllerReady: (controller: CommunityVoiceController | null) => void;
 }) {
+  const { t } = useTranslation();
   const { showToast } = useApp();
   const [category, setCategory] = useState<string>('todos');
   const [view, setView] = useState<View>('home');
@@ -301,16 +307,16 @@ export function CommunityScreen({
   return (
     <div className="screen community" data-testid="community-screen">
       {view === 'all' ? (
-        <SubHeader title="Todas las publicaciones" onBack={() => setView('home')} />
+        <SubHeader title={t('community.todasLasPublicaciones')} onBack={() => setView('home')} />
       ) : (
         <header className="screen-head">
           <div>
             <p className="eyebrow">
-              <span className="eyebrow-dot" /> Compra y ofrece cerca de ti
+              <span className="eyebrow-dot" />{' '}{t('community.compraYOfreceCercaDeTi')}
             </p>
-            <h1>Conecta Amazonía</h1>
+            <h1>{t('community.conectaAmazonia')}</h1>
             <p className="screen-lead">
-              Servicios, productos y centros de apoyo de la comunidad, también sin conexión.
+              {t('community.serviciosProductosYCentrosDeApoyo')}
             </p>
           </div>
         </header>
@@ -322,8 +328,8 @@ export function CommunityScreen({
             <div className="community-publish-copy">
               <span className="community-publish-icon"><Store size={22} aria-hidden="true" /></span>
               <div>
-                <strong>Publica mi servicio</strong>
-                <p>Haz visible tu emprendimiento cuando vuelva la señal.</p>
+                <strong>{t('community.publicaMiServicio')}</strong>
+                <p>{t('community.hazVisibleTuEmprendimientoCuandoVuelva')}</p>
               </div>
             </div>
             <button
@@ -332,11 +338,11 @@ export function CommunityScreen({
               data-testid="listing-open-publish"
               onClick={() => setPublishOpen(true)}
             >
-              <Plus size={17} aria-hidden="true" /> Publicar
+              <Plus size={17} aria-hidden="true" />{' '}{t('community.publicar')}
             </button>
           </section>
 
-          <div className="community-chips" role="tablist" aria-label="Categorías de la comunidad">
+          <div className="community-chips" role="tablist" aria-label={t('community.categoriasDeLaComunidad')}>
             <button
               type="button"
               role="tab"
@@ -344,7 +350,7 @@ export function CommunityScreen({
               className={`community-chip ${category === 'todos' ? 'is-active' : ''}`}
               onClick={() => setCategory('todos')}
             >
-              Todos
+              {t('community.todos')}
             </button>
             {COMMUNITY_CATEGORIES.map((item) => {
               const Icon = item.icon;
@@ -357,16 +363,16 @@ export function CommunityScreen({
                   className={`community-chip ${category === item.id ? 'is-active' : ''}`}
                   onClick={() => setCategory(item.id)}
                 >
-                  <Icon size={14} aria-hidden="true" /> {item.label}
+                  <Icon size={14} aria-hidden="true" /> {t(communityLabel(item.id))}
                 </button>
               );
             })}
           </div>
         </>
       ) : (
-        <section className="listing-filters" aria-label="Filtrar publicaciones por ubicación">
+        <section className="listing-filters" aria-label={t('community.filtrarPublicacionesPorUbicacion')}>
           <label>
-            Departamento
+            {t('community.departamento')}
             <select
               value={department}
               onChange={(event) => {
@@ -376,14 +382,14 @@ export function CommunityScreen({
                 setCommunity('');
               }}
             >
-              <option value="">Todos</option>
+              <option value="">{t('community.todos')}</option>
               {[...new Set(allListings.map((item) => item.department))].map((value) => (
                 <option key={value} value={value}>{value}</option>
               ))}
             </select>
           </label>
           <label>
-            Provincia
+            {t('community.provincia')}
             <select
               value={province}
               onChange={(event) => {
@@ -392,12 +398,12 @@ export function CommunityScreen({
                 setCommunity('');
               }}
             >
-              <option value="">Todas</option>
+              <option value="">{t('community.todas')}</option>
               {provinces.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </label>
           <label>
-            Distrito
+            {t('community.distrito')}
             <select
               value={district}
               onChange={(event) => {
@@ -405,14 +411,14 @@ export function CommunityScreen({
                 setCommunity('');
               }}
             >
-              <option value="">Todos</option>
+              <option value="">{t('community.todos')}</option>
               {districts.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </label>
           <label>
-            Comunidad
+            {t('common.community')}
             <select value={community} onChange={(event) => setCommunity(event.target.value)}>
-              <option value="">Todas</option>
+              <option value="">{t('community.todas')}</option>
               {communities.map((value) => <option key={value} value={value}>{value}</option>)}
             </select>
           </label>
@@ -421,13 +427,13 @@ export function CommunityScreen({
 
       <section className="community-section" aria-labelledby="community-listings">
         <div className="section-head">
-          <h2 id="community-listings">{view === 'all' ? 'Publicaciones' : 'Recomendado cerca de ti'}</h2>
+          <h2 id="community-listings">{view === 'all' ? t('community.publicaciones') : t('community.recomendadoCercaDeTi')}</h2>
           {view === 'home' ? (
             <button type="button" className="text-btn" onClick={() => setView('all')}>
-              Ver todo <ChevronRight size={14} aria-hidden="true" />
+              {t('community.verTodo')}{' '}<ChevronRight size={14} aria-hidden="true" />
             </button>
           ) : (
-            <span className="demo-badge">Datos de demo</span>
+            <span className="demo-badge">{t('community.datosDeDemo')}</span>
           )}
         </div>
         {listings.length > 0 ? (
@@ -439,7 +445,7 @@ export function CommunityScreen({
         ) : (
           <div className="community-empty">
             <Store size={22} aria-hidden="true" />
-            <p>No hay publicaciones para esos filtros.</p>
+            <p>{t('community.noHayPublicacionesParaEsosFiltros')}</p>
           </div>
         )}
         {view === 'home' ? (
@@ -449,7 +455,7 @@ export function CommunityScreen({
             data-testid="listings-view-all"
             onClick={() => setView('all')}
           >
-            Ver todas las publicaciones
+            {t('community.verTodasLasPublicaciones')}
           </button>
         ) : null}
       </section>
@@ -458,11 +464,11 @@ export function CommunityScreen({
         <>
           <section className="community-section" aria-labelledby="community-centers">
             <div className="section-head">
-              <h2 id="community-centers">Centros de apoyo próximos</h2>
-              <span className="demo-badge">Distancias de demo</span>
+              <h2 id="community-centers">{t('community.centrosDeApoyoProximos')}</h2>
+              <span className="demo-badge">{t('community.distanciasDeDemo')}</span>
             </div>
             <p className="community-section-lead">
-              Puntos de auxilio para llamar o acudir. No reemplazan a la radio del puesto de salud.
+              {t('community.puntosDeAuxilioParaLlamarO')}
             </p>
             <div className="center-list">
               {SUPPORT_CENTERS.map((center) => (
@@ -470,14 +476,14 @@ export function CommunityScreen({
                   <span className="center-icon"><MapPin size={19} aria-hidden="true" /></span>
                   <span className="center-copy">
                     <strong>{center.name}</strong>
-                    <span>{center.distance} · {center.note}</span>
+                    <span>{center.distance} · {t('community.supportNote')}</span>
                   </span>
                   <button
                     type="button"
                     className="text-btn"
-                    onClick={() => showToast(`${center.name}: ${center.distance}. Dato de demostración.`, 'ok')}
+                    onClick={() => showToast(t('community.datoDeDemostracion', { name: center.name, distance: center.distance }), 'ok')}
                   >
-                    Ver
+                    {t('common.view')}
                   </button>
                 </div>
               ))}
@@ -488,8 +494,8 @@ export function CommunityScreen({
             <div className="environment-head">
               <span className="environment-icon"><Leaf size={21} aria-hidden="true" /></span>
               <div>
-                <h2 id="community-environment">Alerta Amazonía</h2>
-                <p>Proteger la Amazonía es proteger la vida. Reporta lo que daña el bosque o los ríos.</p>
+                <h2 id="community-environment">{t('community.alertaAmazonia')}</h2>
+                <p>{t('community.protegerLaAmazoniaEsProtegerLa')}</p>
               </div>
             </div>
             <div className="environment-topics">
@@ -500,7 +506,7 @@ export function CommunityScreen({
                   data-testid={`environment-topic-${topic.toLocaleLowerCase('es').replace(/\s+/g, '-')}`}
                   onClick={() => onReportBiodiversity(topic)}
                 >
-                  {topic}
+                  {t(biodiversityLabels[topic])}
                 </button>
               ))}
             </div>
@@ -509,16 +515,14 @@ export function CommunityScreen({
               className="btn btn-secondary btn-block"
               onClick={() => onReportBiodiversity('Otro')}
             >
-              <TriangleAlert size={17} aria-hidden="true" /> Reportar una alerta
+              <TriangleAlert size={17} aria-hidden="true" />{' '}{t('community.reportarUnaAlerta')}
             </button>
             <p className="environment-note">
-              <ShieldCheck size={14} aria-hidden="true" /> El reporte se guarda por separado de las
-              emergencias.
+              <ShieldCheck size={14} aria-hidden="true" />{' '}{t('community.elReporteSeGuardaPorSeparado')}
             </p>
           </section>
           <p className="disclaimer">
-            Contenido de demostración tomado del prototipo de Figma. No hay pagos ni contactos reales
-            habilitados.
+            {t('community.contenidoDeDemostracionTomadoDelPrototipo')}
           </p>
         </>
       ) : null}
@@ -536,7 +540,7 @@ export function CommunityScreen({
           setUserListings(next);
           setPublishOpen(false);
           setCategory('todos');
-          showToast('Publicado. Se envía al mercado compartido cuando haya conexión.', 'ok');
+          showToast(message('listing.publicadoSeEnviaAlMercadoCompartido'), 'ok');
           return true;
         }}
       />

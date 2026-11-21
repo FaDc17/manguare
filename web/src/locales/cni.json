@@ -1,0 +1,23 @@
+{
+  "biodiversity.title": "Osankenaitoki",
+  "common.community": "Nampitsi",
+  "common.help": "Amitakotantsi",
+  "common.no": "Te",
+  "common.photo": "Shiyakaantsi",
+  "common.view": "Amenaantsi",
+  "common.yes": "Je",
+  "community.category.vestimenta": "Maatsaantsi",
+  "emergency.enfermedad": "Mantsiyarentsi",
+  "home.emergencia": "Shintsipaite yabintete",
+  "home.greeting": "Kametsa pimpoke, {name}",
+  "location.community": "Nampitsi",
+  "newAlert.emergencia": "Shintsipaite yabintete",
+  "registration.celular": "Kaimamentotsi",
+  "registration.escribeTuNombre": "Pisankenatero pibajiro.",
+  "registration.firstName": "Bajirontsi",
+  "registration.welcome": "¡Kametsa pimpoke, {name}!",
+  "settings.language": "Ñanentsi",
+  "time.tomorrow": "osaitekera",
+  "time.yesterday": "chapinki",
+  "topBar.emergencias": "Shintsipaite yabintete"
+}

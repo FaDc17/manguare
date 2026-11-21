@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Mic, PhoneOff, Sparkles, X } from 'lucide-react';
+import { useTranslation } from '../i18n/LanguageContext';
 import { VOICE_FUNCTION_DECLARATIONS, type VoiceToolHandler } from '../lib/voice-tools';
 
 type VoiceStatus = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error';
@@ -17,6 +18,7 @@ export function VoiceAssistant({
   onClose: () => void;
   onToolCall: VoiceToolHandler;
 }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<VoiceStatus>('idle');
   const [compact, setCompact] = useState(false);
   const [error, setError] = useState('');
@@ -157,7 +159,7 @@ export function VoiceAssistant({
     for (let index = 0; index < binary.length; index++) {
       bytes[index] = binary.charCodeAt(index);
     }
-    if (bytes.byteLength % 2 !== 0) throw new Error('Gemini devolvió audio PCM incompleto.');
+    if (bytes.byteLength % 2 !== 0) throw new Error(t('voice.incompleteAudio'));
     const pcm = new Int16Array(bytes.buffer);
     const audioBuffer = context.createBuffer(1, pcm.length, rate);
     const channel = audioBuffer.getChannelData(0);
@@ -189,10 +191,10 @@ export function VoiceAssistant({
       sessionAbortRef.current = currentSessionAbort;
 
       if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Este navegador no permite acceso al micrófono.');
+        throw new Error(t('voice.micUnavailable'));
       }
       if (typeof AudioContext === 'undefined') {
-        throw new Error('Este navegador no ofrece reproducción de audio compatible.');
+        throw new Error(t('voice.audioUnavailable'));
       }
       const context = new AudioContext();
       contextRef.current = context;
@@ -216,14 +218,14 @@ export function VoiceAssistant({
       const tokenResult = (await response.json().catch(() => ({}))) as GeminiLiveToken;
       if (!response.ok) {
         const messages: Record<string, string> = {
-          gemini_not_configured: 'Falta configurar GEMINI_API_KEY en el servidor.',
-          gemini_api_key_format_invalid: 'GEMINI_API_KEY no tiene el formato de una API key válida.',
-          gemini_token_unavailable: 'Gemini no pudo emitir el token de Live. Revisa la clave y la configuración del proyecto.',
+          gemini_not_configured: t('voice.geminiNotConfigured'),
+          gemini_api_key_format_invalid: t('voice.geminiKeyInvalid'),
+          gemini_token_unavailable: t('voice.geminiTokenUnavailable'),
         };
-        throw new Error(messages[tokenResult.error ?? ''] ?? 'No se pudo obtener el acceso a Gemini.');
+        throw new Error(messages[tokenResult.error ?? ''] ?? t('voice.geminiAccessUnavailable'));
       }
       if (!tokenResult.token || !tokenResult.model) {
-        throw new Error('El servidor no devolvió un token válido.');
+        throw new Error(t('voice.invalidToken'));
       }
       if (currentSessionAbort.signal.aborted) return;
 
@@ -354,7 +356,7 @@ export function VoiceAssistant({
           if (serverContent?.turnComplete) setStatus('listening');
         } catch (messageError) {
           if (activeRef.current) {
-            setError(messageError instanceof Error ? messageError.message : 'Error procesando respuesta de Gemini.');
+            setError(messageError instanceof Error ? messageError.message : t('voice.responseProcessingError'));
             setStatus('error');
             cleanup();
           }
@@ -363,13 +365,13 @@ export function VoiceAssistant({
 
       socket.onerror = () => {
         if (!activeRef.current) return;
-        setError('No se pudo establecer la conexión con Gemini Live.');
+        setError(t('voice.connectionFailed'));
         setStatus('error');
         cleanup();
       };
       socket.onclose = (closeEvent) => {
         if (!activeRef.current) return;
-        setError(`La conexión con Gemini Live se cerró (${closeEvent.code}).`);
+        setError(t('voice.connectionClosed', { code: closeEvent.code }));
         setStatus('error');
         cleanup();
       };
@@ -377,7 +379,7 @@ export function VoiceAssistant({
       if (sessionAbort?.signal.aborted) return;
       cleanup();
       setStatus('error');
-      setError(startError instanceof Error ? startError.message : 'No se pudo iniciar el audio.');
+      setError(startError instanceof Error ? startError.message : t('voice.startFailed'));
     }
   };
 
@@ -387,17 +389,17 @@ export function VoiceAssistant({
   };
 
   const statusText = {
-    idle: 'Tu asistente de voz',
-    connecting: 'Conectando con Gemini Live...',
-    listening: 'Te estoy escuchando',
-    speaking: 'Manguaré está hablando',
-    error: 'La conexión se interrumpió',
+    idle: t('voice.idle'),
+    connecting: t('voice.connecting'),
+    listening: t('voice.listening'),
+    speaking: t('voice.speaking'),
+    error: t('voice.interrupted'),
   }[status];
 
   return (
     <section
       className={`voice-assistant${compact ? ' is-compact' : ''}`}
-      aria-label="Asistente de voz Manguaré"
+      aria-label={t('voice.assistantLabel')}
     >
       {compact ? (
         <div className="voice-active-controls" data-testid="voice-active-controls">
@@ -411,14 +413,14 @@ export function VoiceAssistant({
           </div>
           {status === 'error' && (
             <button type="button" className="voice-retry" onClick={() => void start()}>
-              Reintentar
+              {t('voice.retry')}
             </button>
           )}
           <button
             type="button"
             className="voice-close"
             onClick={close}
-            aria-label="Cancelar llamada"
+            aria-label={t('voice.cancelCall')}
           >
             <PhoneOff size={20} />
           </button>
@@ -429,7 +431,7 @@ export function VoiceAssistant({
             type="button"
             className="voice-close"
             onClick={close}
-            aria-label="Cerrar asistente de voz"
+            aria-label={t('voice.closeAssistant')}
           >
             <X size={22} />
           </button>
@@ -446,23 +448,23 @@ export function VoiceAssistant({
             {status === 'connecting' && statusText}
             {status === 'listening' && statusText}
             {status === 'speaking' && statusText}
-            {status === 'error' && 'No se pudo iniciar la conversación'}
+            {status === 'error' && t('voice.startFailed')}
           </p>
           {error && <p className="voice-error" role="alert">{error}</p>}
 
           {status === 'idle' || status === 'error' ? (
             <button type="button" className="voice-start" onClick={() => void start()}>
               <Mic size={20} />
-              {status === 'error' ? 'Intentar nuevamente' : 'Iniciar conversación'}
+              {status === 'error' ? t('voice.retry') : t('voice.start')}
             </button>
           ) : (
             <button type="button" className="voice-start voice-stop" onClick={close}>
               <PhoneOff size={20} />
-              Finalizar conversación
+              {t('voice.endCall')}
             </button>
           )}
 
-          <p className="voice-hint">Habla con naturalidad. Puedes interrumpir cuando quieras</p>
+          <p className="voice-hint">{t('voice.hint')}</p>
         </>
       )}
     </section>

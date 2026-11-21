@@ -1,3 +1,6 @@
+// Presenta las preferencias, el idioma seleccionado y la guía de audio.
+
+import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { useState } from 'react';
 import {
   ChevronRight,
@@ -22,17 +25,24 @@ import {
 import { useApp } from '../app/AppContext';
 import { useSession } from '../app/SessionContext';
 import { AudioButton } from '../components/AudioButton';
+import { MIXED_AUDIO_NOTE } from '../lib/audio';
 import { ConnectionPill } from '../components/ConnectionPill';
 import { Sheet } from '../components/Sheet';
 import { formatRelative } from '../lib/format';
-import { formatPhone, roleLabel } from '../lib/session';
-import { LANGUAGES } from '../lib/settings';
+import { formatPhone } from '../lib/session';
+import { isLanguageComplete, LANGUAGES, type Translate } from '../i18n/catalog';
 
 const SETTINGS_AUDIO =
   'Ajustes de Manguaré. Aquí puedes elegir el idioma, escribir el número de respaldo para mensajes, ' +
   'cambiar el nombre de tu comunidad y simular que no hay conexión para la demostración.';
 
+// Compone «1 alerta» o «2 reportes» con las claves del idioma activo.
+function countText(t: Translate, kind: 'alert' | 'report', count: number): string {
+  return t(count === 1 ? `settings.${kind}CountOne` : `settings.${kind}CountOther`, { count });
+}
+
 export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void }) {
+  const { t, language: activeLanguage, visualSimulation } = useTranslation();
   const {
     alerts,
     biodiversityReports,
@@ -52,7 +62,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
   const awaiting = alerts.filter(
     (alert) => alert.state === 'sent' && !alert.acknowledgedAt,
   ).length;
-  const language = LANGUAGES.find((item) => item.id === settings.language);
+  const language = LANGUAGES.find((item) => item.id === activeLanguage);
 
   const handleClear = async () => {
     setClearing(true);
@@ -68,14 +78,14 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
     <div className="screen settings">
       <header className="screen-head">
         <div>
-          <p className="eyebrow">Preferencias del teléfono</p>
-          <h1>Ajustes</h1>
-          <p className="screen-lead">Cuenta, idioma y respaldo sin conexión.</p>
+          <p className="eyebrow">{t('settings.preferenciasDelTelefono')}</p>
+          <h1>{t('navigation.settings')}</h1>
+          <p className="screen-lead">{t('settings.cuentaIdiomaYRespaldoSinConexion')}</p>
         </div>
       </header>
 
       <section className="settings-group" aria-labelledby="settings-account">
-        <h2 id="settings-account">Mi cuenta</h2>
+        <h2 id="settings-account">{t('settings.miCuenta')}</h2>
         <div className="settings-card">
           <div className="setting-row">
             <span className="setting-icon">
@@ -83,10 +93,10 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
             </span>
             <span className="setting-main">
               <span className="setting-label">{session.name}</span>
-              <span className="setting-sub">{roleLabel(session.role)}</span>
+              <span className="setting-sub">{t(`role.${session.role}`)}</span>
             </span>
             <span className={`account-role account-role--${session.role}`}>
-              {session.role === 'admin' ? 'Admin' : 'Usuario'}
+              {session.role === 'admin' ? t('settings.admin') : t('settings.usuario')}
             </span>
           </div>
 
@@ -95,8 +105,8 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <Smartphone size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Número de acceso</span>
-              <span className="setting-sub">Acceso de demostración</span>
+              <span className="setting-label">{t('settings.numeroDeAcceso')}</span>
+              <span className="setting-sub">{t('settings.accesoDeDemostracion')}</span>
             </span>
             <span className="account-phone">{formatPhone(session.phone)}</span>
           </div>
@@ -112,8 +122,8 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
                 <ShieldCheck size={20} aria-hidden="true" />
               </span>
               <span className="setting-main">
-                <span className="setting-label">Panel de la red de salud</span>
-                <span className="setting-sub">Alertas recibidas y confirmaciones</span>
+                <span className="setting-label">{t('settings.panelDeLaRedDeSalud')}</span>
+                <span className="setting-sub">{t('settings.alertasRecibidasYConfirmaciones')}</span>
               </span>
               <ChevronRight size={18} aria-hidden="true" />
             </a>
@@ -129,30 +139,28 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <LogOut size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Cerrar sesión</span>
-              <span className="setting-sub">Volver a la pantalla de acceso</span>
+              <span className="setting-label">{t('settings.cerrarSesion')}</span>
+              <span className="setting-sub">{t('settings.volverALaPantallaDeAcceso')}</span>
             </span>
             <ChevronRight size={18} aria-hidden="true" />
           </button>
         </div>
         <p className="settings-note">
-          <Info size={15} aria-hidden="true" /> Este acceso es de demostración. El panel de la red
-          tiene su propia contraseña en el servidor.
+          <Info size={15} aria-hidden="true" />{' '}{t('settings.esteAccesoEsDeDemostracionEl')}
         </p>
       </section>
 
       <section className="settings-group" aria-labelledby="settings-prefs">
-        <h2 id="settings-prefs">Preferencias</h2>
+        <h2 id="settings-prefs">{t('settings.preferencias')}</h2>
         <div className="settings-card">
-          <button type="button" className="setting-row setting-row--button" onClick={onOpenLanguage}>
+          <button type="button" className="setting-row setting-row--button" data-testid="settings-language" onClick={onOpenLanguage}>
             <span className="setting-icon">
               <Languages size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Idioma</span>
+              <span className="setting-label"><LocalizedText id="settings.language" /></span>
               <span className="setting-sub">
-                {language?.label ?? 'Español'}
-                {language?.status === 'pendiente' ? ' · traducción pendiente' : ' · disponible'}
+                {language?.label} · {t(isLanguageComplete(activeLanguage) ? 'language.complete' : 'language.partial')}
               </span>
             </span>
             <ChevronRight size={18} aria-hidden="true" />
@@ -163,14 +171,14 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <Globe2 size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Comunidad</span>
-              <span className="setting-sub">Se propone al crear una alerta</span>
+              <span className="setting-label"><LocalizedText id="location.community" /></span>
+              <span className="setting-sub">{t('settings.seProponeAlCrearUnaAlerta')}</span>
             </span>
             <input
               type="text"
               className="setting-input"
               value={settings.community}
-              placeholder="Ej. Nueva Esperanza"
+              placeholder={t('settings.ejNuevaEsperanza')}
               maxLength={80}
               onChange={(event) => updateSettings({ community: event.target.value })}
             />
@@ -181,8 +189,8 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <Smartphone size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Nombre del equipo</span>
-              <span className="setting-sub">Ayuda a identificar quién envió la alerta</span>
+              <span className="setting-label">{t('settings.nombreDelEquipo')}</span>
+              <span className="setting-sub">{t('settings.ayudaAIdentificarQuienEnvioLa')}</span>
             </span>
             <input
               type="text"
@@ -196,7 +204,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       </section>
 
       <section className="settings-group" aria-labelledby="settings-sms">
-        <h2 id="settings-sms">Contacto y respaldo</h2>
+        <h2 id="settings-sms">{t('settings.contactoYRespaldo')}</h2>
         <div className="settings-card">
           <label className="setting-row setting-row--stack">
             <span className="setting-stack-head">
@@ -204,15 +212,15 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
                 <MapPin size={20} aria-hidden="true" />
               </span>
               <span className="setting-main">
-                <span className="setting-label">Puesto de salud</span>
-                <span className="setting-sub">Se muestra en Números de ayuda, sin conexión</span>
+                <span className="setting-label">{t('settings.puestoDeSalud')}</span>
+                <span className="setting-sub">{t('settings.seMuestraEnNumerosDeAyuda')}</span>
               </span>
             </span>
             <input
               type="text"
               className="setting-input setting-input--block"
               value={settings.healthPost}
-              placeholder="Ej. Puesto de salud Nueva Esperanza"
+              placeholder={t('settings.ejPuestoDeSaludNuevaEsperanza')}
               maxLength={80}
               onChange={(event) => updateSettings({ healthPost: event.target.value })}
             />
@@ -223,8 +231,8 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <Phone size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Teléfono del puesto</span>
-              <span className="setting-sub">Opcional; se puede llamar si hay señal</span>
+              <span className="setting-label">{t('settings.telefonoDelPuesto')}</span>
+              <span className="setting-sub">{t('settings.opcionalSePuedeLlamarSiHay')}</span>
             </span>
             <input
               type="tel"
@@ -240,8 +248,8 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <MessageSquareText size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Número del promotor o posta</span>
-              <span className="setting-sub">Número de prueba para la demostración</span>
+              <span className="setting-label">{t('settings.numeroDelPromotorOPosta')}</span>
+              <span className="setting-sub">{t('settings.numeroDePruebaParaLaDemostracion')}</span>
             </span>
             <input
               type="tel"
@@ -253,22 +261,21 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
           </label>
         </div>
         <p className="settings-note">
-          <Info size={15} aria-hidden="true" /> En producción, este número debe acordarse con la red
-          de salud. El SMS no confirma la entrega.
+          <Info size={15} aria-hidden="true" />{' '}{t('settings.enProduccionEsteNumeroDebeAcordarse')}
         </p>
       </section>
 
       <section className="settings-group" aria-labelledby="settings-demo">
-        <h2 id="settings-demo">Conexión y demostración</h2>
+        <h2 id="settings-demo">{t('settings.conexionYDemostracion')}</h2>
         <div className="settings-card">
           <div className="setting-row">
             <span className="setting-icon">
               {realOnline ? <Wifi size={20} aria-hidden="true" /> : <WifiOff size={20} aria-hidden="true" />}
             </span>
             <span className="setting-main">
-              <span className="setting-label">Señal del dispositivo</span>
+              <span className="setting-label">{t('settings.senalDelDispositivo')}</span>
               <span className="setting-sub">
-                {realOnline ? 'El navegador reporta conexión' : 'El navegador reporta sin conexión'}
+                {realOnline ? t('settings.elNavegadorReportaConexion') : t('settings.elNavegadorReportaSinConexion')}
               </span>
             </span>
             <ConnectionPill online={realOnline} />
@@ -279,23 +286,23 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <TriangleAlert size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Simular sin conexión</span>
+              <span className="setting-label">{t('settings.simularSinConexion')}</span>
               <span className="setting-sub">
-                Para la demo: la app se comporta como si no hubiera señal. No borra alertas.
+                {t('settings.paraLaDemoLaAppSe')}
               </span>
             </span>
             <button
               type="button"
               role="switch"
               aria-checked={settings.simulateOffline}
-              aria-label="Simular sin conexión"
+              aria-label={t('settings.simularSinConexion')}
               className={`switch ${settings.simulateOffline ? 'is-on' : ''}`}
               onClick={() => {
                 updateSettings({ simulateOffline: !settings.simulateOffline });
                 showToast(
                   settings.simulateOffline
-                    ? 'Conexión simulada desactivada. Se intentará sincronizar.'
-                    : 'Modo demo: la app ahora se comporta sin conexión.',
+                    ? t('settings.conexionSimuladaDesactivadaSeIntentaraSincronizar')
+                    : t('settings.modoDemoLaAppAhoraSe'),
                   settings.simulateOffline ? 'ok' : 'warn',
                 );
               }}
@@ -309,15 +316,15 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <RefreshCw size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Estado de envío</span>
+              <span className="setting-label">{t('settings.estadoDeEnvio')}</span>
               <span className="setting-sub">
                 {online
                   ? pending > 0
-                    ? `${pending} alerta${pending === 1 ? '' : 's'} en cola. Se reintenta con espera progresiva.`
+                    ? t(pending === 1 ? 'settings.queuedOne' : 'settings.queuedOther', { count: pending })
                     : awaiting > 0
-                      ? `${awaiting} alerta${awaiting === 1 ? '' : 's'} esperando confirmación de la red.`
-                      : 'Todo al día.'
-                  : 'Sin conexión: las alertas esperan en el teléfono.'}
+                      ? t(awaiting === 1 ? 'settings.awaitingOne' : 'settings.awaitingOther', { count: awaiting })
+                      : t('settings.todoAlDia')
+                  : t('settings.sinConexionLasAlertasEsperanEn')}
               </span>
             </span>
             <button
@@ -327,14 +334,14 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               disabled={syncing}
             >
               <RefreshCw size={14} className={syncing ? 'spin' : ''} aria-hidden="true" />
-              {syncing ? 'Enviando' : 'Sincronizar'}
+              {syncing ? t('settings.enviando') : t('settings.sincronizar')}
             </button>
           </div>
         </div>
       </section>
 
       <section className="settings-group" aria-labelledby="settings-audio">
-        <h2 id="settings-audio">Audio y lengua</h2>
+        <h2 id="settings-audio">{t('settings.audioYLengua')}</h2>
         <div className="settings-card">
           <div className="setting-row setting-row--stack">
             <div className="setting-stack-head">
@@ -342,11 +349,11 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
                 <Volume2 size={20} aria-hidden="true" />
               </span>
               <span className="setting-main">
-                <span className="setting-label">Guía de audio</span>
-                <span className="setting-sub">Audio de demostración en castellano</span>
+                <span className="setting-label">{t('settings.guiaDeAudio')}</span>
+                <span className="setting-sub">{visualSimulation ? MIXED_AUDIO_NOTE : t('settings.audioDeDemostracionEnCastellano')}</span>
               </span>
             </div>
-            <AudioButton text={SETTINGS_AUDIO} label="Escuchar guía" />
+            <AudioButton text={SETTINGS_AUDIO} label={t('settings.escucharGuia')} />
           </div>
           <div className="setting-row setting-row--stack">
             <div className="setting-stack-head">
@@ -354,10 +361,9 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
                 <Languages size={20} aria-hidden="true" />
               </span>
               <span className="setting-main">
-                <span className="setting-label">Awajún y shawi</span>
+                <span className="setting-label">{t('settings.indigenousLanguages')}</span>
                 <span className="setting-sub">
-                  Traducción y grabación pendientes con hablantes de la comunidad. No usamos voces
-                  sintéticas para estas lenguas.
+                  {t('settings.indigenousAudioNote')}
                 </span>
               </span>
             </div>
@@ -366,7 +372,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       </section>
 
       <section className="settings-group" aria-labelledby="settings-data">
-        <h2 id="settings-data">Datos en este teléfono</h2>
+        <h2 id="settings-data">{t('settings.datosEnEsteTelefono')}</h2>
         <div className="settings-card">
           <button
             type="button"
@@ -377,11 +383,11 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <Trash2 size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Borrar datos locales</span>
+              <span className="setting-label">{t('settings.borrarDatosLocales')}</span>
               <span className="setting-sub">
                 {alerts.length + biodiversityReports.length === 0
-                  ? 'No hay alertas ni reportes guardados'
-                  : `${alerts.length} alerta${alerts.length === 1 ? '' : 's'} y ${biodiversityReports.length} reporte${biodiversityReports.length === 1 ? '' : 's'} en este teléfono`}
+                  ? t('settings.noHayAlertasNiReportesGuardados')
+                  : t('settings.localSummary', { alerts: countText(t, 'alert', alerts.length), reports: countText(t, 'report', biodiversityReports.length) })}
               </span>
             </span>
             <ChevronRight size={18} aria-hidden="true" />
@@ -391,10 +397,9 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <Database size={20} aria-hidden="true" />
             </span>
             <span className="setting-main">
-              <span className="setting-label">Cómo se guardan</span>
+              <span className="setting-label">{t('settings.comoSeGuardan')}</span>
               <span className="setting-sub">
-                Las alertas se guardan en el almacenamiento local del navegador (IndexedDB). No se
-                borran al cerrar la app.
+                {t('settings.lasAlertasSeGuardanEnEl')}
               </span>
             </span>
           </div>
@@ -402,37 +407,34 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       </section>
 
       <section className="settings-group" aria-labelledby="settings-about">
-        <h2 id="settings-about">Acerca de Manguaré</h2>
+        <h2 id="settings-about">{t('settings.acercaDeManguare')}</h2>
         <div className="about-card">
           <div className="about-logo">
             <ShieldCheck size={24} aria-hidden="true" />
           </div>
           <div>
-            <strong>Manguaré MVP · versión 0.1.0</strong>
+            <strong>{t('settings.manguareMvpVersion010')}</strong>
             <p>
-              Prototipo para el Desafío ISC 2027, Amazonía Viva. Diseñado para conectividad
-              intermitente, no para reemplazar a los servicios de emergencia.
+              {t('settings.prototipoParaElDesafioIsc2027')}
             </p>
             <p className="about-meta">
-              Alerta guardada {alerts[0] ? formatRelative(alerts[0].createdAt) : 'sin registros'} ·
-              Datos de demostración
+              {t('settings.alertaGuardada')}{' '}{alerts[0] ? formatRelative(alerts[0].createdAt, t) : t('settings.sinRegistros')}{' '}{t('settings.datosDeDemostracion')}
             </p>
           </div>
         </div>
         <p className="settings-note settings-note--danger">
-          <TriangleAlert size={15} aria-hidden="true" /> No usar este prototipo para emergencias
-          reales. La recepción depende de un receptor definido y de un protocolo de respuesta.
+          <TriangleAlert size={15} aria-hidden="true" />{' '}{t('settings.noUsarEstePrototipoParaEmergencias')}
         </p>
       </section>
 
       <Sheet
         open={confirmClear}
-        title="Borrar datos locales"
+        title={t('settings.borrarDatosLocales')}
         onClose={() => setConfirmClear(false)}
         footer={
           <>
             <button type="button" className="btn btn-ghost" onClick={() => setConfirmClear(false)}>
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -440,20 +442,17 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               onClick={() => void handleClear()}
               disabled={clearing}
             >
-              {clearing ? 'Borrando…' : 'Borrar datos'}
+              {clearing ? t('settings.borrando') : t('settings.borrarDatos')}
             </button>
           </>
         }
       >
         <p className="sheet-intro">
-          Se borrarán {alerts.length} alerta{alerts.length === 1 ? '' : 's'} y{' '}
-          {biodiversityReports.length} reporte
-          {biodiversityReports.length === 1 ? '' : 's'} de este teléfono. Lo que ya llegó al
-          servidor y a la red de salud no se elimina allí.
+          {t('settings.clearSummary', { alerts: countText(t, 'alert', alerts.length), reports: countText(t, 'report', biodiversityReports.length) })}
         </p>
         <div className="notice-box notice-box--danger">
-          <strong>Esta acción no se puede deshacer en el teléfono</strong>
-          <p>Úsala solo para limpiar la demostración o un equipo compartido.</p>
+          <strong>{t('settings.estaAccionNoSePuedeDeshacer')}</strong>
+          <p>{t('settings.usalaSoloParaLimpiarLaDemostracion')}</p>
         </div>
       </Sheet>
     </div>

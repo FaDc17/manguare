@@ -16,6 +16,8 @@ import {
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useApp } from '../app/AppContext';
+import { InterfaceError, message, type MessageKey } from '../i18n/catalog';
+import { useTranslation } from '../i18n/LanguageContext';
 import { useSession } from '../app/SessionContext';
 import { EmptyState } from '../components/EmptyState';
 import { Sheet } from '../components/Sheet';
@@ -65,6 +67,7 @@ export function NetworkScreen({
   onOpenVoice: () => void;
   initialTab?: NetworkTab;
 }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<NetworkTab>(initialTab);
   const [state, setState] = useState<SocialState>(() => loadSocialState());
   const { showToast } = useApp();
@@ -125,7 +128,7 @@ export function NetworkScreen({
     const saved = saveSocialState(state);
     if (!saved && !warnedRef.current) {
       warnedRef.current = true;
-      showToast('Poco espacio en el teléfono: algunos cambios no se guardarán.', 'warn');
+      showToast(message('network.pocoEspacioEnElTelefono'), 'warn');
     }
   }, [state, showToast]);
 
@@ -141,21 +144,22 @@ export function NetworkScreen({
       <header className="screen-head">
         <div>
           <p className="eyebrow">
-            <span className="eyebrow-dot" /> Tu comunidad, también sin señal
+            <span className="eyebrow-dot" /> {t('network.tuComunidadTambienSinSenal')}
           </p>
-          <h1>Red Manguaré</h1>
+          <h1>{t('network.redManguare')}</h1>
           <p className="screen-lead">
-            Comparte, conecta y pregunta. {online ? (pending ? 'Enviando cambios…' : 'Muro compartido y al día.') : 'Sin conexión: se guarda aquí y se envía después.'}
+            {t('network.comparteConectaYPregunta')}{' '}
+            {online ? (pending ? t('network.enviandoCambios') : t('network.muroCompartidoYAlDia')) : t('network.sinConexionSeGuardaAqui')}
           </p>
         </div>
       </header>
 
-      <div className="net-tabs" role="tablist" aria-label="Secciones de la red">
+      <div className="net-tabs" role="tablist" aria-label={t('network.seccionesDeLaRed')}>
         {(
           [
-            ['wall', 'Muro', Users],
-            ['match', 'Match', Heart],
-            ['agent', 'Asistente', Bot],
+            ['wall', t('network.muro'), Users],
+            ['match', t('network.match'), Heart],
+            ['agent', t('network.asistente'), Bot],
           ] as const
         ).map(([id, label, Icon]) => (
           <button
@@ -209,6 +213,7 @@ function PostCard({
   onComment: (text: string) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
 
@@ -233,7 +238,7 @@ function PostCard({
           <button
             type="button"
             className="icon-btn"
-            aria-label="Eliminar mi publicación"
+            aria-label={t('network.eliminarMiPublicacion')}
             onClick={onRemove}
           >
             <Trash2 size={18} aria-hidden="true" />
@@ -243,7 +248,7 @@ function PostCard({
 
       {post.text ? <p className="net-post-text">{post.text}</p> : null}
       {post.photo ? (
-        <img className="net-post-photo" src={post.photo} alt="Foto de la publicación" loading="lazy" />
+        <img className="net-post-photo" src={post.photo} alt={t('network.fotoDeLaPublicacion')} loading="lazy" />
       ) : null}
 
       <div className="net-post-actions">
@@ -280,11 +285,11 @@ function PostCard({
               type="text"
               value={text}
               maxLength={MAX_COMMENT_CHARS}
-              placeholder="Escribe un comentario"
-              aria-label="Escribe un comentario"
+              placeholder={t('network.escribeUnComentario')}
+              aria-label={t('network.escribeUnComentario')}
               onChange={(event) => setText(event.target.value)}
             />
-            <button type="submit" className="icon-btn" aria-label="Enviar comentario">
+            <button type="submit" className="icon-btn" aria-label={t('network.enviarComentario')}>
               <Send size={18} aria-hidden="true" />
             </button>
           </form>
@@ -301,6 +306,7 @@ function WallView({
   state: SocialState;
   setState: (updater: (previous: SocialState) => SocialState) => void;
 }) {
+  const { t } = useTranslation();
   const { session } = useSession();
   const { showToast } = useApp();
   const [composeOpen, setComposeOpen] = useState(false);
@@ -321,7 +327,7 @@ function WallView({
     try {
       setPhoto(await compressImage(file, { maxSide: 900, maxChars: 160_000 }));
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'No se pudo usar la foto.', 'warn');
+      showToast(error instanceof InterfaceError ? message(error.key) : message('network.noSePudoUsarLaFoto'), 'warn');
     } finally {
       setBusy(false);
     }
@@ -332,29 +338,29 @@ function WallView({
     setState((previous) =>
       addPost(previous, {
         author: session.name,
-        community: session.community ?? 'Mi comunidad',
+        community: session.community ?? t('network.miComunidad'),
         text,
         photo,
       }),
     );
     close();
-    showToast('Publicado. Se guarda en tu teléfono.', 'ok');
+    showToast(message('network.publicadoSeGuardaEnTuTelefono'), 'ok');
   };
 
   return (
-    <section aria-label="Muro de la comunidad">
+    <section aria-label={t('network.muroDeLaComunidad')}>
       <button
         type="button"
         className="btn btn-primary btn-block net-compose-btn"
         data-testid="net-compose"
         onClick={() => setComposeOpen(true)}
       >
-        <Plus size={18} aria-hidden="true" /> Compartir con mi comunidad
+        <Plus size={18} aria-hidden="true" /> {t('network.compartirConMiComunidad')}
       </button>
 
       {state.posts.length === 0 ? (
-        <EmptyState icon={Users} title="Aún no hay publicaciones">
-          Sé la primera persona en compartir algo.
+        <EmptyState icon={Users} title={t('network.aunNoHayPublicaciones')}>
+          {t('network.seLaPrimeraPersonaEnCompartir')}
         </EmptyState>
       ) : (
         <div className="net-feed">
@@ -375,7 +381,7 @@ function WallView({
 
       <Sheet
         open={composeOpen}
-        title="Nueva publicación"
+        title={t('network.nuevaPublicacion')}
         onClose={close}
         footer={
           <button
@@ -385,20 +391,20 @@ function WallView({
             data-testid="net-publish"
             onClick={publish}
           >
-            Publicar
+            {t('community.publicar')}
           </button>
         }
       >
         <div className="field">
           <label className="field-label" htmlFor="net-text">
-            ¿Qué quieres compartir?
+            {t('network.queQuieresCompartir')}
           </label>
           <textarea
             id="net-text"
             rows={4}
             maxLength={MAX_POST_CHARS}
             value={text}
-            placeholder="Un aviso, una cosecha, una novedad…"
+            placeholder={t('network.unAvisoUnaCosechaUnaNovedad')}
             onChange={(event) => setText(event.target.value)}
           />
           <p className="field-help">
@@ -408,11 +414,11 @@ function WallView({
 
         {photo ? (
           <div className="net-photo-preview">
-            <img src={photo} alt="Vista previa de la foto" />
+            <img src={photo} alt={t('network.vistaPreviaDeLaFoto')} />
             <button
               type="button"
               className="icon-btn"
-              aria-label="Quitar foto"
+              aria-label={t('network.quitarFoto')}
               onClick={() => setPhoto(undefined)}
             >
               <X size={18} aria-hidden="true" />
@@ -442,12 +448,12 @@ function WallView({
               ) : (
                 <ImagePlus size={18} aria-hidden="true" />
               )}{' '}
-              {busy ? 'Procesando…' : 'Agregar foto'}
+              {busy ? t('network.procesando') : t('network.agregarFoto')}
             </button>
           </>
         )}
         <p className="field-help">
-          Las publicaciones de esta demostración se guardan solo en tu teléfono.
+          {t('network.lasPublicacionesDeEstaDemostracionSe')}
         </p>
       </Sheet>
     </section>
@@ -459,6 +465,7 @@ function WallView({
 /* ------------------------------------------------------------------ */
 
 function ProfileCard({ profile }: { profile: MatchProfile }) {
+  const { t } = useTranslation();
   return (
     <article className="card net-profile" data-testid="net-profile">
       <div
@@ -475,7 +482,7 @@ function ProfileCard({ profile }: { profile: MatchProfile }) {
         <p className="net-profile-where">{profile.community}</p>
         <p className="net-profile-headline">{profile.headline}</p>
         <p>{profile.about}</p>
-        <ul className="net-tags" aria-label="Etiquetas">
+        <ul className="net-tags" aria-label={t('network.etiquetas')}>
           {profile.tags.map((tag) => (
             <li key={tag}>{tag}</li>
           ))}
@@ -492,6 +499,7 @@ function MatchView({
   state: SocialState;
   setState: (updater: (previous: SocialState) => SocialState) => void;
 }) {
+  const { t } = useTranslation();
   const [matchedId, setMatchedId] = useState<string | null>(null);
   const [chatId, setChatId] = useState<string | null>(null);
   const queue = useMemo(() => pendingProfiles(state), [state]);
@@ -508,7 +516,7 @@ function MatchView({
   };
 
   return (
-    <section aria-label="Match de productores y compradores">
+    <section aria-label={t('network.matchDeProductoresYCompradores')}>
       {current ? (
         <>
           <ProfileCard profile={current} />
@@ -519,7 +527,7 @@ function MatchView({
               data-testid="net-pass"
               onClick={() => decide('pass')}
             >
-              <X size={20} aria-hidden="true" /> Pasar
+              <X size={20} aria-hidden="true" /> {t('network.pasar')}
             </button>
             <button
               type="button"
@@ -527,29 +535,29 @@ function MatchView({
               data-testid="net-interest"
               onClick={() => decide('like')}
             >
-              <Heart size={20} aria-hidden="true" /> Me interesa
+              <Heart size={20} aria-hidden="true" /> {t('network.meInteresa')}
             </button>
           </div>
           <p className="field-help net-count">
-            {queue.length} {queue.length === 1 ? 'perfil por ver' : 'perfiles por ver'}
+            {queue.length} {queue.length === 1 ? t('network.perfilPorVer') : t('network.perfilesPorVer')}
           </p>
         </>
       ) : (
-        <EmptyState icon={Sparkles} title="Viste todos los perfiles">
+        <EmptyState icon={Sparkles} title={t('network.visteTodosLosPerfiles')}>
           <button
             type="button"
             className="btn btn-secondary"
             onClick={() => setState((previous) => resetSwipes(previous))}
           >
-            <RotateCcw size={16} aria-hidden="true" /> Volver a ver los descartados
+            <RotateCcw size={16} aria-hidden="true" /> {t('network.volverAVerLosDescartados')}
           </button>
         </EmptyState>
       )}
 
       <section className="community-section" aria-labelledby="net-matches">
-        <h2 id="net-matches">Tus matches ({matched.length})</h2>
+        <h2 id="net-matches">{t('network.tusMatches', { count: matched.length })}</h2>
         {matched.length === 0 ? (
-          <p className="field-help">Aún no tienes matches. Marca «Me interesa» en un perfil.</p>
+          <p className="field-help">{t('network.aunNoTienesMatches')}</p>
         ) : (
           <ul className="net-match-list">
             {matched.map((profile) => (
@@ -572,12 +580,12 @@ function MatchView({
         )}
       </section>
 
-      <Sheet open={Boolean(matchedProfile)} title="¡Hicieron match!" onClose={() => setMatchedId(null)}>
+      <Sheet open={Boolean(matchedProfile)} title={t('network.hicieronMatch')} onClose={() => setMatchedId(null)}>
         {matchedProfile ? (
           <div className="net-match-modal">
             <Avatar name={matchedProfile.name} hue={matchedProfile.hue} />
             <p>
-              <strong>{matchedProfile.name}</strong> también se interesó por tu perfil.
+              <strong>{matchedProfile.name}</strong> {t('network.tambienSeInteresoPorTuPerfil')}
             </p>
             <button
               type="button"
@@ -587,7 +595,7 @@ function MatchView({
                 setMatchedId(null);
               }}
             >
-              <MessageCircle size={18} aria-hidden="true" /> Enviar mensaje
+              <MessageCircle size={18} aria-hidden="true" /> {t('network.enviarMensaje')}
             </button>
           </div>
         ) : null}
@@ -616,6 +624,7 @@ function ChatSheet({
   setState: (updater: (previous: SocialState) => SocialState) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const timer = useRef<number | undefined>(undefined);
   const messages = state.chats[profile.id] ?? [];
@@ -635,10 +644,10 @@ function ChatSheet({
 
   return (
     <Sheet open title={profile.name} onClose={onClose}>
-      <p className="field-help">Chat de demostración: las respuestas son automáticas.</p>
+      <p className="field-help">{t('network.chatDeDemostracionLasRespuestasSon')}</p>
       <div className="net-chat" aria-live="polite">
         {messages.length === 0 ? (
-          <p className="field-help">Escribe el primer mensaje para coordinar.</p>
+          <p className="field-help">{t('network.escribeElPrimerMensajeParaCoordinar')}</p>
         ) : (
           messages.map((message) => (
             <p key={message.id} className={`net-bubble ${message.from === 'me' ? 'is-me' : ''}`}>
@@ -652,12 +661,12 @@ function ChatSheet({
           type="text"
           value={text}
           maxLength={MAX_MESSAGE_CHARS}
-          placeholder="Escribe un mensaje"
-          aria-label="Escribe un mensaje"
+          placeholder={t('network.escribeUnMensaje')}
+          aria-label={t('network.escribeUnMensaje')}
           data-testid="net-chat-input"
           onChange={(event) => setText(event.target.value)}
         />
-        <button type="submit" className="icon-btn" aria-label="Enviar mensaje">
+        <button type="submit" className="icon-btn" aria-label={t('network.enviarMensaje')}>
           <Send size={18} aria-hidden="true" />
         </button>
       </form>
@@ -676,11 +685,11 @@ interface AgentMessage {
   action?: AssistantAction;
 }
 
-const ACTION_LABEL: Partial<Record<AssistantAction, string>> = {
-  'new-alert': 'Crear alerta',
-  community: 'Ir a Comunidad',
-  wall: 'Ir al Muro',
-  match: 'Ir a Match',
+const ACTION_LABEL: Partial<Record<AssistantAction, MessageKey>> = {
+  'new-alert': 'network.action.crearAlerta',
+  community: 'network.action.irAComunidad',
+  wall: 'network.action.irAlMuro',
+  match: 'network.action.irAMatch',
 };
 
 function AgentView({
@@ -690,11 +699,12 @@ function AgentView({
   onAction: (action?: AssistantAction) => void;
   onOpenVoice: () => void;
 }) {
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<AgentMessage[]>([
     {
       id: 0,
       from: 'bot',
-      text: 'Hola, soy el asistente de Manguaré. ¿En qué te ayudo?',
+      text: t('network.holaSoyElAsistenteDeManguare'),
     },
   ]);
   const [text, setText] = useState('');
@@ -718,7 +728,7 @@ function AgentView({
   };
 
   return (
-    <section aria-label="Asistente">
+    <section aria-label={t('network.asistente')}>
       <button
         type="button"
         className="btn btn-primary"
@@ -726,10 +736,10 @@ function AgentView({
         onClick={onOpenVoice}
       >
         <Mic size={18} />
-        Hablar con Manguaré
+        {t('network.hablarConManguare')}
       </button>
       <p className="field-help">
-        Asistente local con reglas, no un modelo de IA: no da consejos médicos.
+        {t('network.asistenteLocalConReglasNoUn')}
       </p>
       <div className="net-chat net-agent-chat" aria-live="polite" data-testid="net-agent-chat">
         {messages.map((message) => (
@@ -741,7 +751,7 @@ function AgentView({
                 className="btn btn-secondary net-bubble-action"
                 onClick={() => onAction(message.action)}
               >
-                {ACTION_LABEL[message.action]}
+                {t(ACTION_LABEL[message.action]!)}
               </button>
             ) : null}
           </div>
@@ -773,12 +783,12 @@ function AgentView({
           type="text"
           value={text}
           maxLength={200}
-          placeholder="Pregúntame algo"
-          aria-label="Pregúntale al asistente"
+          placeholder={t('network.preguntameAlgo')}
+          aria-label={t('network.preguntaleAlAsistente')}
           data-testid="net-agent-input"
           onChange={(event) => setText(event.target.value)}
         />
-        <button type="submit" className="icon-btn" aria-label="Enviar pregunta">
+        <button type="submit" className="icon-btn" aria-label={t('network.enviarPregunta')}>
           <Send size={18} aria-hidden="true" />
         </button>
       </form>

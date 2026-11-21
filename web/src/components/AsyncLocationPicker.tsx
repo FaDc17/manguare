@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { useTranslation } from '../i18n/LanguageContext';
 import type { AlertLocation } from '../lib/types';
 
 const LocationPicker = lazy(() =>
@@ -16,8 +17,9 @@ export function AsyncLocationPicker({
   value?: AlertLocation;
   onChange: (location: AlertLocation) => void;
 }) {
+  const { t } = useTranslation();
   return (
-    <Suspense fallback={<div className="map-loading">Cargando mapa…</div>}>
+    <Suspense fallback={<div className="map-loading">{t('map.cargandoMapa')}</div>}>
       <LocationPicker value={value} onChange={onChange} />
     </Suspense>
   );

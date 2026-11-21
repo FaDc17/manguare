@@ -8,6 +8,9 @@ import {
 } from 'lucide-react';
 import type { EmergencyType } from './types';
 
+// Guarda una nota SOS estable que las pantallas pueden traducir al mostrarla.
+export const SOS_DEFAULT_NOTE = 'Alerta SOS';
+
 export interface EmergencyMeta {
   label: string;
   hint: string;

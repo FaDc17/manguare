@@ -4,6 +4,7 @@
  * - alerta creada sin red y persistida en IndexedDB
  * - sincronización al volver la conexión
  * - panel protegido, confirmación y vuelta del estado al teléfono
+ * - cambio de idioma sin red y reproducción del guion de audio de la beta
  * - sin alertas pendientes, la app no consulta el servidor cada 20 s
  *
  * Requiere Chromium/Chrome instalado y `npm run build` hecho.
@@ -24,6 +25,7 @@ import { AlertStore } from '../server/src/store.js';
 process.env.MANGUARE_LOG = '0';
 
 const PASSWORD = 'clave-e2e';
+const visualBeta = process.argv.includes('--beta-visual');
 const root = path.resolve(import.meta.dirname, '..');
 const staticDir = path.join(root, 'web', 'dist');
 
@@ -63,6 +65,128 @@ async function findChrome() {
     }
   }
   throw new Error('No se encontró Chromium/Chrome. Define CHROME_PATH.');
+}
+
+// Recorre el selector y las pantallas traducidas con una ventana móvil sin red.
+async function checkLanguages(app) {
+  await app.bringToFront();
+  await app.setViewport({ width: 320, height: 720, isMobile: true, hasTouch: true });
+  const languageSelect = '[data-testid="language-select"]';
+  await app.waitForSelector(languageSelect);
+  await app.select(languageSelect, 'agr');
+  await app.waitForFunction(() => document.querySelector('.login-erase')?.textContent?.includes('Esakáut'));
+  await app.select(languageSelect, 'es');
+  await app.click('[data-testid="demo-user"]');
+  await app.click('[data-testid="login-submit"]');
+  await app.waitForSelector('[data-testid="sos-button"]');
+  await app.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+  await app.setOfflineMode(true);
+  await app.waitForFunction(() => !navigator.onLine);
+
+  const openSettings = async () => {
+    await app.click('[data-testid="nav-settings"]');
+    await app.waitForSelector('[data-testid="settings-language"]');
+  };
+  const selectLanguage = async (locale, previous) => {
+    await app.click('[data-testid="settings-language"]');
+    await app.waitForSelector('[data-testid="language-' + previous + '"][aria-pressed="true"]');
+    await app.click('[data-testid="language-' + locale + '"]');
+    await app.waitForSelector('[data-testid="language-' + locale + '"]', { hidden: true });
+    assert.equal(await app.$eval('[data-testid="nav-settings"]', (item) =>
+      item.getAttribute('aria-current')), 'page');
+  };
+
+  await openSettings();
+  await selectLanguage('agr', 'es');
+  assert.equal(await app.$eval('[data-testid="nav-history"] [lang="agr"]', (label) => label.textContent), 'Mina étsejmau aidau');
+  await app.click('[data-testid="nav-history"]');
+  await app.waitForSelector('.screen.history h1 [lang="agr"]');
+  assert.equal(await app.$eval('.screen.history h1', (heading) => heading.textContent), 'Mina étsejmau aidau');
+  assert.equal(await app.$eval('[data-testid="nav-home"] [lang="agr"]', (label) => label.textContent), 'Nágkabau');
+  await app.waitForSelector('[data-testid="nav-map"] [lang="agr"]');
+  assert.equal(await app.$eval('[data-testid="nav-map"] span[lang]', (label) => label.textContent),
+    'Núgka dakumkámu');
+  assert.ok(await app.$eval('[data-testid="nav-map"]', (button) => button.scrollWidth <= button.clientWidth),
+    'la etiqueta de mapa debe caber en una pantalla de 320 px');
+  await app.click('[data-testid="nav-home"]');
+  const awajunSos = await app.waitForSelector('[data-testid="sos-button"] [lang="agr"]');
+  assert.equal(await awajunSos.evaluate((label) => label.textContent), 'Wájimas utújchat');
+  assert.ok(await awajunSos.evaluate((label) =>
+    label.scrollWidth <= label.clientWidth && label.clientWidth < label.closest('button').clientWidth),
+    'el título del SOS en awajún debe caber dentro del botón');
+  await openSettings();
+  await selectLanguage('es', 'agr');
+
+  await selectLanguage('cbt', 'es');
+  assert.equal(await app.$eval('.setting-label [lang="cbt"]', (label) => label.textContent), "Ninanu'");
+  assert.equal(await app.$eval('[data-testid="nav-community"] [lang="cbt"]', (label) => label.textContent), "Ninanu'");
+  await app.click('[data-testid="nav-community"]');
+  await app.waitForFunction(() => document.body.textContent?.includes("Pei'"));
+  await openSettings();
+  await selectLanguage('es', 'cbt');
+
+  if (visualBeta) {
+    await app.evaluate(() => {
+      Object.defineProperty(window, 'speechSynthesis', {
+        configurable: true,
+        value: {
+          cancel() {},
+          getVoices: () => [],
+          speak: (utterance) => { document.body.dataset.guideText = utterance.text; },
+        },
+      });
+      if (!window.SpeechSynthesisUtterance) {
+        window.SpeechSynthesisUtterance = function (text) { this.text = text; };
+      }
+    });
+  }
+  await app.click('[data-testid="nav-home"]');
+  await app.click('.lang-btn');
+  await app.waitForSelector('[data-testid="language-es"][aria-pressed="true"]');
+  const languageIntro = await app.$eval('[role="dialog"] .sheet-intro', (intro) => intro.textContent);
+  assert.equal(languageIntro.includes('La beta mezcla español, términos del idioma elegido y rótulos simulados.'), visualBeta);
+  await app.click('[data-testid="language-cni"]');
+  const greeting = await app.waitForSelector('[data-testid="home-hello"] [lang="cni"]');
+  assert.equal(await greeting.evaluate((label) => label.textContent), 'Kametsa pimpoke, Juan');
+  const ashaninkaSos = await app.waitForSelector('[data-testid="sos-button"] [lang="cni"]');
+  assert.equal(await ashaninkaSos.evaluate((label) => label.textContent), 'Shintsipaite yabintete');
+  assert.ok(await ashaninkaSos.evaluate((label) =>
+    label.scrollWidth <= label.clientWidth && label.clientWidth < label.closest('button').clientWidth),
+    'el título del SOS en asháninka debe caber dentro del botón');
+  assert.equal(await app.$eval('.quick-title [lang="cni"]', (label) => label.textContent), 'Amitakotantsi');
+  assert.equal(await app.$eval('[data-testid="nav-community"] [lang="cni"]', (label) => label.textContent), 'Nampitsi');
+  if (visualBeta) {
+    await app.click('.quick-card--audio');
+    const spoken = await app.evaluate(() => document.body.dataset.guideText);
+    assert.match(spoken, /Amitakotantsi/);
+    assert.match(spoken, /Manguaré guarda tu alerta en el teléfono/);
+  }
+  await app.click('[data-testid="sos-button"]');
+  const sosDialog = '[role="dialog"][aria-label="¿Desea enviar una alerta de emergencia?"]';
+  await app.waitForSelector(sosDialog);
+  await app.click('[data-testid="sos-confirm-cancel"]');
+  await app.waitForSelector(sosDialog, { hidden: true });
+
+  await app.click('[data-testid="nav-community"]');
+  await app.waitForFunction(() => document.body.textContent?.includes('Pankotsi'));
+  assert.ok(await app.evaluate(() => !document.body.textContent?.includes('Vista beta · Textos simulados')));
+  if (visualBeta) {
+    assert.equal(await app.$eval('.screen.community h1', (title) => title.textContent), 'Pamosantero Amazonía');
+    assert.ok(await app.evaluate(() => document.body.textContent?.includes('Miel pura de la comunidad')));
+  }
+  await app.click('[data-testid="environment-topic-tala-ilegal"]');
+  assert.equal(await app.$eval('label [lang="cni"]', (label) => label.textContent), 'Osankenaitoki');
+  assert.equal(await app.$eval('[data-testid="biodiversity-category"]', (input) => input.value), 'Tala ilegal');
+
+  await app.reload({ waitUntil: 'domcontentloaded' });
+  await app.waitForSelector('[data-testid="sos-button"]');
+  assert.match(await app.$eval('[data-testid="home-hello"]', (label) => label.textContent), /Kametsa pimpoke, Juan/);
+  await openSettings();
+  await selectLanguage('es', 'cni');
+  assert.equal(await app.$eval('[data-testid="nav-map"] span[lang]', (label) => label.textContent), 'Mapa');
+  await app.click('[data-testid="nav-home"]');
+  assert.match(await app.$eval('[data-testid="home-hello"]', (label) => label.textContent), /Hola, Juan/);
+  await app.setOfflineMode(false);
 }
 
 async function main() {
@@ -204,12 +328,18 @@ async function main() {
     await panel.goto(`${base}/panel`, { waitUntil: 'domcontentloaded' });
     await panel.waitForSelector('[data-testid="login-password"]', { timeout: 10000 });
     await panel.type('[data-testid="login-password"]', PASSWORD);
+    await panel.select('[data-testid="language-select"]', 'cni');
+    assert.ok(await panel.$eval('[data-testid="login-password"]', (input) => input.value.length > 0));
+    await panel.select('[data-testid="language-select"]', 'es');
     await panel.click('[data-testid="login-submit"]');
     await panel.bringToFront();
     await panel.waitForSelector('[data-testid^="ack-"]', { timeout: 15000 });
     await panel.waitForFunction(() => document.body.textContent?.includes('Reportó Juan'), {
       timeout: 5000,
     });
+    await panel.select('[data-testid="language-select"]', 'cbt');
+    assert.ok(await panel.$('[data-testid^="ack-"]'), 'el panel conserva la sesión al cambiar el idioma');
+    await panel.select('[data-testid="language-select"]', 'es');
     results.panelReporter = true;
     const ackButton = await panel.$('[data-testid^="ack-"]');
     await ackButton.click();
@@ -321,11 +451,11 @@ async function main() {
     }, { timeout: 15000 });
     await app.click('[data-testid="refresh-status"]');
     await app.waitForFunction(
-      () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Recibida',
+      () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Leída',
       { timeout: 15000 },
     );
     await app.click('[data-testid="nav-history"]');
-    await app.waitForFunction(() => document.body.textContent?.includes('Recibida'), {
+    await app.waitForFunction(() => document.body.textContent?.includes('Leída'), {
       timeout: 10000,
     });
     results.sosReceivedStateInProfile = true;
@@ -727,6 +857,10 @@ async function main() {
         document.body.textContent?.includes('Usa 9 dígitos y empieza con 9') &&
         document.body.textContent?.includes('Escribe un correo válido.'),
     );
+    await app.select('[data-testid="language-select"]', 'cni');
+    await app.waitForFunction(() => document.body.textContent?.includes('Pisankenatero pibajiro.'));
+    assert.equal(await app.$eval('[data-testid="register-email"]', (input) => input.value), 'correo-invalido');
+    await app.select('[data-testid="language-select"]', 'es');
 
     await app.click('[data-testid="register-first-name"]');
     await app.type('[data-testid="register-first-name"]', 'Ana');
@@ -788,6 +922,9 @@ async function main() {
     });
     await panel.waitForSelector('[data-testid="login-password"]', { timeout: 10000 });
     results.logoutWorks = true;
+
+    await checkLanguages(app);
+    results.languagesOfflineAndPersisted = true;
 
     console.log('\nE2E OK');
     console.log(JSON.stringify(results, null, 2));

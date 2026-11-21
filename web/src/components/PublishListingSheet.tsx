@@ -1,6 +1,9 @@
 import { Camera, ImagePlus, Mic, X } from 'lucide-react';
 import { forwardRef, useImperativeHandle, useRef, useState } from 'react';
 import { useApp } from '../app/AppContext';
+import { InterfaceError, message } from '../i18n/catalog';
+import { communityLabel } from '../i18n/labels';
+import { useTranslation } from '../i18n/LanguageContext';
 import { useSession } from '../app/SessionContext';
 import { COMMUNITY_CATEGORIES, type CommunityListing } from '../lib/community';
 import type {
@@ -20,6 +23,7 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
   onOpenVoice: () => void;
   onPublish: (listing: CommunityListing) => boolean;
 }>(function PublishListingSheet({ open, onClose, onOpenVoice, onPublish }, ref) {
+  const { t } = useTranslation();
   const { session } = useSession();
   const { showToast } = useApp();
   const [title, setTitle] = useState('');
@@ -151,7 +155,7 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
     try {
       setPhoto(await compressImage(file, { maxSide: 900, maxChars: 160_000 }));
     } catch (error) {
-      showToast(error instanceof Error ? error.message : 'No se pudo usar la foto.', 'warn');
+      showToast(error instanceof InterfaceError ? message(error.key) : message('network.noSePudoUsarLaFoto'), 'warn');
     } finally {
       setBusy(false);
     }
@@ -165,7 +169,7 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
   return (
     <Sheet
       open={open}
-      title="Publicar mi producto o servicio"
+      title={t('listing.publicarMiProductoOServicio')}
       onClose={close}
       footer={
         <button
@@ -175,7 +179,7 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
           data-testid="listing-publish"
           onClick={submitManually}
         >
-          Publicar
+          {t('community.publicar')}
         </button>
       }
     >
@@ -186,19 +190,19 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
           data-testid="listing-voice-assistant"
           onClick={onOpenVoice}
         >
-          <Mic size={17} aria-hidden="true" /> Completar con el asistente de voz
+          <Mic size={17} aria-hidden="true" /> {t('listing.completarConElAsistenteDeVoz')}
         </button>
 
         <div className="field">
           <label className="field-label" htmlFor="listing-title">
-            Título
+            {t('listing.titulo')}
           </label>
           <input
             id="listing-title"
             type="text"
             maxLength={80}
             value={title}
-            placeholder="Ej.: Miel pura de abeja"
+            placeholder={t('listing.ejMielPuraDeAbeja')}
             data-testid="listing-title"
             onChange={(event) => setTitle(event.target.value)}
           />
@@ -206,7 +210,7 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
 
         <div className="field">
           <label className="field-label" htmlFor="listing-category">
-            Categoría
+            {t('listing.categoria')}
           </label>
           <select
             id="listing-category"
@@ -214,10 +218,10 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
             data-testid="listing-category"
             onChange={(event) => setCategory(event.target.value)}
           >
-            <option value="">Selecciona una categoría</option>
+            <option value="">{t('listing.seleccionaUnaCategoria')}</option>
             {COMMUNITY_CATEGORIES.map((item) => (
               <option key={item.id} value={item.id}>
-                {item.label}
+                {t(communityLabel(item.id, 'community.category.otros'))}
               </option>
             ))}
           </select>
@@ -225,14 +229,14 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
 
         <div className="field">
           <label className="field-label" htmlFor="listing-price">
-            Precio
+            {t('listing.precio')}
           </label>
           <input
             id="listing-price"
             type="text"
             maxLength={30}
             value={price}
-            placeholder="Ej.: S/ 20 – 30"
+            placeholder={t('listing.ejS2030')}
             data-testid="listing-price"
             onChange={(event) => setPrice(event.target.value)}
           />
@@ -240,14 +244,14 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
 
         <div className="field">
           <label className="field-label" htmlFor="listing-location">
-            ¿Dónde te encuentran?
+            {t('listing.dondeTeEncuentran')}
           </label>
           <input
             id="listing-location"
             type="text"
             maxLength={80}
             value={location}
-            placeholder="Ej.: Chiriaco, Imaza"
+            placeholder={t('listing.ejChiriacoImaza')}
             data-testid="listing-location"
             onChange={(event) => setLocation(event.target.value)}
           />
@@ -255,7 +259,7 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
 
         <div className="field">
           <label className="field-label" htmlFor="listing-description">
-            Descripción
+            {t('listing.descripcion')}
           </label>
           <textarea
             id="listing-description"
@@ -269,11 +273,11 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
 
         {photo ? (
           <div className="net-photo-preview">
-            <img src={photo} alt="Vista previa de la foto del producto" />
+            <img src={photo} alt={t('listing.vistaPreviaDeLaFotoDelProducto')} />
             <button
               type="button"
               className="icon-btn"
-              aria-label="Quitar foto"
+              aria-label={t('network.quitarFoto')}
               onClick={() => setPhoto(undefined)}
             >
               <X size={18} aria-hidden="true" />
@@ -302,12 +306,12 @@ export const PublishListingSheet = forwardRef<ListingFormController, {
               ) : (
                 <ImagePlus size={18} aria-hidden="true" />
               )}{' '}
-              {busy ? 'Procesando…' : 'Agregar foto'}
+              {busy ? t('network.procesando') : t('network.agregarFoto')}
             </button>
           </>
         )}
         <p className="field-help">
-          Tu publicación se guarda en el teléfono y se comparte con la comunidad cuando haya conexión.
+          {t('listing.tuPublicacionSeGuardaEnElTelefono')}
         </p>
       </div>
     </Sheet>

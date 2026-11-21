@@ -1,31 +1,46 @@
+import type { Translate } from '../i18n/catalog';
 import type { AlertState, EmergencyType } from './types';
 
-const relative = new Intl.RelativeTimeFormat('es', { numeric: 'auto' });
-const dateTime = new Intl.DateTimeFormat('es-PE', {
-  day: '2-digit',
-  month: 'short',
-  hour: '2-digit',
-  minute: '2-digit',
-});
-
-export function formatRelative(iso: string, now = Date.now()): string {
+// Localiza tiempos como «ayer» y conserva el valor numérico del intervalo.
+export function formatRelative(iso: string, t: Translate, now = Date.now()): string {
   const diff = new Date(iso).getTime() - now;
   const abs = Math.abs(diff);
-  if (abs < 45_000) return 'hace un momento';
-  if (abs < 3_600_000) return relative.format(Math.round(diff / 60_000), 'minute');
-  if (abs < 86_400_000) return relative.format(Math.round(diff / 3_600_000), 'hour');
-  return relative.format(Math.round(diff / 86_400_000), 'day');
+  if (!Number.isFinite(abs)) return '—';
+  if (abs < 45_000) return t('time.justNow');
+  const unit = abs < 3_600_000 ? 'minute' : abs < 86_400_000 ? 'hour' : 'day';
+  const milliseconds = { minute: 60_000, hour: 3_600_000, day: 86_400_000 }[unit];
+  const relative = Math.round(diff / milliseconds);
+  if (unit === 'day' && relative === -1) return t('time.yesterday');
+  if (unit === 'day' && relative === 1) return t('time.tomorrow');
+  const count = Math.abs(relative);
+  const direction = relative < 0 ? 'past' : 'future';
+  if (unit === 'day') return t(`time.day.${direction}.other`, { count });
+  return t(`time.${unit}.${direction}.${count === 1 ? 'one' : 'other'}`, { count });
 }
 
-export function formatDateTime(iso: string): string {
-  return dateTime.format(new Date(iso));
+const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'] as const;
+const twoDigits = (number: number) => String(number).padStart(2, '0');
+
+// Compone la fecha y la hora con las plantillas del idioma elegido.
+export function formatDateTime(iso: string, t: Translate): string {
+  const date = new Date(iso);
+  if (!Number.isFinite(date.getTime())) return '—';
+  return t('time.dateTime', {
+    day: twoDigits(date.getDate()),
+    month: t(`time.month.${months[date.getMonth()]}`),
+    time: formatTime(iso, t),
+  });
 }
 
-export function formatTime(iso: string): string {
-  return new Intl.DateTimeFormat('es-PE', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(iso));
+export function formatTime(iso: string, t: Translate): string {
+  const date = new Date(iso);
+  const hours = date.getHours();
+  if (!Number.isFinite(hours)) return '—';
+  return t('time.clock', {
+    hour: twoDigits(hours % 12 || 12),
+    minute: twoDigits(date.getMinutes()),
+    period: t(hours < 12 ? 'time.am' : 'time.pm'),
+  });
 }
 
 export function shortId(id: string): string {

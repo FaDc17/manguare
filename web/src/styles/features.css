@@ -621,6 +621,13 @@
   color: var(--green-800);
   font-size: 11px;
   text-align: center;
+  cursor: pointer;
+}
+
+/* Resalta el control de documentos cuando recibe el foco del teclado. */
+.dni-upload:focus-within {
+  outline: 3px solid rgba(60, 143, 107, 0.55);
+  outline-offset: 2px;
 }
 
 .dni-upload img {

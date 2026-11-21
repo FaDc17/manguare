@@ -1,0 +1,44 @@
+{
+  "agr": {
+    "audioButton.listen": "Ántut",
+    "common.close": "Épenat",
+    "community.category.alimentos": "Yutái",
+    "community.category.hogar": "Jéga",
+    "community.distrito": "Núgka tesámu",
+    "community.todas": "Ashí",
+    "community.todos": "Ashí",
+    "history.filter.all": "Ashí",
+    "home.verTodas": "Díit Ashí",
+    "navigation.home": "Nágkabau",
+    "topBar.cambiarIdioma": "Chícham yapajít",
+    "topBar.emergencias": "Wájimas utújchat aidau",
+    "navigation.history": "Mina étsejmau aidau"
+  },
+  "cbt": {
+    "audioButton.listen": "Nahtanakasu'",
+    "common.close": "Unkutakasu'",
+    "common.help": "Kahtawakasu'",
+    "community.category.hogar": "Pei'",
+    "community.estrellas": "{value} tayura",
+    "community.todas": "Ya'ihpichachin",
+    "community.todos": "Ya'ihpichachin",
+    "community.verMas": "Na'kun kenanakasu'",
+    "community.verTodo": "Ya'ihpichachin kenanakasu'",
+    "history.filter.all": "Ya'ihpichachin",
+    "home.verTodas": "Kenanakasu' Ya'ihpichachin"
+  },
+  "cni": {
+    "audioButton.listen": "Kemaantsi",
+    "community.category.hogar": "Pankotsi",
+    "community.estrellas": "{value} impokiro",
+    "community.fotoDe": "Shiyakaantsi {title}",
+    "community.todas": "Maaboeni",
+    "community.todos": "Maaboeni",
+    "community.verMas": "Amenaantsi osheki",
+    "community.verTodo": "Maaboeni amenaantsi",
+    "history.esteTelefono": "Iroka kaimamentotsi",
+    "history.filter.all": "Maaboeni",
+    "home.verTodas": "Amenaantsi Maaboeni",
+    "login.bienvenidoATuComunidad": "Kametsa pimpoke pinampiki"
+  }
+}

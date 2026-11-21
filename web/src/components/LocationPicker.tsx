@@ -1,3 +1,7 @@
+// Presenta el permiso de ubicación y los avisos de captura en el idioma activo.
+
+import { useTranslation } from '../i18n/LanguageContext';
+import { MapZoom } from './MapZoom';
 import { useEffect, useState } from 'react';
 import { CircleMarker, MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
@@ -28,6 +32,7 @@ export function LocationPicker({
   value?: AlertLocation;
   onChange: (location: AlertLocation) => void;
 }) {
+  const { t } = useTranslation();
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
   const { online } = useApp();
@@ -42,7 +47,7 @@ export function LocationPicker({
         setError(
           reason instanceof Error
             ? reason.message
-            : 'No se pudo obtener el GPS. Puedes tocar el mapa para ajustar el punto.',
+            : t('locationPicker.noSePudoObtenerElGps'),
         );
       })
       .finally(() => setLocating(false));
@@ -56,14 +61,16 @@ export function LocationPicker({
         onClick={activateLocation}
         disabled={locating}
       >
-        {locating ? 'Buscando ubicación…' : 'Activar mi ubicación'}
+        {locating ? t('locationPicker.buscandoUbicacion') : t('locationPicker.activarMiUbicacion')}
       </button>
       <MapContainer
         className="location-picker-map"
         center={center}
         zoom={value ? 14 : 8}
+        zoomControl={false}
         scrollWheelZoom
       >
+        <MapZoom />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -87,10 +94,10 @@ export function LocationPicker({
       </MapContainer>
       <p className="map-helper">
         {!online
-          ? 'Sin conexión no se ven las teselas del mapa. Puedes activar el GPS o tocar el recuadro para fijar un punto aproximado.'
+          ? t('locationPicker.sinConexionNoSeVenLasTeselas')
           : value
-            ? 'Punto elegido. Toca otra parte del mapa para ajustarlo.'
-            : 'Toca el mapa para elegir una ubicación aproximada.'}
+            ? t('locationPicker.puntoElegidoTocaOtraParteDel')
+            : t('locationPicker.tocaElMapaParaElegirUna')}
       </p>
       {error ? <p className="field-error" role="status">{error}</p> : null}
     </div>

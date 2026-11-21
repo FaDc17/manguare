@@ -139,6 +139,24 @@ body.sheet-open {
   border: 0;
 }
 
+/* Mantiene el selector compacto en las pantallas de ingreso y del panel. */
+.language-select {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  width: fit-content;
+  color: var(--ink-soft);
+}
+
+.language-select select {
+  min-height: 36px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
