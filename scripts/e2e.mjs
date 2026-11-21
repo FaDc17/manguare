@@ -150,9 +150,27 @@ async function checkLanguages(app) {
   assert.equal(await greeting.evaluate((label) => label.textContent), 'Kametsa pimpoke, Juan');
   const ashaninkaSos = await app.waitForSelector('[data-testid="sos-button"] [lang="cni"]');
   assert.equal(await ashaninkaSos.evaluate((label) => label.textContent), 'Shintsipaite yabintete');
-  assert.ok(await ashaninkaSos.evaluate((label) =>
-    label.scrollWidth <= label.clientWidth && label.clientWidth < label.closest('button').clientWidth),
-    'el título del SOS en asháninka debe caber dentro del botón');
+  const sosMetrics = await ashaninkaSos.evaluate((label) => {
+  const button = label.closest('button');
+  const style = getComputedStyle(label);
+  return {
+    text: label.textContent,
+    scrollWidth: label.scrollWidth,
+    clientWidth: label.clientWidth,
+    buttonWidth: button.clientWidth,
+    fontSize: style.fontSize,
+    letterSpacing: style.letterSpacing,
+    whiteSpace: style.whiteSpace,
+    display: style.display,
+    viewport: { width: innerWidth, height: innerHeight },
+  };
+});
+console.log('ASHANINKA SOS:', JSON.stringify(sosMetrics));
+assert.ok(
+  sosMetrics.scrollWidth <= sosMetrics.clientWidth &&
+  sosMetrics.clientWidth < sosMetrics.buttonWidth,
+  'el título del SOS en asháninka debe caber dentro del botón',
+);
   assert.equal(await app.$eval('.quick-title [lang="cni"]', (label) => label.textContent), 'Amitakotantsi');
   assert.equal(await app.$eval('[data-testid="nav-community"] [lang="cni"]', (label) => label.textContent), 'Nampitsi');
   if (visualBeta) {
