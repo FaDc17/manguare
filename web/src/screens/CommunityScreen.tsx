@@ -22,6 +22,8 @@ import {
 } from '../lib/community';
 import { loadUserListings, mergeListings, saveUserListings } from '../lib/social';
 import { syncListings } from '../lib/social-sync';
+import type { CommunityVoiceController } from '../lib/voice-tools';
+import type { ListingFormController } from '../lib/voice-tools';
 import type { BiodiversityCategory } from '../lib/types';
 
 type View = 'home' | 'all' | 'detail';
@@ -189,8 +191,12 @@ function ListingDetail({ listing, onBack }: { listing: CommunityListing; onBack:
 
 export function CommunityScreen({
   onReportBiodiversity,
+  onOpenVoice,
+  onVoiceControllerReady,
 }: {
   onReportBiodiversity: (category: BiodiversityCategory) => void;
+  onOpenVoice: () => void;
+  onVoiceControllerReady: (controller: CommunityVoiceController | null) => void;
 }) {
   const { showToast } = useApp();
   const [category, setCategory] = useState<string>('todos');
@@ -203,6 +209,7 @@ export function CommunityScreen({
   const [userListings, setUserListings] = useState<CommunityListing[]>(() => loadUserListings());
   const [publishOpen, setPublishOpen] = useState(false);
   const { session } = useSession();
+  const publishFormRef = useRef<ListingFormController>(null);
   const listingsRef = useRef(userListings);
   listingsRef.current = userListings;
   const pendingListings = userListings.some((item) => item.synced === false);
@@ -259,8 +266,31 @@ export function CommunityScreen({
   );
   const selectedListing = allListings.find((item) => item.id === selectedId);
 
+  useEffect(() => {
+    const controller: CommunityVoiceController = {
+      showHome: () => {
+        setSelectedId(null);
+        setView('home');
+      },
+      openListingForm: () => {
+        setSelectedId(null);
+        setView('home');
+        setCategory('todos');
+        publishFormRef.current?.resetForVoice();
+        setPublishOpen(true);
+      },
+      getListingForm: () => publishFormRef.current,
+    };
+    onVoiceControllerReady(controller);
+    return () => onVoiceControllerReady(null);
+  }, [onVoiceControllerReady]);
+
   if (view === 'detail' && selectedListing) {
-    return <ListingDetail listing={selectedListing} onBack={() => setView('all')} />;
+    return (
+      <div data-testid="community-screen">
+        <ListingDetail listing={selectedListing} onBack={() => setView('all')} />
+      </div>
+    );
   }
 
   const openDetail = (id: string) => {
@@ -269,7 +299,7 @@ export function CommunityScreen({
   };
 
   return (
-    <div className="screen community">
+    <div className="screen community" data-testid="community-screen">
       {view === 'all' ? (
         <SubHeader title="Todas las publicaciones" onBack={() => setView('home')} />
       ) : (
@@ -493,15 +523,21 @@ export function CommunityScreen({
         </>
       ) : null}
       <PublishListingSheet
+        ref={publishFormRef}
         open={publishOpen}
         onClose={() => setPublishOpen(false)}
+        onOpenVoice={onOpenVoice}
         onPublish={(listing) => {
           const next = [listing, ...userListings];
+          if (!saveUserListings(next)) {
+            showToast('No se pudo guardar la publicación en este teléfono.', 'error');
+            return false;
+          }
           setUserListings(next);
-          saveUserListings(next);
           setPublishOpen(false);
           setCategory('todos');
           showToast('Publicado. Se envía al mercado compartido cuando haya conexión.', 'ok');
+          return true;
         }}
       />
     </div>

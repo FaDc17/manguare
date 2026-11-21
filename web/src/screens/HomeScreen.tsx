@@ -32,6 +32,7 @@ export function HomeScreen({
   onOpenAlert,
   onHistory,
   onCommunity,
+  onOpenAssistant,
   onOpenLanguage,
   onOpenHelp,
 }: {
@@ -39,6 +40,7 @@ export function HomeScreen({
   onOpenAlert: (id: string) => void;
   onHistory: () => void;
   onCommunity: () => void;
+  onOpenAssistant: () => void;
   onOpenLanguage: () => void;
   onOpenHelp: () => void;
 }) {
@@ -215,7 +217,7 @@ export function HomeScreen({
         <button
           type="button"
           className="quick-card"
-          onClick={() => showToast('El asistente estará disponible en el piloto.', 'warn')}
+          onClick={onOpenAssistant}
         >
           <span className="quick-icon quick-icon--sand">
             <Sparkles size={21} aria-hidden="true" />

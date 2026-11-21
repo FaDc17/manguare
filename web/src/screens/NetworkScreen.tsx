@@ -4,6 +4,7 @@ import {
   Heart,
   ImagePlus,
   MessageCircle,
+  Mic,
   Plus,
   RotateCcw,
   Send,
@@ -11,7 +12,8 @@ import {
   Trash2,
   Users,
   X,
-} from 'lucide-react';
+}from 'lucide-react';
+
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { useApp } from '../app/AppContext';
 import { useSession } from '../app/SessionContext';
@@ -55,11 +57,15 @@ type NetworkTab = 'wall' | 'match' | 'agent';
 export function NetworkScreen({
   onNewAlert,
   onOpenCommunity,
+  onOpenVoice,
+  initialTab = 'wall',
 }: {
   onNewAlert: () => void;
   onOpenCommunity: () => void;
+  onOpenVoice: () => void;
+  initialTab?: NetworkTab;
 }) {
-  const [tab, setTab] = useState<NetworkTab>('wall');
+  const [tab, setTab] = useState<NetworkTab>(initialTab);
   const [state, setState] = useState<SocialState>(() => loadSocialState());
   const { showToast } = useApp();
   const warnedRef = useRef(false);
@@ -168,7 +174,7 @@ export function NetworkScreen({
 
       {tab === 'wall' ? <WallView state={state} setState={setState} /> : null}
       {tab === 'match' ? <MatchView state={state} setState={setState} /> : null}
-      {tab === 'agent' ? <AgentView onAction={runAction} /> : null}
+      {tab === 'agent' ? <AgentView onAction={runAction} onOpenVoice={onOpenVoice} /> : null}
     </div>
   );
 }
@@ -677,12 +683,18 @@ const ACTION_LABEL: Partial<Record<AssistantAction, string>> = {
   match: 'Ir a Match',
 };
 
-function AgentView({ onAction }: { onAction: (action?: AssistantAction) => void }) {
+function AgentView({
+  onAction,
+  onOpenVoice,
+}: {
+  onAction: (action?: AssistantAction) => void;
+  onOpenVoice: () => void;
+}) {
   const [messages, setMessages] = useState<AgentMessage[]>([
     {
       id: 0,
       from: 'bot',
-      text: 'Hola, soy el asistente de Manguaré. Funciono sin conexión. ¿En qué te ayudo?',
+      text: 'Hola, soy el asistente de Manguaré. ¿En qué te ayudo?',
     },
   ]);
   const [text, setText] = useState('');
@@ -707,6 +719,15 @@ function AgentView({ onAction }: { onAction: (action?: AssistantAction) => void 
 
   return (
     <section aria-label="Asistente">
+      <button
+        type="button"
+        className="btn btn-primary"
+        data-testid="net-open-voice"
+        onClick={onOpenVoice}
+      >
+        <Mic size={18} />
+        Hablar con Manguaré
+      </button>
       <p className="field-help">
         Asistente local con reglas, no un modelo de IA: no da consejos médicos.
       </p>
