@@ -1,7 +1,7 @@
 // Presenta las preferencias, el idioma seleccionado y la guía de audio.
 
 import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ChevronRight,
   Database,
@@ -55,7 +55,9 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
     clearLocal,
     showToast,
   } = useApp();
-  const { session, logout } = useSession();
+  const { session, logout, updateName } = useSession();
+  const [profileName, setProfileName] = useState(session.name);
+  useEffect(() => setProfileName(session.name), [session.name]);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
   const pending = alerts.filter((alert) => alert.state === 'pending').length;
@@ -87,6 +89,23 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       <section className="settings-group" aria-labelledby="settings-account">
         <h2 id="settings-account">{t('settings.miCuenta')}</h2>
         <div className="settings-card">
+          <label className="setting-row">
+            <span className="setting-icon"><UserRound size={20} aria-hidden="true" /></span>
+            <span className="setting-main"><span className="setting-label">{t('settings.nombreDePerfil')}</span></span>
+            <input
+              type="text"
+              className="setting-input"
+              data-testid="settings-profile-name"
+              value={profileName}
+              maxLength={80}
+              onChange={(event) => setProfileName(event.target.value)}
+              onBlur={() => {
+                if (profileName.trim()) {
+                  try { updateName(profileName); } catch { setProfileName(session.name); showToast(t('settings.noSePudoGuardarNombre'), 'error'); }
+                } else setProfileName(session.name);
+              }}
+            />
+          </label>
           <div className="setting-row">
             <span className="setting-icon">
               <UserRound size={20} aria-hidden="true" />
@@ -114,6 +133,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
           {session.role === 'admin' ? (
             <a
               className="setting-row setting-row--button setting-row--link"
+              data-testid="settings-admin-panel"
               href="/panel"
               target="_blank"
               rel="noreferrer"
@@ -177,6 +197,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
             <input
               type="text"
               className="setting-input"
+              data-testid="settings-community"
               value={settings.community}
               placeholder={t('settings.ejNuevaEsperanza')}
               maxLength={80}
@@ -195,6 +216,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
             <input
               type="text"
               className="setting-input"
+              data-testid="settings-deviceName"
               value={settings.deviceName}
               maxLength={80}
               onChange={(event) => updateSettings({ deviceName: event.target.value })}
@@ -219,6 +241,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
             <input
               type="text"
               className="setting-input setting-input--block"
+              data-testid="settings-healthPost"
               value={settings.healthPost}
               placeholder={t('settings.ejPuestoDeSaludNuevaEsperanza')}
               maxLength={80}
@@ -237,6 +260,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
             <input
               type="tel"
               className="setting-input setting-input--tel"
+              data-testid="settings-healthPhone"
               value={settings.healthPhone}
               placeholder="+51 999 999 999"
               onChange={(event) => updateSettings({ healthPhone: event.target.value })}
@@ -254,6 +278,7 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
             <input
               type="tel"
               className="setting-input setting-input--tel"
+              data-testid="settings-smsNumber"
               value={settings.smsNumber}
               placeholder="+51 999 999 999"
               onChange={(event) => updateSettings({ smsNumber: event.target.value })}

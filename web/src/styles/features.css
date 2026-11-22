@@ -260,6 +260,7 @@
 }
 
 .listing-filters select,
+.listing-filters input,
 .register-form input,
 .register-form select {
   width: 100%;
@@ -275,6 +276,7 @@
 }
 
 .listing-filters select:focus,
+.listing-filters input:focus,
 .register-form input:focus,
 .register-form select:focus {
   border-color: var(--green-500);

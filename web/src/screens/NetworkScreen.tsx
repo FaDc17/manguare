@@ -61,14 +61,21 @@ export function NetworkScreen({
   onOpenCommunity,
   onOpenVoice,
   initialTab = 'wall',
+  initialSearch,
 }: {
   onNewAlert: () => void;
   onOpenCommunity: () => void;
   onOpenVoice: () => void;
   initialTab?: NetworkTab;
+  initialSearch?: string;
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<NetworkTab>(initialTab);
+  const [wallSearch, setWallSearch] = useState(initialSearch ?? '');
+  useEffect(() => {
+    if (initialTab) setTab(initialTab);
+  }, [initialTab]);
+  useEffect(() => setWallSearch(initialSearch ?? ''), [initialSearch]);
   const [state, setState] = useState<SocialState>(() => loadSocialState());
   const { showToast, online: appOnline } = useApp();
   const warnedRef = useRef(false);
@@ -177,7 +184,7 @@ export function NetworkScreen({
         ))}
       </div>
 
-      {tab === 'wall' ? <WallView state={state} setState={setState} /> : null}
+      {tab === 'wall' ? <WallView state={state} setState={setState} search={wallSearch} onSearch={setWallSearch} /> : null}
       {tab === 'match' ? <MatchView state={state} setState={setState} /> : null}
       {tab === 'agent' ? <AgentView onAction={runAction} onOpenVoice={onOpenVoice} /> : null}
     </div>
@@ -303,9 +310,13 @@ function PostCard({
 function WallView({
   state,
   setState,
+  search,
+  onSearch,
 }: {
   state: SocialState;
   setState: (updater: (previous: SocialState) => SocialState) => void;
+  search: string;
+  onSearch: (value: string) => void;
 }) {
   const { t } = useTranslation();
   const { session } = useSession();
@@ -315,6 +326,10 @@ function WallView({
   const [photo, setPhoto] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const normalizedSearch = search.trim().toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const visiblePosts = state.posts.filter((post) =>
+    [post.text, post.author, post.community].join(' ').toLocaleLowerCase('es')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(normalizedSearch));
 
   const close = () => {
     setComposeOpen(false);
@@ -350,6 +365,9 @@ function WallView({
 
   return (
     <section aria-label={t('network.muroDeLaComunidad')}>
+      <input type="search" className="net-wall-search" data-testid="wall-search"
+        aria-label={t('network.buscarEnElMuro')} placeholder={t('network.buscarEnElMuro')} value={search}
+        onChange={(event) => onSearch(event.target.value)} />
       <button
         type="button"
         className="btn btn-primary btn-block net-compose-btn"
@@ -359,13 +377,13 @@ function WallView({
         <Plus size={18} aria-hidden="true" /> {t('network.compartirConMiComunidad')}
       </button>
 
-      {state.posts.length === 0 ? (
+      {visiblePosts.length === 0 ? (
         <EmptyState icon={Users} title={t('network.aunNoHayPublicaciones')}>
-          {t('network.seLaPrimeraPersonaEnCompartir')}
+          {search ? t('network.sinResultadosBusqueda') : t('network.seLaPrimeraPersonaEnCompartir')}
         </EmptyState>
       ) : (
         <div className="net-feed">
-          {state.posts.map((post) => (
+          {visiblePosts.map((post) => (
             <PostCard
               key={post.id}
               post={post}

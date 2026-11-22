@@ -4,6 +4,7 @@ import type { Session } from '../lib/session';
 interface SessionContextValue {
   session: Session;
   logout: () => void;
+  updateName: (name: string) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -11,10 +12,11 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 export function SessionProvider({
   session,
   logout,
+  updateName,
   children,
 }: SessionContextValue & { children: ReactNode }) {
   return (
-    <SessionContext.Provider value={{ session, logout }}>{children}</SessionContext.Provider>
+    <SessionContext.Provider value={{ session, logout, updateName }}>{children}</SessionContext.Provider>
   );
 }
 
