@@ -34,6 +34,7 @@ import { formatDateTime, formatRelative, formatTime, shortId } from '../lib/form
 import { biodiversityLabels, responseLabel, translatedResponse } from '../i18n/labels';
 import { RESPONSE_OPTIONS } from '../lib/sla';
 import type { ServerAlert, ServerBiodiversityReport } from '../lib/types';
+import { StatisticsSection } from './StatisticsSection';
 
 type PanelFilter = 'all' | 'pending' | 'overdue' | 'received';
 
@@ -1128,6 +1129,10 @@ export function PanelApp() {
             </div>
           )}
         </section>
+
+        {session.authRequired ? (
+          <StatisticsSection revision={alerts.map((alert) => `${alert.id}:${alert.acknowledgedAt ?? ''}`).join('|')} />
+        ) : null}
 
         <section className="panel-bio-section" aria-labelledby="panel-bio-title">
           <div className="panel-list-head">
