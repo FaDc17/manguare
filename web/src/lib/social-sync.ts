@@ -1,4 +1,5 @@
 import type { CommunityListing } from './community';
+import { fetchWithTimeout } from './fetch-timeout';
 import {
   type Post,
   type SocialState,
@@ -11,13 +12,13 @@ function headers(phone: string): HeadersInit {
   return { 'content-type': 'application/json', 'x-manguare-phone': phone };
 }
 
-/** 2xx = listo. 404/400/403 = el servidor jamás lo aceptará: se da por resuelto para no reintentar siempre. */
+/** Solo un 2xx confirma que el servidor guardó el cambio. */
 function settled(status: number): boolean {
-  return (status >= 200 && status < 300) || status === 400 || status === 403 || status === 404;
+  return status >= 200 && status < 300;
 }
 
 async function call(phone: string, path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${API}${path}`, { ...init, headers: headers(phone), signal: AbortSignal.timeout(10_000) });
+  return fetchWithTimeout(`${API}${path}`, { ...init, headers: headers(phone) }, 10_000);
 }
 
 export interface SocialSyncResult {
@@ -33,7 +34,7 @@ export async function syncPosts(phone: string, state: SocialState): Promise<Soci
   try {
     for (const id of state.pendingDeletes) {
       const res = await call(phone, `/posts/${encodeURIComponent(id)}`, { method: 'DELETE' });
-      if (settled(res.status)) patches.push({ type: 'deleted', id });
+      if (settled(res.status) || res.status === 404) patches.push({ type: 'deleted', id });
       else allSent = false;
     }
     for (const post of state.posts) {

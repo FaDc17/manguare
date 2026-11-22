@@ -951,7 +951,7 @@ export function createHandler({
             sendJson(res, 404, { error: 'not_found' });
             return;
           }
-          sendJson(res, 200, { alert });
+          sendJson(res, 200, { alert: publicAlert(alert) });
           return;
         }
         if (req.method === 'PATCH') {

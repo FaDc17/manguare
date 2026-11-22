@@ -28,9 +28,9 @@ MANGUARE_SESSION_SECRET="$(openssl rand -base64 48)" \
 npm start
 ```
 
-El panel pide usuario (`salud` por defecto) y contraseña. La sesión dura 12 horas,
-vive en memoria y se invalida al reiniciar el servidor salvo que fijes
-`MANGUARE_SESSION_SECRET` y reinicies con el mismo valor.
+El panel pide usuario (`salud` por defecto) y contraseña. La sesión dura 12 horas
+y vive en memoria: se invalida al reiniciar el servidor. Fijar
+`MANGUARE_SESSION_SECRET` no conserva las sesiones activas.
 
 ### Docker
 
@@ -41,7 +41,11 @@ docker compose up -d --build
 docker compose logs -f
 ```
 
-Los datos quedan en el volumen `manguare-data` (`/data/alerts.json` y `/data/biodiversity.json`).
+Los datos quedan en el volumen `manguare-data` (`/data/alerts.json`,
+`/data/biodiversity.json` y `/data/social.json`). Si ya existe un contenedor de
+una versión anterior con publicaciones sociales, copia primero su archivo
+`/app/server/data/social.json` al volumen antes de recrearlo: ese archivo antiguo
+no estaba en el volumen y Docker no puede recuperarlo tras eliminar el contenedor.
 
 Para una imagen sin Compose:
 
@@ -62,6 +66,7 @@ docker run -d --name manguare -p 8787:8787 \
 | `HOST` | `0.0.0.0` | Interfaz de escucha |
 | `MANGUARE_DATA_FILE` | `server/data/alerts.json` | Archivo JSON de alertas |
 | `MANGUARE_BIODIVERSITY_FILE` | `server/data/biodiversity.json` | Archivo JSON de reportes de biodiversidad |
+| `MANGUARE_SOCIAL_FILE` | `server/data/social.json` | Archivo JSON de publicaciones sociales; Docker usa `/data/social.json` |
 | `MANGUARE_STATIC_DIR` | `web/dist` | Web compilada |
 | `MANGUARE_LOG` | activo | `MANGUARE_LOG=0` silencia el log por petición |
 | `MANGUARE_PANEL_PASSWORD` | vacío | Si se define, el panel exige login |

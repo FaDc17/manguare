@@ -133,6 +133,8 @@ test('completa una alerta SOS ya creada sin generar otra', async () => {
   assert.equal(created.response.status, 201);
   assert.equal(created.data.alert.isSos, true);
   assert.equal(created.data.alert.editTokenHash, undefined);
+  const individual = await (await fetch(`${base}/api/alerts/sos-alert-0001`)).json();
+  assert.equal(individual.alert.editTokenHash, undefined);
 
   const unauthorized = await fetch(`${base}/api/alerts/sos-alert-0001`, {
     method: 'PATCH',

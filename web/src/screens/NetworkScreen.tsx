@@ -70,7 +70,7 @@ export function NetworkScreen({
   const { t } = useTranslation();
   const [tab, setTab] = useState<NetworkTab>(initialTab);
   const [state, setState] = useState<SocialState>(() => loadSocialState());
-  const { showToast } = useApp();
+  const { showToast, online: appOnline } = useApp();
   const warnedRef = useRef(false);
   const { session } = useSession();
   const stateRef = useRef(state);
@@ -81,7 +81,7 @@ export function NetworkScreen({
   useEffect(() => {
     let alive = true;
     const run = async () => {
-      if (busyRef.current || !navigator.onLine) return;
+      if (busyRef.current || !appOnline) return;
       busyRef.current = true;
       try {
         const result = await syncPosts(session.phone, stateRef.current);
@@ -94,6 +94,7 @@ export function NetworkScreen({
         busyRef.current = false;
       }
     };
+    if (!appOnline) setOnline(false);
     void run();
     const timer = window.setInterval(() => void run(), 20_000);
     const onOnline = () => void run();
@@ -103,14 +104,14 @@ export function NetworkScreen({
       window.clearInterval(timer);
       window.removeEventListener('online', onOnline);
     };
-  }, [session.phone]);
+  }, [session.phone, appOnline]);
 
   // Si hay algo pendiente, reintenta pronto (publicar, comentar, dar «me gusta»).
   const pending = hasPendingWork(state);
   useEffect(() => {
     if (!pending) return;
     const timer = window.setTimeout(() => {
-      if (busyRef.current || !navigator.onLine) return;
+      if (busyRef.current || !appOnline) return;
       busyRef.current = true;
       void syncPosts(session.phone, stateRef.current)
         .then((result) => {
@@ -122,7 +123,7 @@ export function NetworkScreen({
         });
     }, 800);
     return () => window.clearTimeout(timer);
-  }, [pending, state, session.phone]);
+  }, [pending, state, session.phone, appOnline]);
 
   useEffect(() => {
     const saved = saveSocialState(state);

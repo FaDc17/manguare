@@ -204,7 +204,7 @@ export function CommunityScreen({
   onVoiceControllerReady: (controller: CommunityVoiceController | null) => void;
 }) {
   const { t } = useTranslation();
-  const { showToast } = useApp();
+  const { showToast, online } = useApp();
   const [category, setCategory] = useState<string>('todos');
   const [view, setView] = useState<View>('home');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -222,10 +222,12 @@ export function CommunityScreen({
 
   useEffect(() => {
     let alive = true;
+    let latestRequest = 0;
     const run = async () => {
-      if (!navigator.onLine) return;
+      if (!online) return;
+      const request = ++latestRequest;
       const { server } = await syncListings(session.phone, listingsRef.current);
-      if (!alive || !server) return;
+      if (!alive || request !== latestRequest || !server) return;
       setUserListings((previous) => {
         const next = mergeListings(previous, server);
         saveUserListings(next);
@@ -240,7 +242,7 @@ export function CommunityScreen({
       window.clearInterval(timer);
       window.removeEventListener('online', run);
     };
-  }, [session.phone, pendingListings]);
+  }, [session.phone, pendingListings, online]);
   const allListings = useMemo(
     () => [...userListings, ...COMMUNITY_LISTINGS],
     [userListings],

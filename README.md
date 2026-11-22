@@ -230,7 +230,9 @@ cp .env.example .env    # cambia la contraseña y el secreto
 docker compose up -d --build
 ```
 
-Los datos quedan en el volumen `manguare-data`. La guía completa está en
+Los datos nuevos quedan en el volumen `manguare-data`. Si actualizas un contenedor
+anterior, conserva antes su `/app/server/data/social.json` como indica la guía.
+La guía completa está en
 [`docs/OPERACION.md`](docs/OPERACION.md).
 
 ### Variables de entorno
@@ -245,11 +247,12 @@ Los datos quedan en el volumen `manguare-data`. La guía completa está en
 | `MANGUARE_PANEL_PASSWORD` | vacío | Si se define, el panel exige login |
 | `MANGUARE_STATS_DEMO` | `0` | `1` habilita una muestra ficticia solo fuera de producción y con panel protegido |
 | `MANGUARE_PANEL_USER` | `salud` | Usuario del panel |
-| `MANGUARE_SESSION_SECRET` | aleatorio | Fija un secreto para conservar sesiones al reiniciar |
+| `MANGUARE_SESSION_SECRET` | aleatorio | Secreto de sesiones; las sesiones en memoria se invalidan al reiniciar |
 | `MANGUARE_SESSION_HOURS` | `12` | Duración de la sesión del panel |
 | `MANGUARE_ACK_MINUTES` | `10` | Plazo para que la red confirme una alerta |
 | `MANGUARE_ESCALATION_PHONE` | vacío | Número para el SMS de escalamiento del panel |
 | `MANGUARE_BIODIVERSITY_FILE` | `server/data/biodiversity.json` | Archivo separado para reportes de biodiversidad |
+| `MANGUARE_SOCIAL_FILE` | `server/data/social.json` | Archivo de publicaciones sociales; Docker usa `/data/social.json` |
 | `MANGUARE_SECURE_COOKIES` | `0` | `1` para cookie `Secure` detrás de HTTPS |
 | `MANGUARE_TRUST_PROXY` | `0` | `1` para leer `X-Forwarded-For` de un proxy de confianza |
 | `VITE_SMS_NUMBER` | `+51999999999` | Número de respaldo SMS (se fija al compilar) |
