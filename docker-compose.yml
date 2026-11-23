@@ -8,10 +8,11 @@ services:
       # Obligatoria: el panel no debe quedar abierto en una red compartida.
       MANGUARE_PANEL_PASSWORD: ${MANGUARE_PANEL_PASSWORD:?define MANGUARE_PANEL_PASSWORD en .env}
       MANGUARE_PANEL_USER: ${MANGUARE_PANEL_USER:-salud}
-      # Fija un secreto largo para que las sesiones sobrevivan a reinicios.
+      # Secreto de sesión; las sesiones activas se invalidan al reiniciar.
       MANGUARE_SESSION_SECRET: ${MANGUARE_SESSION_SECRET:-}
       MANGUARE_SESSION_HOURS: ${MANGUARE_SESSION_HOURS:-12}
       MANGUARE_BIODIVERSITY_FILE: ${MANGUARE_BIODIVERSITY_FILE:-/data/biodiversity.json}
+      MANGUARE_SOCIAL_FILE: ${MANGUARE_SOCIAL_FILE:-/data/social.json}
       MANGUARE_ACK_MINUTES: ${MANGUARE_ACK_MINUTES:-10}
       MANGUARE_ESCALATION_PHONE: ${MANGUARE_ESCALATION_PHONE:-}
       # Actívalos si publicas detrás de HTTPS y un proxy inverso.

@@ -1,8 +1,10 @@
 import {
+  getBiodiversityReport,
   getAllBiodiversityReports,
   putBiodiversityReport,
 } from './db';
 import { newAlertId } from './queue-core';
+import { fetchWithTimeout } from './fetch-timeout';
 import type {
   BiodiversityReport,
   BiodiversityReportDraft,
@@ -32,7 +34,7 @@ export async function createLocalBiodiversityReport(
 }
 
 async function postReport(report: BiodiversityReport): Promise<ServerBiodiversityReport> {
-  const response = await fetch(API, {
+  const response = await fetchWithTimeout(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -47,7 +49,7 @@ async function postReport(report: BiodiversityReport): Promise<ServerBiodiversit
       clientCreatedAt: report.createdAt,
     }),
     cache: 'no-store',
-  });
+  }, 15_000);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = (await response.json()) as { report?: ServerBiodiversityReport };
   if (!data.report) throw new Error('Respuesta incompleta al enviar el reporte.');
@@ -68,23 +70,32 @@ export async function syncBiodiversityReports(): Promise<{
     let current = report;
     if (current.state === 'pending') {
       try {
-        const server = await postReport(current);
-        current = {
-          ...current,
-          state: server.state,
-          serverReceivedAt: server.serverReceivedAt,
-          readAt: server.readAt,
-          attempts: current.attempts + 1,
-          lastError: undefined,
-          updatedAt: nowIso(),
-        };
-        await putBiodiversityReport(current);
-        sent += 1;
+        const latest = await getBiodiversityReport(current.id);
+        if (!latest || latest.state !== 'pending') continue;
+        const server = await postReport(latest);
+        const saved = await getBiodiversityReport(current.id);
+        if (!saved) continue;
+        current = saved;
+        if (saved.state === 'pending') {
+          current = {
+            ...saved,
+            state: server.state,
+            serverReceivedAt: server.serverReceivedAt,
+            readAt: server.readAt,
+            attempts: saved.attempts + 1,
+            lastError: undefined,
+            updatedAt: nowIso(),
+          };
+          await putBiodiversityReport(current);
+          sent += 1;
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Error desconocido';
+        const saved = await getBiodiversityReport(current.id);
+        if (!saved || saved.state !== 'pending') continue;
         await putBiodiversityReport({
-          ...current,
-          attempts: current.attempts + 1,
+          ...saved,
+          attempts: saved.attempts + 1,
           lastError: message,
           updatedAt: nowIso(),
         });
@@ -95,15 +106,17 @@ export async function syncBiodiversityReports(): Promise<{
 
     if (current.state !== 'sent') continue;
     try {
-      const response = await fetch(`${API}/${encodeURIComponent(current.id)}/status`, {
+      const response = await fetchWithTimeout(`${API}/${encodeURIComponent(current.id)}/status`, {
         cache: 'no-store',
-      });
+      }, 15_000);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = (await response.json()) as { report?: ServerBiodiversityReport };
       if (!data.report) throw new Error('Respuesta incompleta al consultar el reporte.');
       if (data.report.state === 'read') {
+        const saved = await getBiodiversityReport(current.id);
+        if (!saved || saved.state !== 'sent') continue;
         await putBiodiversityReport({
-          ...current,
+          ...saved,
           state: 'read',
           readAt: data.report.readAt,
           updatedAt: nowIso(),

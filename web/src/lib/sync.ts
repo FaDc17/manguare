@@ -3,6 +3,20 @@ import { loadSettings } from './settings';
 import { syncBiodiversityReports } from './biodiversity';
 
 export const QUEUE_CHANGED_EVENT = 'manguare:queue-changed';
+const SIMULATION_CACHE = 'settings-manguare';
+const SIMULATION_MARKER = '/__manguare_simulated_offline__';
+
+/** CacheStorage es visible tanto para la página como para el service worker. */
+export async function setWorkerOfflineSimulation(enabled: boolean): Promise<void> {
+  if (typeof caches === 'undefined') return;
+  try {
+    const cache = await caches.open(SIMULATION_CACHE);
+    if (enabled) await cache.put(SIMULATION_MARKER, new Response('1'));
+    else await cache.delete(SIMULATION_MARKER);
+  } catch {
+    // El flujo principal consulta la preferencia local incluso si CacheStorage falla.
+  }
+}
 
 export function isEffectivelyOnline(): boolean {
   if (typeof navigator === 'undefined') return true;
@@ -16,7 +30,7 @@ export function notifyQueueChanged(): void {
 }
 
 export async function requestBackgroundSync(): Promise<void> {
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  if (!isEffectivelyOnline() || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
   try {
     const registration = await navigator.serviceWorker.getRegistration();
     if (!registration) return;

@@ -10,6 +10,8 @@ import {
   mergeServerState,
   pullStatuses,
   resumePendingNow,
+  syncAll,
+  updateAlertDetails,
 } from '../src/lib/queue-core';
 import { isAttemptDue, nextAttemptAt, retryDelayMs } from '../src/lib/retry';
 import type { AlertRecord, ServerAlert } from '../src/lib/types';
@@ -22,6 +24,9 @@ function serverAlert(record: AlertRecord, acknowledged = false): ServerAlert {
     type: record.type,
     note: record.note,
     community: record.community,
+    isSos: record.isSos,
+    photo: record.photo,
+    location: record.location,
     deviceName: record.deviceName,
     consentLocation: record.consentLocation,
     clientCreatedAt: record.createdAt,
@@ -244,4 +249,119 @@ test('una alerta que ya salió del teléfono no se puede anular', async () => {
 
   assert.equal(await cancelAlert(alert.id), null);
   assert.equal((await getAlert(alert.id))?.state, 'sent');
+});
+
+test('un envío confirmado después de anular no queda falsamente anulado', async () => {
+  let started!: () => void;
+  let finish!: (response: Response) => void;
+  const entered = new Promise<void>((resolve) => { started = resolve; });
+  const pendingResponse = new Promise<Response>((resolve) => { finish = resolve; });
+  globalThis.fetch = (async () => { started(); return pendingResponse; }) as typeof fetch;
+  const alert = await createLocalAlert({ type: 'otro', note: '', community: '', deviceName: '', consentLocation: false });
+  const flush = flushQueue(true);
+  await entered;
+  assert.equal((await cancelAlert(alert.id))?.state, 'canceled');
+  finish(new Response(JSON.stringify({ alert: serverAlert(alert) }), { status: 201 }));
+  await flush;
+  assert.equal((await getAlert(alert.id))?.state, 'sent');
+});
+
+test('un fallo de envío no sobrescribe detalles editados durante la solicitud', async () => {
+  let started!: () => void;
+  let fail!: (error: Error) => void;
+  const entered = new Promise<void>((resolve) => { started = resolve; });
+  const pendingResponse = new Promise<Response>((_resolve, reject) => { fail = reject; });
+  globalThis.fetch = (async () => { started(); return pendingResponse; }) as typeof fetch;
+  const alert = await createLocalAlert({ type: 'otro', note: 'Original', community: '', deviceName: '', consentLocation: false });
+  const flush = flushQueue(true);
+  await entered;
+  await updateAlertDetails(alert.id, { note: 'Detalle nuevo', community: 'Comunidad', photo: undefined });
+  fail(new Error('red interrumpida'));
+  await flush;
+  const stored = await getAlert(alert.id);
+  assert.equal(stored?.state, 'pending');
+  assert.equal(stored?.note, 'Detalle nuevo');
+  assert.equal(stored?.community, 'Comunidad');
+});
+
+test('la consulta del servidor conserva una edición local hecha durante la solicitud', async () => {
+  const alert = await createLocalAlert({
+    type: 'otro', isSos: true, note: 'Original', community: '', deviceName: '', consentLocation: false,
+  });
+  globalThis.fetch = (async () => new Response(JSON.stringify({ alert: serverAlert(alert) }), { status: 201 })) as typeof fetch;
+  await flushQueue(true);
+
+  let started!: () => void;
+  let finish!: (response: Response) => void;
+  const entered = new Promise<void>((resolve) => { started = resolve; });
+  const pendingResponse = new Promise<Response>((resolve) => { finish = resolve; });
+  globalThis.fetch = (async () => { started(); return pendingResponse; }) as typeof fetch;
+  const pull = pullStatuses();
+  await entered;
+  await updateAlertDetails(alert.id, { note: 'Edición reciente', community: '', photo: undefined });
+  finish(new Response(JSON.stringify({ alert: serverAlert(alert) }), { status: 200 }));
+  await pull;
+  const stored = await getAlert(alert.id);
+  assert.equal(stored?.note, 'Edición reciente');
+  assert.equal(stored?.detailsPendingSync, true);
+});
+
+test('una segunda edición durante PATCH queda pendiente de sincronizar', async () => {
+  const alert = await createLocalAlert({
+    type: 'otro', isSos: true, note: 'Original', community: '', deviceName: '', consentLocation: false,
+  });
+  globalThis.fetch = (async () => new Response(JSON.stringify({ alert: serverAlert(alert) }), { status: 201 })) as typeof fetch;
+  await flushQueue(true);
+  await updateAlertDetails(alert.id, { note: 'Primera edición', community: '', photo: undefined });
+
+  let started!: () => void;
+  let finish!: (response: Response) => void;
+  const entered = new Promise<void>((resolve) => { started = resolve; });
+  const pendingResponse = new Promise<Response>((resolve) => { finish = resolve; });
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'PATCH') { started(); return pendingResponse; }
+    return new Response(JSON.stringify({ alert: serverAlert(alert) }), { status: 200 });
+  }) as typeof fetch;
+  const sync = syncAll(true);
+  await entered;
+  await updateAlertDetails(alert.id, { note: 'Segunda edición', community: '', photo: undefined });
+  finish(new Response(JSON.stringify({ alert: { ...serverAlert(alert), note: 'Primera edición' } }), { status: 200 }));
+  await sync;
+  const stored = await getAlert(alert.id);
+  assert.equal(stored?.note, 'Segunda edición');
+  assert.equal(stored?.detailsPendingSync, true);
+});
+
+test('un detalle rechazado no aparece como sincronizado', async () => {
+  const alert = await createLocalAlert({
+    type: 'otro', isSos: true, note: 'Original', community: '', deviceName: '', consentLocation: false,
+  });
+  globalThis.fetch = (async () => new Response(JSON.stringify({ alert: serverAlert(alert) }), { status: 201 })) as typeof fetch;
+  await flushQueue(true);
+  await updateAlertDetails(alert.id, { note: 'Detalle pendiente', community: '', photo: undefined });
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'PATCH') return new Response(null, { status: 409 });
+    return new Response(JSON.stringify({ alert: serverAlert(alert, true) }), { status: 200 });
+  }) as typeof fetch;
+  const result = await syncAll(true);
+  assert.equal(result.failed, 1);
+  const stored = await getAlert(alert.id);
+  assert.equal(stored?.note, 'Detalle pendiente');
+  assert.equal(stored?.detailsPendingSync, true);
+  assert.match(stored?.lastError ?? '', /no se puede editar/);
+});
+
+test('un cambio remoto solo de ubicación actualiza la alerta local', async () => {
+  const alert = await createLocalAlert({
+    type: 'otro', note: '', community: '', deviceName: '', consentLocation: false,
+  });
+  const local: AlertRecord = { ...alert, state: 'sent', serverReceivedAt: '2026-11-22T00:00:00.000Z' };
+  const location = { lat: -3.75, lng: -73.25, accuracy: 12, capturedAt: '2026-11-22T00:00:00.000Z' };
+  const server: ServerAlert = {
+    ...serverAlert(local), serverReceivedAt: local.serverReceivedAt!,
+    consentLocation: true, location,
+  };
+  const merged = mergeServerState(local, server, 'sent');
+  assert.equal(merged.consentLocation, true);
+  assert.deepEqual(merged.location, location);
 });

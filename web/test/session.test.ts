@@ -6,6 +6,7 @@ import {
   formatPhone,
   normalizePhone,
   roleLabel,
+  saveProfileName,
 } from '../src/lib/session';
 
 test('acepta los dos accesos de demo con su PIN', () => {
@@ -32,4 +33,20 @@ test('normaliza y formatea el número peruano de 9 dígitos', () => {
 test('etiqueta los roles para la interfaz', () => {
   assert.equal(roleLabel('user'), 'Miembro de la comunidad');
   assert.equal(roleLabel('admin'), 'Administrador de la red');
+});
+
+test('conserva el nombre editado del perfil al volver a iniciar sesión', () => {
+  const entries = new Map<string, string>();
+  const previous = globalThis.localStorage;
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => { entries.set(key, value); },
+  } });
+  try {
+    saveProfileName('992066275', 'María');
+    assert.equal(authenticate('992066275', '123456')?.name, 'María');
+    assert.throws(() => saveProfileName('992066275', '   '));
+  } finally {
+    Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: previous });
+  }
 });

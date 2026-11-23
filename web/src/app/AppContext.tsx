@@ -24,6 +24,7 @@ import {
   QUEUE_CHANGED_EVENT,
   requestBackgroundSync,
   runSync,
+  setWorkerOfflineSimulation,
 } from '../lib/sync';
 import {
   loadSettings,
@@ -91,6 +92,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const syncingRef = useRef(false);
 
   const online = realOnline && !settings.simulateOffline;
+
+  useEffect(() => {
+    void setWorkerOfflineSimulation(settings.simulateOffline);
+  }, [settings.simulateOffline]);
 
   const showToast = useCallback((message: string | Message, tone: ToastTone = 'ok') => {
     setToast({ id: Date.now(), message, tone });

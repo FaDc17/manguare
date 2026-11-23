@@ -65,6 +65,28 @@ export const DEMO_ACCOUNTS: DemoAccount[] = [
 
 const STORAGE_KEY = 'manguare.session.v1';
 const ACCOUNTS_STORAGE_KEY = 'manguare.local-accounts.v1';
+const PROFILE_NAMES_STORAGE_KEY = 'manguare.profile-names.v1';
+
+function profileName(phone: string, fallback: string): string {
+  try {
+    const names = JSON.parse(localStorage.getItem(PROFILE_NAMES_STORAGE_KEY) ?? '{}') as Record<string, unknown>;
+    const saved = names[phone];
+    return typeof saved === 'string' && saved.trim() ? saved : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveProfileName(phone: string, name: string): void {
+  const clean = name.trim();
+  if (!clean || clean.length > 80) throw new Error('El nombre debe tener entre 1 y 80 caracteres.');
+  try {
+    const names = JSON.parse(localStorage.getItem(PROFILE_NAMES_STORAGE_KEY) ?? '{}') as Record<string, unknown>;
+    localStorage.setItem(PROFILE_NAMES_STORAGE_KEY, JSON.stringify({ ...names, [phone]: clean }));
+  } catch {
+    throw new Error('No se pudo guardar el nombre en este teléfono.');
+  }
+}
 
 export function normalizePhone(value: string): string {
   return value.replace(/[^\d]/g, '').slice(0, 15);
@@ -148,7 +170,7 @@ export function authenticate(identifier: string, pin: string): Session | null {
   if (account) {
     return {
       phone: account.phone,
-      name: account.name,
+      name: profileName(account.phone, account.name),
       role: account.role,
       loggedAt: new Date().toISOString(),
     };
@@ -162,7 +184,7 @@ export function authenticate(identifier: string, pin: string): Session | null {
   if (!localAccount) return null;
   return {
     phone: localAccount.phone,
-    name: localAccount.name,
+    name: profileName(localAccount.phone, localAccount.name),
     role: 'user',
     loggedAt: new Date().toISOString(),
     email: localAccount.email,

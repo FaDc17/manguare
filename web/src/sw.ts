@@ -90,6 +90,7 @@ syncTarget.addEventListener('sync', (event) => {
   if (event.tag !== 'manguare-alerts') return;
   event.waitUntil(
     (async () => {
+      if (await caches.match('/__manguare_simulated_offline__')) return;
       const alerts = await syncAll(true);
       const reports = await syncBiodiversityReports();
       const result = {

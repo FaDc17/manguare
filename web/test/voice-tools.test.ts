@@ -2,11 +2,16 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   isExplicitPublicationConfirmation,
+  listingDistanceKm,
+  canReadAdminEmergencies,
+  searchCommunityListings,
   summarizeVoiceListing,
   validateVoiceListing,
+  voiceCapabilities,
   voiceListingFieldSchema,
   type ListingFormValues,
 } from '../src/lib/voice-tools.ts';
+import { COMMUNITY_LISTINGS } from '../src/lib/community.ts';
 
 describe('flujo de publicación por voz', () => {
   const complete: ListingFormValues = {
@@ -49,5 +54,36 @@ describe('flujo de publicación por voz', () => {
     assert.equal(isExplicitPublicationConfirmation('No, cancela.'), false);
     assert.equal(isExplicitPublicationConfirmation('Sí, pero cambia el precio.'), false);
     assert.equal(isExplicitPublicationConfirmation('Tal vez.'), false);
+  });
+});
+
+describe('lectura de la app por voz', () => {
+  it('encuentra publicaciones por producto sin distinguir tildes', () => {
+    const results = searchCommunityListings(COMMUNITY_LISTINGS, 'platano');
+    assert.ok(results.some((item) => item.id === 'yuca-elena'));
+    assert.ok(!results.some((item) => item.id === 'miel-comunidad'));
+    assert.deepEqual(searchCommunityListings(COMMUNITY_LISTINGS, '¿Hay alguien vendiendo plátano cerca de mí?')
+      .map((item) => item.id), ['yuca-elena']);
+  });
+
+  it('limita "cerca de mí" a coordenadas reales y 30 km', () => {
+    const point = { lat: -5.2, lng: -78.31 };
+    const results = searchCommunityListings(COMMUNITY_LISTINGS, 'plátano', point);
+    assert.deepEqual(results.map((item) => item.id), ['yuca-elena']);
+    assert.equal(listingDistanceKm(results[0]!, point), 0);
+    assert.deepEqual(searchCommunityListings(COMMUNITY_LISTINGS, 'plátano', { lat: -12.05, lng: -77.04 }), []);
+  });
+
+  it('limita búsquedas a una localidad cuando se especifica', () => {
+    assert.deepEqual(searchCommunityListings(COMMUNITY_LISTINGS, 'plátano', null, 'Imaza').map((item) => item.id), ['yuca-elena']);
+    assert.deepEqual(searchCommunityListings(COMMUNITY_LISTINGS, 'plátano', null, 'Nieva'), []);
+  });
+
+  it('solo ofrece las emergencias de la red al administrador', () => {
+    assert.ok(!voiceCapabilities('user').includes('consultar_emergencias_del_panel_con_sesion_autenticada'));
+    assert.ok(voiceCapabilities('admin').includes('consultar_emergencias_del_panel_con_sesion_autenticada'));
+    assert.equal(canReadAdminEmergencies('user', true), false);
+    assert.equal(canReadAdminEmergencies('admin', false), false);
+    assert.equal(canReadAdminEmergencies('admin', true), true);
   });
 });

@@ -27,7 +27,7 @@ import {
 } from '../lib/community';
 import { loadUserListings, mergeListings, saveUserListings } from '../lib/social';
 import { syncListings } from '../lib/social-sync';
-import type { CommunityVoiceController } from '../lib/voice-tools';
+import { listingDistanceKm, searchCommunityListings, type CommunityVoiceController } from '../lib/voice-tools';
 import type { ListingFormController } from '../lib/voice-tools';
 import type { BiodiversityCategory } from '../lib/types';
 
@@ -204,10 +204,13 @@ export function CommunityScreen({
   onVoiceControllerReady: (controller: CommunityVoiceController | null) => void;
 }) {
   const { t } = useTranslation();
-  const { showToast } = useApp();
+  const { showToast, online } = useApp();
   const [category, setCategory] = useState<string>('todos');
   const [view, setView] = useState<View>('home');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [voiceNear, setVoiceNear] = useState<{ lat: number; lng: number } | null>(null);
+  const [voiceCommunity, setVoiceCommunity] = useState('');
   const [department, setDepartment] = useState('');
   const [province, setProvince] = useState('');
   const [district, setDistrict] = useState('');
@@ -222,10 +225,12 @@ export function CommunityScreen({
 
   useEffect(() => {
     let alive = true;
+    let latestRequest = 0;
     const run = async () => {
-      if (!navigator.onLine) return;
+      if (!online) return;
+      const request = ++latestRequest;
       const { server } = await syncListings(session.phone, listingsRef.current);
-      if (!alive || !server) return;
+      if (!alive || request !== latestRequest || !server) return;
       setUserListings((previous) => {
         const next = mergeListings(previous, server);
         saveUserListings(next);
@@ -240,7 +245,7 @@ export function CommunityScreen({
       window.clearInterval(timer);
       window.removeEventListener('online', run);
     };
-  }, [session.phone, pendingListings]);
+  }, [session.phone, pendingListings, online]);
   const allListings = useMemo(
     () => [...userListings, ...COMMUNITY_LISTINGS],
     [userListings],
@@ -262,13 +267,16 @@ export function CommunityScreen({
     () =>
       allListings.filter(
         (item) =>
+          (!searchTerm.trim() || searchCommunityListings([item], searchTerm, voiceNear, voiceCommunity).length > 0) &&
           (category === 'todos' || item.category === category) &&
           (view !== 'all' || !department || item.department === department) &&
           (view !== 'all' || !province || item.province === province) &&
           (view !== 'all' || !district || item.district === district) &&
           (view !== 'all' || !community || item.community === community),
-      ),
-    [allListings, category, community, department, district, province, view],
+      ).sort((left, right) => voiceNear
+        ? (listingDistanceKm(left, voiceNear) ?? Infinity) - (listingDistanceKm(right, voiceNear) ?? Infinity)
+        : 0),
+    [allListings, category, community, department, district, province, view, searchTerm, voiceNear, voiceCommunity],
   );
   const selectedListing = allListings.find((item) => item.id === selectedId);
 
@@ -277,19 +285,45 @@ export function CommunityScreen({
       showHome: () => {
         setSelectedId(null);
         setView('home');
+        setSearchTerm('');
+        setVoiceNear(null);
+        setVoiceCommunity('');
       },
       openListingForm: () => {
         setSelectedId(null);
         setView('home');
         setCategory('todos');
+        setSearchTerm('');
         publishFormRef.current?.resetForVoice();
         setPublishOpen(true);
       },
       getListingForm: () => publishFormRef.current,
+      searchListings: (query, near, localCommunity) => {
+        const matches = searchCommunityListings(allListings, query, near, localCommunity);
+        setPublishOpen(false);
+        setSelectedId(null);
+        setView('all');
+        setCategory('todos');
+        setDepartment('');
+        setProvince('');
+        setDistrict('');
+        setCommunity('');
+        setSearchTerm(query);
+        setVoiceNear(near ?? null);
+        setVoiceCommunity(localCommunity ?? '');
+        return matches;
+      },
+      openListing: (id) => {
+        if (!allListings.some((item) => item.id === id)) return false;
+        setPublishOpen(false);
+        setSelectedId(id);
+        setView('detail');
+        return true;
+      },
     };
     onVoiceControllerReady(controller);
     return () => onVoiceControllerReady(null);
-  }, [onVoiceControllerReady]);
+  }, [onVoiceControllerReady, allListings]);
 
   if (view === 'detail' && selectedListing) {
     return (
@@ -307,7 +341,9 @@ export function CommunityScreen({
   return (
     <div className="screen community" data-testid="community-screen">
       {view === 'all' ? (
-        <SubHeader title={t('community.todasLasPublicaciones')} onBack={() => setView('home')} />
+        <SubHeader title={t('community.todasLasPublicaciones')} onBack={() => {
+          setView('home'); setSearchTerm(''); setVoiceNear(null); setVoiceCommunity('');
+        }} />
       ) : (
         <header className="screen-head">
           <div>
@@ -371,6 +407,20 @@ export function CommunityScreen({
         </>
       ) : (
         <section className="listing-filters" aria-label={t('community.filtrarPublicacionesPorUbicacion')}>
+          <label>
+            {t('listing.buscarPublicaciones')}
+            <input
+              type="search"
+              data-testid="listing-search"
+              value={searchTerm}
+              placeholder={t('listing.buscarProductoServicio')}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setVoiceNear(null);
+                setVoiceCommunity('');
+              }}
+            />
+          </label>
           <label>
             {t('community.departamento')}
             <select

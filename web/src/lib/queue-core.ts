@@ -1,4 +1,5 @@
 import { getAlert, getAllAlerts, putAlert } from './db';
+import { fetchWithTimeout } from './fetch-timeout';
 import { isAttemptDue, nextAttemptAt } from './retry';
 import type {
   AlertDraft,
@@ -118,7 +119,10 @@ export function mergeServerState(
       (server.note !== local.note ||
         server.community !== local.community ||
         server.photo !== local.photo)) ||
-    server.isSos !== local.isSos;
+    server.isSos !== local.isSos ||
+    (!pendingDetails &&
+      (server.consentLocation !== local.consentLocation ||
+        JSON.stringify(server.location) !== JSON.stringify(local.location)));
 
   if (!changed) return local;
 
@@ -138,19 +142,18 @@ export function mergeServerState(
     escalatedAt: server.escalatedAt,
     responses: server.responses,
     updatedAt: nowIso(),
-    lastError: undefined,
+    lastError: pendingDetails ? local.lastError : undefined,
     nextAttemptAt: undefined,
   };
 }
 
 async function postAlert(alert: AlertRecord): Promise<ServerAlert> {
-  const response = await fetch(`${API}/alerts`, {
+  const response = await fetchWithTimeout(`${API}/alerts`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(toServerPayload(alert)),
     cache: 'no-store',
-    signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined,
-  });
+  }, 15_000);
 
   if (!response.ok) {
     let detail = '';
@@ -181,15 +184,26 @@ async function doFlush(force: boolean): Promise<SyncResult> {
   for (const alert of pending) {
     const attemptedAt = nowIso();
     try {
-      const server = await postAlert(alert);
-      const current = (await getAlert(alert.id)) ?? alert;
+      const latest = await getAlert(alert.id);
+      if (!latest || latest.state !== 'pending') continue;
+      const server = await postAlert(latest);
+      const current = await getAlert(alert.id);
+      if (!current) {
+        sent += 1;
+        continue;
+      }
       const serverHasLatestDetails =
         server.note === current.note &&
         server.community === current.community &&
         server.photo === current.photo &&
         server.consentLocation === current.consentLocation &&
         JSON.stringify(server.location) === JSON.stringify(current.location);
-      const merged = mergeServerState(current, server, 'sent');
+      // Si se anuló durante la solicitud, el servidor confirma que sí llegó.
+      const merged = mergeServerState(
+        current.state === 'canceled' ? { ...current, state: 'pending' } : current,
+        server,
+        'sent',
+      );
       await putAlert({
         ...merged,
         detailsPendingSync: !serverHasLatestDetails,
@@ -201,9 +215,14 @@ async function doFlush(force: boolean): Promise<SyncResult> {
       sent += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Error desconocido';
-      const attempts = alert.attempts + 1;
+      const current = await getAlert(alert.id);
+      if (!current || current.state !== 'pending') {
+        failed += 1;
+        continue;
+      }
+      const attempts = current.attempts + 1;
       await putAlert({
-        ...alert,
+        ...current,
         attempts,
         lastAttemptAt: attemptedAt,
         nextAttemptAt: nextAttemptAt(attempts),
@@ -246,10 +265,9 @@ export async function resumePendingNow(): Promise<void> {
 }
 
 async function getServerAlert(id: string): Promise<ServerAlert | null> {
-  const response = await fetch(`${API}/alerts/${encodeURIComponent(id)}`, {
+  const response = await fetchWithTimeout(`${API}/alerts/${encodeURIComponent(id)}`, {
     cache: 'no-store',
-    signal: typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(15000) : undefined,
-  });
+  }, 15_000);
   if (response.status === 404) return null;
   if (!response.ok) throw new HttpError(response.status, '');
   const data = (await response.json()) as { alert?: ServerAlert };
@@ -271,8 +289,10 @@ export async function pullStatuses(): Promise<number> {
     try {
       const server = await getServerAlert(local.id);
       if (!server) continue;
-      const merged = mergeServerState(local, server, 'sent');
-      if (merged !== local) {
+      const current = await getAlert(local.id);
+      if (!current || current.state === 'canceled') continue;
+      const merged = mergeServerState(current, server, 'sent');
+      if (merged !== current) {
         await putAlert(merged);
         updated += 1;
       }
@@ -285,14 +305,14 @@ export async function pullStatuses(): Promise<number> {
 
 export async function syncAll(force = false): Promise<SyncResult & { updated: number }> {
   const result = await flushQueue(force);
-  await flushPendingDetails();
+  const failedDetails = await flushPendingDetails();
   let updated = 0;
   try {
     updated = await pullStatuses();
   } catch {
     // Sin conexión estable: se reintentará en el próximo ciclo.
   }
-  return { ...result, updated };
+  return { ...result, failed: result.failed + failedDetails, updated };
 }
 
 export async function updateAlertDetails(
@@ -317,13 +337,14 @@ export async function updateAlertDetails(
   return updated;
 }
 
-async function flushPendingDetails(): Promise<void> {
+async function flushPendingDetails(): Promise<number> {
   const pending = (await getAllAlerts()).filter(
     (alert) => alert.detailsPendingSync && alert.serverReceivedAt,
   );
+  let failed = 0;
   for (const alert of pending) {
     try {
-      const response = await fetch(`${API}/alerts/${encodeURIComponent(alert.id)}`, {
+      const response = await fetchWithTimeout(`${API}/alerts/${encodeURIComponent(alert.id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -335,17 +356,28 @@ async function flushPendingDetails(): Promise<void> {
           photo: alert.photo,
         }),
         cache: 'no-store',
-      });
+      }, 15_000);
       if (!response.ok) throw new HttpError(response.status, '');
       const data = (await response.json()) as { alert?: ServerAlert };
       if (!data.alert) throw new Error('Respuesta del servidor incompleta');
-      const merged = mergeServerState(alert, data.alert, alert.state);
-      await putAlert({ ...merged, detailsPendingSync: false });
+      const current = await getAlert(alert.id);
+      if (!current) continue;
+      const editedAgain =
+        current.note !== alert.note ||
+        current.community !== alert.community ||
+        current.photo !== alert.photo ||
+        current.consentLocation !== alert.consentLocation ||
+        JSON.stringify(current.location) !== JSON.stringify(alert.location);
+      const merged = mergeServerState(current, data.alert, current.state);
+      await putAlert({ ...merged, detailsPendingSync: editedAgain });
     } catch (error) {
+      failed += 1;
       if (error instanceof HttpError && (error.status === 403 || error.status === 409)) {
+        const current = await getAlert(alert.id);
+        if (!current) continue;
         await putAlert({
-          ...alert,
-          detailsPendingSync: false,
+          ...current,
+          detailsPendingSync: true,
           lastError:
             error.status === 409
               ? 'La red ya confirmó la alerta; no se puede editar.'
@@ -356,6 +388,7 @@ async function flushPendingDetails(): Promise<void> {
       // Los errores de red se reintentan en el próximo ciclo.
     }
   }
+  return failed;
 }
 
 /**
