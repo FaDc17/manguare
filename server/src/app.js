@@ -4,6 +4,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRateLimiter } from './auth.js';
+import { buildStatistics, demoStatisticsAlerts, limaDate, readPeriod } from './statistics.js';
+import { statisticsXlsx } from './statistics-xlsx.js';
 
 const TYPES = new Set(['enfermedad', 'accidente', 'mordedura', 'parto', 'otro']);
 const BIODIVERSITY_CATEGORIES = new Set([
@@ -528,6 +530,50 @@ export function createHandler({
           });
           return;
         }
+
+      if (pathname === '/api/panel/statistics' || pathname === '/api/panel/statistics/export') {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        if (!auth?.enabled) {
+          sendJson(res, 403, { error: 'protected_panel_required' });
+          return;
+        }
+        if (!sessionFor(req)) {
+          sendJson(res, 401, { error: 'authentication_required' });
+          return;
+        }
+        const generatedAt = new Date(now());
+        const period = readPeriod(url.searchParams, generatedAt);
+        if (!period) {
+          sendJson(res, 400, { error: 'invalid_period' });
+          return;
+        }
+        const demoAvailable = process.env.MANGUARE_STATS_DEMO === '1' && process.env.NODE_ENV !== 'production';
+        const demo = url.searchParams.get('demo') === '1';
+        if (demo && !demoAvailable) {
+          sendJson(res, 403, { error: 'demo_unavailable' });
+          return;
+        }
+        const report = buildStatistics(demo ? demoStatisticsAlerts(generatedAt) : await store.list(), period);
+        report.demo = demo;
+        if (pathname.endsWith('/export')) {
+          const workbook = statisticsXlsx(report, generatedAt);
+          res.writeHead(200, {
+            ...SECURITY_HEADERS,
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': `attachment; filename="Manguare_${demo ? 'DEMO_' : ''}Informe_Emergencias_${limaDate(generatedAt.toISOString())}.xlsx"`,
+            'Content-Length': workbook.length,
+            'Cache-Control': 'no-store',
+          });
+          res.end(workbook);
+        } else {
+          const { detail, ...summary } = report;
+          sendJson(res, 200, { ...summary, demoAvailable });
+        }
+        return;
+      }
 
       if (pathname === '/api/panel/session') {
         if (req.method !== 'GET') {

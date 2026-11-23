@@ -208,6 +208,21 @@ npm start
 El panel pide usuario (`salud` por defecto) y contraseña. Sin esa variable el
 panel queda en modo demostración, abierto, y el servidor lo advierte al arrancar.
 
+### Estadísticas e Informes
+
+Con el panel protegido, abre `/panel` e inicia sesión. La sección aparece debajo
+del listado de emergencias. Selecciona últimos 7 días, últimos 30 días, mes actual
+o un rango personalizado; el botón **Exportar informe Excel** descarga un `.xlsx`
+con el mismo periodo. Se cuenta la llegada al servidor en hora de Perú; las alertas
+que siguen solo en el teléfono no forman parte de las estadísticas. El informe
+contiene resumen, detalle sin datos personales ni GPS, y estadísticas mensuales.
+
+Para una demostración aislada, define `MANGUARE_STATS_DEMO=1` al iniciar el servidor
+en un entorno distinto de producción y usa **Mostrar datos DEMO** en la sección.
+Esta muestra se genera en memoria: no se guarda como alerta, no cambia los
+contadores reales y sus archivos Excel indican que contienen información ficticia.
+La opción se desactiva automáticamente con `NODE_ENV=production`.
+
 ### Docker
 
 ```bash
@@ -228,6 +243,7 @@ Los datos quedan en el volumen `manguare-data`. La guía completa está en
 | `MANGUARE_STATIC_DIR` | `web/dist` | Web compilada |
 | `MANGUARE_LOG` | activo | `MANGUARE_LOG=0` silencia el log por petición |
 | `MANGUARE_PANEL_PASSWORD` | vacío | Si se define, el panel exige login |
+| `MANGUARE_STATS_DEMO` | `0` | `1` habilita una muestra ficticia solo fuera de producción y con panel protegido |
 | `MANGUARE_PANEL_USER` | `salud` | Usuario del panel |
 | `MANGUARE_SESSION_SECRET` | aleatorio | Fija un secreto para conservar sesiones al reiniciar |
 | `MANGUARE_SESSION_HOURS` | `12` | Duración de la sesión del panel |
