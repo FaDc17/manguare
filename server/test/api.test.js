@@ -87,6 +87,62 @@ function biodiversityPayload(overrides = {}) {
   };
 }
 
+test('la API permite el origen exacto de Capacitor sin abrir CORS a otros sitios', async () => {
+  const preflight = await fetch(`${base}/api/alerts`, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'https://localhost',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type',
+    },
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://localhost');
+  assert.match(preflight.headers.get('access-control-allow-methods') ?? '', /POST/);
+  const native = await fetch(`${base}/api/health`, { headers: { Origin: 'https://localhost' } });
+  assert.equal(native.headers.get('access-control-allow-origin'), 'https://localhost');
+  const localNative = await fetch(`${base}/api/health`, { headers: { Origin: 'http://localhost' } });
+  assert.equal(localNative.headers.get('access-control-allow-origin'), 'http://localhost');
+  const localPreflight = await fetch(`${base}/api/gemini/token`, {
+    method: 'OPTIONS',
+    headers: { Origin: 'http://localhost', 'Access-Control-Request-Method': 'POST' },
+  });
+  assert.equal(localPreflight.status, 204);
+  assert.equal(localPreflight.headers.get('access-control-allow-origin'), 'http://localhost');
+  const other = await fetch(`${base}/api/health`, { headers: { Origin: 'https://otro.example' } });
+  assert.equal(other.headers.get('access-control-allow-origin'), null);
+});
+
+test('el APK recibe un token temporal de Gemini desde el servidor sin exponer la clave', async () => {
+  const secret = 'AIza-clave-de-prueba-no-real-123456789';
+  let providerRequest;
+  const tokenServer = http.createServer(createHandler({
+    store: new AlertStore(path.join(directory, 'gemini-alerts.json')),
+    staticDir: directory,
+    geminiApiKey: secret,
+    geminiFetch: async (url, options) => {
+      providerRequest = { url, options };
+      return new Response(JSON.stringify({ name: 'auth_tokens/temporal-test' }), { status: 200 });
+    },
+  }));
+  await new Promise((resolve) => tokenServer.listen(0, '127.0.0.1', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${tokenServer.address().port}/api/gemini/token`, {
+      method: 'POST', headers: { Origin: 'https://localhost' },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('access-control-allow-origin'), 'https://localhost');
+    const data = await response.json();
+    assert.deepEqual(data, { token: 'auth_tokens/temporal-test', model: 'gemini-3.8-live' });
+    assert.equal(providerRequest.url, 'https://generativelanguage.googleapis.com/v1beta/auth_tokens');
+    assert.equal(providerRequest.options.headers['x-goog-api-key'], secret);
+    assert.equal(JSON.parse(providerRequest.options.body).uses, 1);
+    assert.ok(!JSON.stringify(data).includes(secret));
+  } finally {
+    await new Promise((resolve) => tokenServer.close(resolve));
+  }
+});
+
 test('crea una alerta y es idempotente por id', async () => {
   const first = await postAlert(payload());
   assert.equal(first.response.status, 201);

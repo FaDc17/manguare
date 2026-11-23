@@ -21,6 +21,7 @@ import { createHandler } from '../server/src/app.js';
 import { createAuth } from '../server/src/auth.js';
 import { BiodiversityStore } from '../server/src/biodiversity-store.js';
 import { AlertStore } from '../server/src/store.js';
+import { SocialStore } from '../server/src/social-store.js';
 
 process.env.MANGUARE_LOG = '0';
 
@@ -215,6 +216,7 @@ async function main() {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'manguare-e2e-'));
   const store = new AlertStore(path.join(directory, 'alerts.json'));
   const biodiversityStore = new BiodiversityStore(path.join(directory, 'biodiversity.json'));
+  const socialStore = new SocialStore(path.join(directory, 'social.json'));
   const dniSample = path.join(directory, 'dni-demo.png');
   await fs.writeFile(
     dniSample,
@@ -229,7 +231,7 @@ async function main() {
     user: 'salud',
     secret: Buffer.from('secreto-e2e'),
   });
-  const server = http.createServer(createHandler({ store, biodiversityStore, staticDir, auth }));
+  const server = http.createServer(createHandler({ store, biodiversityStore, socialStore, staticDir, auth }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -720,6 +722,66 @@ async function main() {
         id,
       );
     };
+    const capabilities = await emitVoiceTool('voice-capabilities', 'get_app_capabilities');
+    assert.equal(capabilities.success, true);
+    assert.ok(capabilities.modules.some((module) => module.id === 'mapa' && module.available));
+    const places = await emitVoiceTool('voice-map-hospital', 'get_map_places', { query: 'hospitales' });
+    assert.equal(places.success, true);
+    assert.deepEqual(places.places.map((item) => item.id), ['hospital-santa-maria']);
+    assert.equal(places.demo, true);
+    await app.click('[data-testid="map-filter-support"]');
+    const filteredPlaces = await emitVoiceTool('voice-map-filtered', 'get_map_places', { query: 'hospitales' });
+    assert.equal(filteredPlaces.count, 0);
+    await app.click('[data-testid="map-filter-support"]');
+    const restoredPlaces = await emitVoiceTool('voice-map-restored', 'get_map_places', { query: 'hospitales' });
+    assert.equal(restoredPlaces.count, 1);
+    const openedPlace = await emitVoiceTool('voice-map-open', 'open_map_place', { placeId: 'hospital-santa-maria' });
+    assert.equal(openedPlace.verified, true);
+    const languages = await emitVoiceTool('voice-languages', 'get_language_options');
+    assert.equal(languages.active, 'es');
+    assert.ok(languages.languages.some((option) => option.id === 'agr'));
+    const unsolicitedLanguage = await emitVoiceTool('voice-language-unsolicited', 'set_app_language', { language: 'agr' });
+    assert.equal(unsolicitedLanguage.success, false);
+    const unsolicitedGps = await emitVoiceTool('voice-gps-unsolicited', 'get_device_location');
+    assert.equal(unsolicitedGps.success, false);
+    const invalidLanguage = await emitVoiceTool('voice-language-invalid', 'set_app_language', { language: 'en' });
+    assert.equal(invalidLanguage.success, false);
+    await app.evaluate(() => window.__geminiMock.emit({
+      serverContent: { inputTranscription: { text: 'Cambia el idioma a awajún', finished: true } },
+    }));
+    const changedLanguage = await emitVoiceTool('voice-language-change', 'set_app_language', { language: 'agr' });
+    assert.equal(changedLanguage.success, true);
+    assert.equal(JSON.parse(await app.evaluate(() => localStorage.getItem('manguare.settings.v1'))).language, 'agr');
+    await app.evaluate(() => window.__geminiMock.emit({
+      serverContent: { inputTranscription: { text: 'Cambia el idioma a español', finished: true } },
+    }));
+    assert.equal((await emitVoiceTool('voice-language-restore', 'set_app_language', { language: 'es' })).success, true);
+    await app.evaluate(() => window.__geminiMock.emit({
+      serverContent: { inputTranscription: { text: 'Muéstrame mi ubicación GPS', finished: true } },
+    }));
+    await app.browserContext().overridePermissions(base, ['microphone']);
+    const deniedLocation = await emitVoiceTool('voice-device-gps-denied', 'get_device_location');
+    assert.equal(deniedLocation.success, false);
+    await app.browserContext().overridePermissions(base, ['microphone', 'geolocation']);
+    const deviceLocation = await emitVoiceTool('voice-device-gps', 'get_device_location');
+    assert.equal(deviceLocation.success, true);
+    assert.equal(deviceLocation.latitude, -5.15);
+    const emergencyOptions = await emitVoiceTool('voice-emergency-options', 'get_emergency_options');
+    assert.ok(emergencyOptions.types.some((item) => item.id === 'mordedura'));
+    const environmentTopics = await emitVoiceTool('voice-environment-topics', 'get_environment_topics');
+    assert.ok(environmentTopics.categories.includes('Tala ilegal'));
+    const matchProfiles = await emitVoiceTool('voice-match-profiles', 'get_match_profiles', { role: 'productor' });
+    assert.ok(matchProfiles.profiles.length > 0);
+    assert.equal(matchProfiles.demo, true);
+    const helpContacts = await emitVoiceTool('voice-help-contacts', 'get_help_contacts');
+    assert.ok(helpContacts.contacts.some((item) => item.number === '106'));
+    const wallPosts = await emitVoiceTool('voice-wall-posts', 'search_wall_posts', { query: '' });
+    assert.equal(wallPosts.success, true);
+    assert.equal(wallPosts.source, 'server');
+    const catalog = await emitVoiceTool('voice-community-catalog', 'get_community_catalog');
+    assert.equal(catalog.success, true);
+    assert.equal(catalog.source, 'server');
+    assert.ok(catalog.categories.some((item) => item.id === 'alimentos'));
     await app.evaluate(() => window.__geminiMock.emit({
       serverContent: { inputTranscription: { text: 'Quiero vender una mochila', finished: true } },
     }));
@@ -757,6 +819,9 @@ async function main() {
     assert.equal(incomplete.valid, false);
     assert.deepEqual(incomplete.missingRequiredFields, ['location', 'description']);
 
+    await app.evaluate(() => window.__geminiMock.emit({
+      serverContent: { inputTranscription: { text: 'Usa mi ubicación GPS para la publicación', finished: true } },
+    }));
     const gpsResult = await emitVoiceTool('voice-use-gps', 'use_current_location');
     assert.equal(gpsResult.success, true);
     assert.ok(gpsResult.coordinates.accuracy >= 0);
@@ -943,6 +1008,61 @@ async function main() {
 
     await checkLanguages(app);
     results.languagesOfflineAndPersisted = true;
+
+    // El APK sin servidor debe orientar a Ajustes antes de pedir micrófono.
+    const simulatedAndroid = await app.evaluate(() => {
+      window.androidBridge = {};
+      return window.Capacitor?.isNativePlatform();
+    });
+    assert.equal(simulatedAndroid, true);
+    await app.click('[data-testid="nav-network"]');
+    await app.click('[data-testid="net-tab-agent"]');
+    await app.click('[data-testid="net-open-voice"]');
+    await app.click('.voice-start');
+    await app.waitForSelector('[data-testid="voice-configure-server"]', { visible: true });
+    assert.ok((await app.$eval('.voice-error', (item) => item.textContent)).includes('URL del servidor'));
+    await app.click('[data-testid="voice-configure-server"]');
+    await app.waitForSelector('[data-testid="settings-native-server-url"]');
+    assert.equal(await app.$eval('[data-testid="app-screen"]', (item) => item.dataset.screen), 'settings');
+    await app.evaluate(() => document.querySelector('.toast button')?.click());
+    await app.type('[data-testid="settings-native-server-url"]', 'http://localhost:8787');
+    await app.evaluate(() => document.activeElement?.blur());
+    await app.tap('[data-testid="settings-server-check"]');
+    await app.waitForFunction(() => document.querySelector('.setting-server-check [role="alert"]')?.textContent?.includes('IP privada'),
+      { timeout: 5000 });
+    assert.equal(await app.evaluate(() => localStorage.getItem('manguare.nativeApiBase')), null);
+    const localMvp = (await app.$eval('[data-testid="settings-native-server-url"]', (item) => item.placeholder))
+      .startsWith('http://');
+    const serverBase = localMvp ? 'http://192.168.1.10:8787' : 'https://manguare-test.example';
+    await app.click('[data-testid="settings-native-server-url"]');
+    await app.keyboard.down('Control');
+    await app.keyboard.press('A');
+    await app.keyboard.up('Control');
+    await app.type('[data-testid="settings-native-server-url"]', serverBase);
+    await app.evaluate(() => document.activeElement?.blur());
+    await app.evaluate((serverBase) => {
+      const nativeFetch = window.fetch.bind(window);
+      window.fetch = (input, init) => {
+        const url = String(input);
+        if (url === `${serverBase}/api/health`) {
+          return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+        }
+        if (url === `${serverBase}/api/gemini/token`) {
+          return Promise.resolve(new Response(JSON.stringify({
+            token: 'auth_tokens/test', model: 'gemini-3.8-live',
+          }), { status: 200 }));
+        }
+        if (url.startsWith(`${serverBase}/api/`)) {
+          return Promise.resolve(new Response(JSON.stringify({ alerts: [], posts: [], listings: [] }), { status: 200 }));
+        }
+        return nativeFetch(input, init);
+      };
+    }, serverBase);
+    await app.tap('[data-testid="settings-server-check"]');
+    await app.waitForFunction(() => document.querySelector('.setting-server-check [role="status"]')?.textContent?.includes('Servidor y Gemini listos'),
+      { timeout: 10000 });
+    assert.equal(await app.evaluate(() => localStorage.getItem('manguare.nativeApiBase')), serverBase);
+    results.nativeGeminiSetupGuidance = true;
 
     console.log('\nE2E OK');
     console.log(JSON.stringify(results, null, 2));

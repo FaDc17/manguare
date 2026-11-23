@@ -2446,6 +2446,27 @@
   margin-left: 48px;
 }
 
+.setting-server-check {
+  display: grid;
+  gap: 8px;
+  padding: 0 13px 13px 61px;
+  border-bottom: 1px solid var(--line);
+}
+
+.setting-server-check .btn {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.setting-server-check p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.setting-server-ok {
+  color: var(--green-700);
+}
+
 .settings-note {
   display: flex;
   align-items: flex-start;

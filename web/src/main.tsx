@@ -1,6 +1,7 @@
 // Inicia la aplicación y activa los textos simulados en la compilación beta visual.
 
 import { StrictMode } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { Splash } from './components/Splash';
@@ -26,7 +27,7 @@ createRoot(rootElement).render(
   </StrictMode>,
 );
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if (!Capacitor.isNativePlatform() && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/sw.js').catch(() => {
       // Sin service worker la app sigue funcionando en primer plano.

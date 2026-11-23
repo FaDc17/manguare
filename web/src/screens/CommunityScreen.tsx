@@ -26,7 +26,7 @@ import {
   type CommunityListing,
 } from '../lib/community';
 import { loadUserListings, mergeListings, saveUserListings } from '../lib/social';
-import { syncListings } from '../lib/social-sync';
+import { readRemoteListings, syncListings } from '../lib/social-sync';
 import { listingDistanceKm, searchCommunityListings, type CommunityVoiceController } from '../lib/voice-tools';
 import type { ListingFormController } from '../lib/voice-tools';
 import type { BiodiversityCategory } from '../lib/types';
@@ -281,6 +281,7 @@ export function CommunityScreen({
   const selectedListing = allListings.find((item) => item.id === selectedId);
 
   useEffect(() => {
+    const currentListings = () => [...listingsRef.current, ...COMMUNITY_LISTINGS];
     const controller: CommunityVoiceController = {
       showHome: () => {
         setSelectedId(null);
@@ -298,8 +299,19 @@ export function CommunityScreen({
         setPublishOpen(true);
       },
       getListingForm: () => publishFormRef.current,
+      getListings: currentListings,
+      refreshListings: async (signal) => {
+        if (!online) return 'cache';
+        const server = await readRemoteListings(session.phone, signal);
+        if (!server || signal?.aborted) return 'cache';
+        const next = mergeListings(listingsRef.current, server);
+        listingsRef.current = next;
+        saveUserListings(next);
+        setUserListings(next);
+        return 'server';
+      },
       searchListings: (query, near, localCommunity) => {
-        const matches = searchCommunityListings(allListings, query, near, localCommunity);
+        const matches = searchCommunityListings(currentListings(), query, near, localCommunity);
         setPublishOpen(false);
         setSelectedId(null);
         setView('all');
@@ -314,7 +326,7 @@ export function CommunityScreen({
         return matches;
       },
       openListing: (id) => {
-        if (!allListings.some((item) => item.id === id)) return false;
+        if (!currentListings().some((item) => item.id === id)) return false;
         setPublishOpen(false);
         setSelectedId(id);
         setView('detail');
@@ -323,7 +335,7 @@ export function CommunityScreen({
     };
     onVoiceControllerReady(controller);
     return () => onVoiceControllerReady(null);
-  }, [onVoiceControllerReady, allListings]);
+  }, [onVoiceControllerReady, online, session.phone]);
 
   if (view === 'detail' && selectedListing) {
     return (

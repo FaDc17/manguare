@@ -309,6 +309,12 @@ no muestra alertas ni ubicaciones de emergencia.
 
 ### Instalar en el teléfono
 
+Para generar un APK Android con Capacitor para el MVP local, ejecuta
+`npm run android:apk`. El archivo queda en
+`android/app/build/outputs/apk/debug/app-debug.apk`. El APK se conecta por Wi-Fi
+al servidor Node del PC mediante su IP privada. La guía de configuración está en
+[`docs/ANDROID.md`](docs/ANDROID.md).
+
 La app es una PWA instalable. En Android/Chrome abre el menú → **Instalar app**.
 El service worker exige contexto seguro: funciona en `localhost` o por HTTPS.
 Si abres la IP de la LAN por HTTP, la app funciona mientras la pestaña siga

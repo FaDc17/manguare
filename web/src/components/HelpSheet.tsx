@@ -4,12 +4,8 @@ import { useTranslation } from '../i18n/LanguageContext';
 import { Phone, Radio } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { Sheet } from './Sheet';
+import { HELP_CONTACTS } from '../lib/help-contacts';
 
-const NUMBERS = [
-  { number: '106', label: 'helpSheet.samu', detail: 'helpSheet.healthEmergencies' },
-  { number: '116', label: 'helpSheet.firefighters', detail: 'helpSheet.fireRescue' },
-  { number: '105', label: 'helpSheet.police', detail: 'helpSheet.safety' },
-] as const;
 
 export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useTranslation();
@@ -36,7 +32,7 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
             <span className="help-number">{healthPhone}</span>
           </a>
         ) : null}
-        {NUMBERS.map((item) => (
+        {HELP_CONTACTS.map((item) => (
           <a key={item.number} className="help-item" href={`tel:${item.number}`}>
             <span className="help-icon">
               <Phone size={19} aria-hidden="true" />

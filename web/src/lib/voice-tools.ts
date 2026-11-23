@@ -34,6 +34,8 @@ export interface CommunityVoiceController {
   showHome(): void;
   openListingForm(): void;
   getListingForm(): ListingFormController | null;
+  getListings(): CommunityListing[];
+  refreshListings(signal?: AbortSignal): Promise<'server' | 'cache'>;
   searchListings(query: string, near?: { lat: number; lng: number } | null, community?: string): CommunityListing[];
   openListing(id: string): boolean;
 }
@@ -41,6 +43,20 @@ export interface CommunityVoiceController {
 export function normalizeSearch(value: string): string {
   return value.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/** Evita usar GPS por una llamada espontánea del modelo. */
+export function hasExplicitLocationIntent(utterance: string): boolean {
+  const normalized = normalizeSearch(utterance);
+  return /\b(gps|ubicacion|localizacion|geolocalizacion|donde estoy|donde me encuentro|cerca de mi|cercano a mi|cercanos a mi|mi posicion|desde aqui|por aqui|a mi alrededor|encuentrame|ubicame)\b/.test(normalized);
+}
+
+/** El idioma se modifica únicamente si el último turno pide ese cambio. */
+export function hasExplicitLanguageIntent(utterance: string): boolean {
+  const normalized = normalizeSearch(utterance);
+  const target = /\b(idioma|lengua|espanol|awajun|shawi|ashaninka)\b/.test(normalized);
+  const action = /\b(cambia|cambiar|pon|poner|configura|configurar|selecciona|seleccionar|quiero|usa|usar|habla|hablar|pasar|pasa)\b/.test(normalized);
+  return target && action;
 }
 
 export function listingDistanceKm(listing: CommunityListing, point: { lat: number; lng: number }): number | null {
@@ -82,12 +98,12 @@ export function searchCommunityListings(
     : 0);
 }
 
-export function voiceCapabilities(role: SessionRole): string[] {
+export function voiceCapabilities(role: SessionRole, native = false): string[] {
   return [
     'navegar', 'leer_pantalla_actual', 'buscar_publicaciones', 'ver_publicacion', 'leer_muro',
     'consultar_mis_alertas', 'consultar_reportes_ambientales',
     'leer_perfil_y_ajustes', 'editar_nombre_y_ajustes', 'crear_publicacion',
-    ...(role === 'admin' ? ['consultar_emergencias_del_panel_con_sesion_autenticada'] : []),
+    ...(role === 'admin' && !native ? ['consultar_emergencias_del_panel_con_sesion_autenticada'] : []),
   ];
 }
 
@@ -119,8 +135,70 @@ export const VOICE_FUNCTION_DECLARATIONS = [
     parameters: { type: 'OBJECT', properties: {} },
   },
   {
+    name: 'get_app_capabilities',
+    description: 'Consulta el registro de módulos reales, fuentes de datos, herramientas y límites según rol, plataforma y conexión. Úsalo antes de afirmar que una función no existe.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
     name: 'read_current_screen',
     description: 'Lee el texto realmente visible de la pantalla actual de Manguaré para responder dudas sobre la app. Para otra pantalla, navega primero.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'get_emergency_options',
+    description: 'Consulta los tipos de emergencia que ofrece el formulario y el estado de las alertas locales.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'get_environment_topics',
+    description: 'Consulta las categorías del formulario ambiental y el número de reportes de este teléfono.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'get_community_catalog',
+    description: 'Consulta categorías y resumen del mercado de Comunidad usando publicaciones locales y de demostración.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'get_match_profiles',
+    description: 'Consulta perfiles Match de demostración y el estado local de coincidencias, con filtro opcional.',
+    parameters: { type: 'OBJECT', properties: {
+      query: { type: 'STRING' }, role: { type: 'STRING', enum: ['all', 'productor', 'comprador', 'voluntario'] },
+    } },
+  },
+  {
+    name: 'get_map_places',
+    description: 'Lee los marcadores visibles del mapa con sus filtros actuales. Puede buscar por nombre o categoría y ordenar por distancia GPS si se solicita. Todos los marcadores actuales son de demostración.',
+    parameters: { type: 'OBJECT', properties: {
+      query: { type: 'STRING' }, kind: { type: 'STRING', enum: ['all', 'support', 'conecta'] },
+      nearMe: { type: 'BOOLEAN' },
+    } },
+  },
+  {
+    name: 'open_map_place',
+    description: 'Selecciona y muestra un marcador que exista en el mapa y esté visible con los filtros activos.',
+    parameters: { type: 'OBJECT', properties: { placeId: { type: 'STRING' } }, required: ['placeId'] },
+  },
+  {
+    name: 'get_device_location',
+    description: 'Pide permiso de geolocalización y devuelve la posición real del dispositivo solo si el usuario solicita una consulta basada en su ubicación.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'get_language_options',
+    description: 'Consulta el idioma activo y las opciones reales del selector de idiomas, incluida su cobertura.',
+    parameters: { type: 'OBJECT', properties: {} },
+  },
+  {
+    name: 'set_app_language',
+    description: 'Cambia el idioma mediante LanguageContext solo cuando la persona lo solicita expresamente.',
+    parameters: { type: 'OBJECT', properties: {
+      language: { type: 'STRING', enum: ['es', 'agr', 'cbt', 'cni'] },
+    }, required: ['language'] },
+  },
+  {
+    name: 'get_help_contacts',
+    description: 'Consulta los teléfonos de ayuda que muestra la app y el puesto de salud configurado en este teléfono.',
     parameters: { type: 'OBJECT', properties: {} },
   },
   {

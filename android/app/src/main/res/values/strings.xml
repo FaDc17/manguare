@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Manguaré</string>
+    <string name="title_activity_main">Manguaré</string>
+    <string name="package_name">pe.manguare.app</string>
+    <string name="custom_url_scheme">pe.manguare.app</string>
+</resources>

@@ -5,13 +5,13 @@ import {
 } from './db';
 import { newAlertId } from './queue-core';
 import { fetchWithTimeout } from './fetch-timeout';
+import { apiUrl } from './api-url';
 import type {
   BiodiversityReport,
   BiodiversityReportDraft,
   ServerBiodiversityReport,
 } from './types';
 
-const API = '/api/biodiversity';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -34,7 +34,7 @@ export async function createLocalBiodiversityReport(
 }
 
 async function postReport(report: BiodiversityReport): Promise<ServerBiodiversityReport> {
-  const response = await fetchWithTimeout(API, {
+  const response = await fetchWithTimeout(apiUrl('/api/biodiversity'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -106,7 +106,7 @@ export async function syncBiodiversityReports(): Promise<{
 
     if (current.state !== 'sent') continue;
     try {
-      const response = await fetchWithTimeout(`${API}/${encodeURIComponent(current.id)}/status`, {
+      const response = await fetchWithTimeout(apiUrl(`/api/biodiversity/${encodeURIComponent(current.id)}/status`), {
         cache: 'no-store',
       }, 15_000);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);

@@ -1,7 +1,9 @@
 // Organiza las pantallas y vincula el selector de idioma con los avisos y diálogos de la app.
 
 import { message } from './i18n/catalog';
+import { Capacitor } from '@capacitor/core';
 import { useTranslation } from './i18n/LanguageContext';
+import { LANGUAGES, isLanguageComplete, type Language } from './i18n/catalog';
 import { lazy, Suspense, useCallback, useRef, useState } from 'react';
 import { AppProvider, useApp } from './app/AppContext';
 import { SessionProvider, useSession } from './app/SessionContext';
@@ -12,8 +14,8 @@ import { Sheet } from './components/Sheet';
 import { Toast } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { clearSession, loadSession, saveProfileName, saveSession, type Session } from './lib/session';
-import { SOS_DEFAULT_NOTE } from './lib/emergency';
-import type { AlertLocation, BiodiversityCategory, ServerAlert } from './lib/types';
+import { EMERGENCY_META, SOS_DEFAULT_NOTE } from './lib/emergency';
+import { BIODIVERSITY_CATEGORIES, EMERGENCY_TYPES, type AlertLocation, type BiodiversityCategory, type ServerAlert } from './lib/types';
 import { AlertDetailScreen } from './screens/AlertDetailScreen';
 import { BiodiversityReportScreen } from './screens/BiodiversityReportScreen';
 import { CommunityScreen } from './screens/CommunityScreen';
@@ -25,18 +27,26 @@ import { NewAlertScreen } from './screens/NewAlertScreen';
 import { RegisterScreen } from './screens/RegisterScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { isEffectivelyOnline } from './lib/sync';
+import { apiUrl } from './lib/api-url';
 import { VoiceAssistant } from './components/VoiceAssistant';
 import { getCurrentLocation } from './lib/geography';
-import { loadSocialState } from './lib/social';
+import { applySync, loadSocialState, MATCH_PROFILES, ROLE_LABEL } from './lib/social';
+import { readRemotePosts } from './lib/social-sync';
+import { COMMUNITY_CATEGORIES, ENVIRONMENT_TOPICS } from './lib/community';
+import { HELP_CONTACTS } from './lib/help-contacts';
+import { loadSettings } from './lib/settings';
+import { listAgentCapabilities } from './lib/agent-capabilities';
+import { placeDistanceKm, type MapVoiceController } from './lib/map-data';
 import type { CommunityVoiceController } from './lib/voice-tools';
 import {
   isExplicitPublicationConfirmation,
+  hasExplicitLanguageIntent,
+  hasExplicitLocationIntent,
   summarizeVoiceListing,
   validateVoiceListing,
   voiceListingFieldSchema,
   listingDistanceKm,
   normalizeSearch,
-  voiceCapabilities,
   canReadAdminEmergencies,
   type ListingFormPatch,
   type VoiceToolContext,
@@ -58,7 +68,7 @@ type Screen =
   | { name: 'alert'; id: string };
 
 function AppShell() {
-  const { t } = useTranslation();
+  const { t, language, setLanguage } = useTranslation();
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   const [languageOpen, setLanguageOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -72,6 +82,7 @@ function AppShell() {
   const alertsRef = useRef(alerts);
   alertsRef.current = alerts;
   const communityVoiceControllerRef = useRef<CommunityVoiceController | null>(null);
+  const mapVoiceControllerRef = useRef<MapVoiceController | null>(null);
   const pendingPublicationRef = useRef<{
     id: string;
     snapshot: string;
@@ -89,6 +100,10 @@ function AppShell() {
     },
     [],
   );
+
+  const registerMapVoiceController = useCallback((controller: MapVoiceController | null) => {
+    mapVoiceControllerRef.current = controller;
+  }, []);
 
   const waitFor = async (
     predicate: () => boolean,
@@ -152,12 +167,137 @@ function AppShell() {
 
     if (name === 'get_app_context') {
       return {
-        success: true, role: session.role, screen: screenRef.current.name,
-        capabilities: voiceCapabilities(session.role),
-        note: session.role === 'admin'
+        success: true, user: { name: session.name, role: session.role },
+        screen: screenRef.current.name, language, online: isEffectivelyOnline(),
+        localAlertCount: alerts.length, localEnvironmentReportCount: biodiversityReports.length,
+        mapFilters: screenRef.current.name === 'map' ? mapVoiceControllerRef.current?.getSnapshot().filters : undefined,
+        capabilities: listAgentCapabilities(session.role, Capacitor.isNativePlatform(), isEffectivelyOnline()),
+        note: session.role === 'admin' && Capacitor.isNativePlatform()
+          ? 'En Android, consulta las emergencias de la red en el panel web desde Ajustes; ese panel tiene su propia sesión.'
+          : session.role === 'admin'
           ? 'Las emergencias de la red requieren además una sesión autenticada en el panel de salud.'
           : 'Las alertas del Historial pertenecen a este teléfono; las emergencias de la red solo están en el panel administrador.',
       };
+    }
+
+    if (name === 'get_app_capabilities') {
+      return { success: true, modules: listAgentCapabilities(
+        session.role, Capacitor.isNativePlatform(), isEffectivelyOnline(),
+      ), note: 'Solo se pueden ejecutar las herramientas registradas; las fuentes demo no son registros verificados.' };
+    }
+
+    if (name === 'get_emergency_options') {
+      return { success: true, types: EMERGENCY_TYPES.map((id) => ({
+        id, label: EMERGENCY_META[id].label, hint: EMERGENCY_META[id].hint,
+      })), localAlertCount: alerts.length,
+      byState: Object.fromEntries(['pending', 'sent', 'received', 'canceled'].map((state) => [
+        state, alerts.filter((item) => item.state === state).length,
+      ])), scope: 'este teléfono' };
+    }
+
+    if (name === 'get_environment_topics') {
+      return { success: true, categories: BIODIVERSITY_CATEGORIES,
+        topics: ENVIRONMENT_TOPICS, localReportCount: biodiversityReports.length,
+        scope: 'este teléfono' };
+    }
+
+    if (name === 'get_language_options') {
+      return { success: true, active: language,
+        languages: LANGUAGES.map((option) => ({ ...option, complete: isLanguageComplete(option.id) })),
+        note: 'Los idiomas incompletos muestran texto de respaldo en español.' };
+    }
+
+    if (name === 'set_app_language') {
+      const requested = args.language;
+      const option = LANGUAGES.find((item) => item.id === requested);
+      if (!option) return { success: false, message: 'Idioma no disponible.' };
+      if (!hasExplicitLanguageIntent(lastUserUtterance))
+        return { success: false, message: 'Necesito que pidas expresamente el cambio de idioma.' };
+      setLanguage(option.id as Language);
+      await waitFor(() => loadSettings().language === option.id && document.documentElement.lang ===
+        (isLanguageComplete(option.id) ? option.id : 'es'), 'se aplicara el idioma', signal);
+      return { success: true, language: option.id, label: option.label,
+        complete: isLanguageComplete(option.id), verified: true };
+    }
+
+    if (name === 'get_help_contacts') {
+      return { success: true, contacts: HELP_CONTACTS.map((item) => ({
+        number: item.number, label: t(item.label), detail: t(item.detail),
+      })), healthPost: settings.healthPost.trim(), healthPhone: settings.healthPhone.trim(),
+      note: 'Los números telefónicos necesitan señal. Manguaré no reemplaza los servicios de emergencia.' };
+    }
+
+    if (name === 'get_match_profiles') {
+      const query = typeof args.query === 'string' ? normalizeSearch(args.query.slice(0, 80)) : '';
+      const role = typeof args.role === 'string' ? args.role : 'all';
+      if (!['all', 'productor', 'comprador', 'voluntario'].includes(role))
+        return { success: false, message: 'Rol de Match no reconocido.' };
+      const state = loadSocialState();
+      const profiles = MATCH_PROFILES.filter((item) =>
+        (role === 'all' || item.role === role) &&
+        (!query || normalizeSearch([item.name, item.community, item.headline, item.about, ...item.tags]
+          .join(' ')).includes(query)));
+      return { success: true, count: profiles.length, demo: true,
+        profiles: profiles.map((item) => ({ id: item.id, name: item.name,
+          role: ROLE_LABEL[item.role], community: item.community, headline: item.headline,
+          tags: item.tags, matchedOnThisDevice: state.matches.includes(item.id) })) };
+    }
+
+    if (name === 'get_device_location') {
+      if (!hasExplicitLocationIntent(lastUserUtterance))
+        return { success: false, message: 'Solicita expresamente tu ubicación antes de activar el GPS.' };
+      try {
+        const point = await getCurrentLocation();
+        if (signal.aborted) throw new DOMException('La acción fue cancelada.', 'AbortError');
+        return { success: true, latitude: point.lat, longitude: point.lng,
+          accuracyMeters: point.accuracy, source: 'GPS del dispositivo' };
+      } catch (error) {
+        if (signal.aborted) throw error;
+        return { success: false, message: error instanceof Error ? error.message : 'No se pudo obtener el GPS.' };
+      }
+    }
+
+    if (name === 'get_map_places' || name === 'open_map_place') {
+      await navigateAndVerify({ name: 'map' }, 'map', signal);
+      await waitFor(() => Boolean(mapVoiceControllerRef.current), 'se cargara el mapa', signal);
+      if (name === 'open_map_place') {
+        const id = typeof args.placeId === 'string' ? args.placeId : '';
+        const controller = mapVoiceControllerRef.current;
+        const place = controller?.getSnapshot().visiblePlaces.find((item) => item.id === id);
+        if (!place || !controller?.selectPlace(id))
+          return { success: false, message: 'Ese marcador no está visible con los filtros actuales.' };
+        await waitFor(() => Boolean(document.querySelector('[data-testid="map-selected"]')?.textContent?.includes(place.name)),
+          'se mostrara el marcador', signal);
+        return { success: true, place: { id: place.id, name: place.name, demo: true }, verified: true };
+      }
+      const query = typeof args.query === 'string' ? args.query.trim().slice(0, 80) : '';
+      const kind = typeof args.kind === 'string' ? args.kind : 'all';
+      if (!['all', 'support', 'conecta'].includes(kind))
+        return { success: false, message: 'Filtro de mapa no reconocido.' };
+      let point: { lat: number; lng: number } | null = null;
+      if (args.nearMe === true) {
+        if (!hasExplicitLocationIntent(lastUserUtterance))
+          return { success: false, message: 'Solicita expresamente una búsqueda cercana antes de activar el GPS.' };
+        try {
+          point = await getCurrentLocation();
+        } catch (error) {
+          return { success: false, message: error instanceof Error ? error.message : 'No se pudo obtener el GPS.' };
+        }
+      }
+      const controller = mapVoiceControllerRef.current;
+      if (!controller) throw new Error('No se pudo consultar el mapa.');
+      controller.searchPlaces(query);
+      await waitFor(() => mapVoiceControllerRef.current?.getSnapshot().search === query,
+        'se aplicara la búsqueda en el mapa', signal);
+      const snapshot = mapVoiceControllerRef.current?.getSnapshot();
+      const places = (snapshot?.visiblePlaces ?? []).filter((item) => kind === 'all' || item.kind === kind)
+        .sort((a, b) => point ? placeDistanceKm(a, point) - placeDistanceKm(b, point) : 0);
+      return { success: true, query, filters: snapshot?.filters, count: places.length,
+        dataSource: 'marcadores mostrados en el mapa', demo: true,
+        places: places.slice(0, 20).map((item) => ({ id: item.id, name: item.name,
+          kind: item.kind, category: t(item.category), description: item.description,
+          location: item.location, ...(point ? { distanceKm: Number(placeDistanceKm(item, point).toFixed(1)) } : {}),
+          demo: true })) };
     }
 
     if (name === 'read_current_screen') {
@@ -168,6 +308,23 @@ function AppShell() {
         note: 'Texto visible en esta sesión; no presupongas datos que no aparecen aquí.' };
     }
 
+    if (name === 'get_community_catalog') {
+      await navigateAndVerify({ name: 'community' }, 'community', signal);
+      await waitFor(() => Boolean(communityVoiceControllerRef.current), 'se cargara Comunidad', signal);
+      const controller = communityVoiceControllerRef.current;
+      if (!controller) throw new Error('No se pudo consultar Comunidad.');
+      const source = await controller.refreshListings(signal);
+      if (signal.aborted) throw new DOMException('La acción fue cancelada.', 'AbortError');
+      const listings = controller.getListings();
+      return { success: true, source, count: listings.length,
+        demoCount: listings.filter((item) => item.synced === undefined).length,
+        categories: COMMUNITY_CATEGORIES.map(({ id, label }) => ({ id, label,
+          count: listings.filter((item) => item.category === id).length })),
+        listings: listings.slice(0, 20).map((item) => ({ id: item.id, title: item.title,
+          category: item.category, location: item.location, price: item.priceRange,
+          demo: item.synced === undefined })) };
+    }
+
     if (name === 'search_listings') {
       const query = typeof args.query === 'string' ? args.query.trim().slice(0, 80) : '';
       if (!query) return { success: false, message: 'Indica qué producto o servicio quieres buscar.' };
@@ -175,6 +332,8 @@ function AppShell() {
       let fallbackCommunity = '';
       let locationNote = '';
       if (args.nearMe === true) {
+        if (!hasExplicitLocationIntent(lastUserUtterance))
+          return { success: false, message: 'Solicita expresamente una búsqueda cercana antes de activar el GPS.' };
         try {
           const point = await getCurrentLocation();
           near = { lat: point.lat, lng: point.lng };
@@ -194,10 +353,12 @@ function AppShell() {
       await waitFor(() => Boolean(communityVoiceControllerRef.current), 'se cargara Comunidad', signal);
       const controller = communityVoiceControllerRef.current;
       if (!controller) throw new Error('No se pudo abrir Comunidad.');
+      const source = await controller.refreshListings(signal);
+      if (signal.aborted) throw new DOMException('La acción fue cancelada.', 'AbortError');
       const matches = controller.searchListings(query, near, fallbackCommunity);
       await waitFor(() => (document.querySelector('[data-testid="listing-search"]') as HTMLInputElement | null)?.value === query,
         'se mostraran los resultados de la búsqueda', signal);
-      return { success: true, count: matches.length, query, locationNote,
+      return { success: true, source, count: matches.length, query, locationNote,
         listings: matches.slice(0, 12).map((item) => ({
           id: item.id, title: item.title, description: item.description, author: item.author,
           price: item.priceRange, location: item.location, community: item.community,
@@ -223,9 +384,13 @@ function AppShell() {
         'se abriera el muro', signal);
       await waitFor(() => (document.querySelector('[data-testid="wall-search"]') as HTMLInputElement | null)?.value === query,
         'se mostrara la búsqueda del muro', signal);
-      const posts = loadSocialState().posts.filter((post) =>
+      const remote = isEffectivelyOnline() ? await readRemotePosts(session.phone, signal) : null;
+      if (signal.aborted) throw new DOMException('La acción fue cancelada.', 'AbortError');
+      const social = loadSocialState();
+      const posts = applySync(social, [], remote).posts.filter((post) =>
         !query || normalizeSearch([post.text, post.author, post.community].join(' ')).includes(normalizeSearch(query)));
-      return { success: true, count: posts.length, posts: posts.slice(0, 12).map((post) => ({
+      return { success: true, source: remote ? 'server' : 'cache', count: posts.length,
+        posts: posts.slice(0, 12).map((post) => ({
         id: post.id, author: post.author, community: post.community, text: post.text, at: post.at,
         demo: post.synced === undefined,
       })) };
@@ -283,15 +448,17 @@ function AppShell() {
 
     if (name === 'get_admin_pending_emergencies') {
       if (session.role !== 'admin') return { success: false, message: 'Esta función pertenece al administrador de la red de salud.' };
+      if (Capacitor.isNativePlatform()) return { success: false,
+        message: 'Abre el panel de salud desde Ajustes para consultar emergencias de la red. En Android el panel usa una sesión web separada.' };
       await navigateAndVerify({ name: 'settings' }, 'settings', signal);
       await waitFor(() => Boolean(document.querySelector('[data-testid="settings-admin-panel"]')),
         'se mostrara el acceso al panel de salud', signal);
       (document.querySelector('[data-testid="settings-admin-panel"]') as HTMLElement | null)?.focus();
-      const panelSession = await fetch('/api/panel/session', { cache: 'no-store', signal }).then((res) => res.json()) as
+      const panelSession = await fetch(apiUrl('/api/panel/session'), { cache: 'no-store', signal }).then((res) => res.json()) as
         { authenticated?: boolean; authRequired?: boolean };
       if (!canReadAdminEmergencies(session.role, panelSession.authenticated === true)) return { success: false,
         message: 'Inicia sesión en el panel de salud desde Ajustes para consultar emergencias de la red.' };
-      const response = await fetch('/api/alerts', { cache: 'no-store', signal });
+      const response = await fetch(apiUrl('/api/alerts'), { cache: 'no-store', signal });
       if (!response.ok) return { success: false, message: 'No se pudieron consultar las emergencias del panel.' };
       const data = await response.json() as { alerts?: ServerAlert[] };
       const pending = (data.alerts ?? []).filter((item) => !item.acknowledgedAt);
@@ -406,6 +573,8 @@ function AppShell() {
     }
 
     if (name === 'use_current_location') {
+      if (!hasExplicitLocationIntent(lastUserUtterance))
+        return { success: false, message: 'Pide expresamente usar tu ubicación para la publicación.' };
       const form = await requireListingForm(signal);
       const location = await getCurrentLocation();
       if (signal.aborted) throw new DOMException('La acción fue cancelada.', 'AbortError');
@@ -568,7 +737,7 @@ function AppShell() {
 
           {screen.name === 'map' ? (
             <Suspense fallback={<div className="inline-loading">{t('map.cargandoMapa')}</div>}>
-              <MapScreen onSOS={() => setSosConfirmOpen(true)} />
+              <MapScreen onSOS={() => setSosConfirmOpen(true)} onVoiceControllerReady={registerMapVoiceController} />
             </Suspense>
           ) : null}
 
@@ -608,6 +777,10 @@ function AppShell() {
         {voiceOpen && (
           <VoiceAssistant
             onClose={closeVoice}
+            onConfigureServer={() => {
+              closeVoice();
+              setScreen({ name: 'settings' });
+            }}
             onToolCall={handleVoiceToolCall}
           />
         )}

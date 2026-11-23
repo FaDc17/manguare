@@ -82,6 +82,7 @@ describe('lectura de la app por voz', () => {
   it('solo ofrece las emergencias de la red al administrador', () => {
     assert.ok(!voiceCapabilities('user').includes('consultar_emergencias_del_panel_con_sesion_autenticada'));
     assert.ok(voiceCapabilities('admin').includes('consultar_emergencias_del_panel_con_sesion_autenticada'));
+    assert.ok(!voiceCapabilities('admin', true).includes('consultar_emergencias_del_panel_con_sesion_autenticada'));
     assert.equal(canReadAdminEmergencies('user', true), false);
     assert.equal(canReadAdminEmergencies('admin', false), false);
     assert.equal(canReadAdminEmergencies('admin', true), true);

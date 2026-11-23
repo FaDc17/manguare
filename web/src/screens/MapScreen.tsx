@@ -1,7 +1,5 @@
 // Traduce los rótulos de búsqueda, filtros y permisos del mapa.
 
-import { communityLabel } from '../i18n/labels';
-import { translate, type MessageKey } from '../i18n/catalog';
 import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { MapZoom } from '../components/MapZoom';
 import { useEffect, useMemo, useState } from 'react';
@@ -14,52 +12,16 @@ import {
 } from 'react-leaflet';
 import { LocateFixed, Map as MapIcon, MapPin, Search, TriangleAlert } from 'lucide-react';
 import { useApp } from '../app/AppContext';
-import { COMMUNITY_LISTINGS, SUPPORT_CENTERS } from '../lib/community';
+import { SUPPORT_CENTERS } from '../lib/community';
+import { MAP_PLACES, filterMapPlaces, type MapKind, type MapPlace, type MapVoiceController } from '../lib/map-data';
 import type { AlertLocation } from '../lib/types';
 import 'leaflet/dist/leaflet.css';
-
-type MapKind = 'conecta' | 'support';
-type Filter = 'conecta' | 'support';
-
-interface MapResult {
-  id: string;
-  kind: MapKind;
-  name: string;
-  category: MessageKey;
-  description: string;
-  location: string;
-  coordinates: { lat: number; lng: number };
-}
-
-const RESULTS: MapResult[] = [
-  ...COMMUNITY_LISTINGS.filter(
-    (listing): listing is typeof listing & { coordinates: { lat: number; lng: number } } =>
-      Boolean(listing.coordinates),
-  ).map((listing) => ({
-    id: listing.id,
-    kind: 'conecta' as const,
-    name: listing.title,
-    category: communityLabel(listing.category, 'map.conecta'),
-    description: listing.description,
-    location: listing.location,
-    coordinates: listing.coordinates,
-  })),
-  ...SUPPORT_CENTERS.map((center) => ({
-    id: center.id,
-    kind: 'support' as const,
-    name: center.name,
-    category: 'map.centroDeApoyo' as const,
-    description: center.note,
-    location: center.distance,
-    coordinates: center.coordinates,
-  })),
-];
 
 function MapFocus({
   result,
   userLocation,
 }: {
-  result?: MapResult;
+  result?: MapPlace;
   userLocation?: AlertLocation;
 }) {
   const map = useMap();
@@ -73,11 +35,14 @@ function MapFocus({
   return null;
 }
 
-export function MapScreen({ onSOS }: { onSOS: () => void }) {
+export function MapScreen({ onSOS, onVoiceControllerReady }: {
+  onSOS: () => void;
+  onVoiceControllerReady?: (controller: MapVoiceController | null) => void;
+}) {
   const { online } = useApp();
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
-  const [activeFilters, setActiveFilters] = useState<Record<Filter, boolean>>({
+  const [activeFilters, setActiveFilters] = useState<Record<MapKind, boolean>>({
     conecta: true,
     support: true,
   });
@@ -86,17 +51,22 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
   const [locationMessage, setLocationMessage] = useState('');
   const [locating, setLocating] = useState(false);
 
-  const results = useMemo(() => {
-    const query = search.trim().toLocaleLowerCase('es');
-    return RESULTS.filter((item) => {
-      if (!activeFilters[item.kind]) return false;
-      if (!query) return true;
-      return [t(item.category), translate('es', item.category)].some((category) =>
-        `${item.name} ${category} ${item.location}`.toLocaleLowerCase('es').includes(query),
-      );
-    });
-  }, [activeFilters, search, t]);
+  const results = useMemo(() => filterMapPlaces(MAP_PLACES, search, activeFilters, t), [activeFilters, search, t]);
   const selected = results.find((item) => item.id === selectedId);
+
+  useEffect(() => {
+    if (!onVoiceControllerReady) return;
+    onVoiceControllerReady({
+      getSnapshot: () => ({ search, filters: activeFilters, selectedId, userLocation, visiblePlaces: results }),
+      searchPlaces: (query) => { setSearch(query); setSelectedId(null); },
+      selectPlace: (id) => {
+        if (!results.some((item) => item.id === id)) return false;
+        setSelectedId(id);
+        return true;
+      },
+    });
+    return () => onVoiceControllerReady(null);
+  }, [onVoiceControllerReady, search, activeFilters, selectedId, userLocation, results]);
 
   const activateLocation = () => {
     if (!navigator.geolocation) {
@@ -123,8 +93,8 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
     );
   };
 
-  const selectResult = (item: MapResult) => setSelectedId(item.id);
-  const toggleFilter = (filter: Filter) => {
+  const selectResult = (item: MapPlace) => setSelectedId(item.id);
+  const toggleFilter = (filter: MapKind) => {
     setActiveFilters((current) => ({ ...current, [filter]: !current[filter] }));
     setSelectedId(null);
   };
@@ -284,7 +254,7 @@ export function MapScreen({ onSOS }: { onSOS: () => void }) {
             type="button"
             className="map-suggestion"
             onClick={() => {
-              const result = RESULTS.find((item) => item.id === center.id);
+              const result = MAP_PLACES.find((item) => item.id === center.id);
               if (result) selectResult(result);
             }}
           >

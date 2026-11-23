@@ -1,5 +1,6 @@
 import { getAlert, getAllAlerts, putAlert } from './db';
 import { fetchWithTimeout } from './fetch-timeout';
+import { apiUrl } from './api-url';
 import { isAttemptDue, nextAttemptAt } from './retry';
 import type {
   AlertDraft,
@@ -9,7 +10,6 @@ import type {
   SyncResult,
 } from './types';
 
-const API = '/api';
 const STATE_RANK: Record<AlertState, number> = {
   pending: 0,
   sent: 1,
@@ -148,7 +148,7 @@ export function mergeServerState(
 }
 
 async function postAlert(alert: AlertRecord): Promise<ServerAlert> {
-  const response = await fetchWithTimeout(`${API}/alerts`, {
+  const response = await fetchWithTimeout(apiUrl('/api/alerts'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(toServerPayload(alert)),
@@ -265,7 +265,7 @@ export async function resumePendingNow(): Promise<void> {
 }
 
 async function getServerAlert(id: string): Promise<ServerAlert | null> {
-  const response = await fetchWithTimeout(`${API}/alerts/${encodeURIComponent(id)}`, {
+  const response = await fetchWithTimeout(apiUrl(`/api/alerts/${encodeURIComponent(id)}`), {
     cache: 'no-store',
   }, 15_000);
   if (response.status === 404) return null;
@@ -344,7 +344,7 @@ async function flushPendingDetails(): Promise<number> {
   let failed = 0;
   for (const alert of pending) {
     try {
-      const response = await fetchWithTimeout(`${API}/alerts/${encodeURIComponent(alert.id)}`, {
+      const response = await fetchWithTimeout(apiUrl(`/api/alerts/${encodeURIComponent(alert.id)}`), {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

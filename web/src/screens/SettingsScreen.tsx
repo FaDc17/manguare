@@ -2,6 +2,8 @@
 
 import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import {
   ChevronRight,
   Database,
@@ -26,11 +28,23 @@ import { useApp } from '../app/AppContext';
 import { useSession } from '../app/SessionContext';
 import { AudioButton } from '../components/AudioButton';
 import { MIXED_AUDIO_NOTE } from '../lib/audio';
+import { getNativeApiBase, isLocalMvpBuild, setNativeApiBase } from '../lib/api-url';
+import { checkGeminiServer, type GeminiServerCheck } from '../lib/gemini-server';
 import { ConnectionPill } from '../components/ConnectionPill';
 import { Sheet } from '../components/Sheet';
 import { formatRelative } from '../lib/format';
 import { formatPhone } from '../lib/session';
-import { isLanguageComplete, LANGUAGES, type Translate } from '../i18n/catalog';
+import { isLanguageComplete, LANGUAGES, type MessageKey, type Translate } from '../i18n/catalog';
+
+const SERVER_CHECK_ERRORS: Record<Exclude<GeminiServerCheck, { ok: true }>['code'], MessageKey> = {
+  unreachable: 'settings.nativeServerUnreachable',
+  not_manguare: 'settings.nativeServerNotManguare',
+  gemini_not_configured: 'settings.nativeServerNoGemini',
+  gemini_api_key_format_invalid: 'settings.nativeServerBadGeminiKey',
+  gemini_token_unavailable: 'settings.nativeServerGeminiError',
+  rate_limit_exceeded: 'settings.nativeServerRateLimited',
+  unexpected_response: 'settings.nativeServerUnexpected',
+};
 
 const SETTINGS_AUDIO =
   'Ajustes de Manguaré. Aquí puedes elegir el idioma, escribir el número de respaldo para mensajes, ' +
@@ -57,6 +71,9 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
   } = useApp();
   const { session, logout, updateName } = useSession();
   const [profileName, setProfileName] = useState(session.name);
+  const [nativeApiBase, setNativeApiBaseDraft] = useState(getNativeApiBase);
+  const [serverChecking, setServerChecking] = useState(false);
+  const [serverCheck, setServerCheck] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => setProfileName(session.name), [session.name]);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -73,6 +90,27 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       setConfirmClear(false);
     } finally {
       setClearing(false);
+    }
+  };
+
+  const checkServer = async () => {
+    let base: string;
+    try {
+      base = setNativeApiBase(nativeApiBase);
+      if (!base) throw new Error(t('settings.nativeServerRequired'));
+      setNativeApiBaseDraft(base);
+      void syncNow(true);
+    } catch (error) {
+      setServerCheck({ ok: false, text: error instanceof Error ? error.message : t('settings.nativeServerRequired') });
+      return;
+    }
+    setServerChecking(true);
+    setServerCheck(null);
+    try {
+      const result = await checkGeminiServer(base);
+      setServerCheck({ ok: result.ok, text: t(result.ok ? 'settings.nativeServerReady' : SERVER_CHECK_ERRORS[result.code]) });
+    } finally {
+      setServerChecking(false);
     }
   };
 
@@ -134,9 +172,21 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
             <a
               className="setting-row setting-row--button setting-row--link"
               data-testid="settings-admin-panel"
-              href="/panel"
+              href={Capacitor.isNativePlatform() && getNativeApiBase() ? `${getNativeApiBase()}/panel` : '/panel'}
               target="_blank"
               rel="noreferrer"
+              onClick={(event) => {
+                if (!Capacitor.isNativePlatform()) return;
+                event.preventDefault();
+                const server = getNativeApiBase();
+                if (!server) {
+                  showToast(t('settings.nativeServerRequired'), 'error');
+                  return;
+                }
+                void Browser.open({ url: `${server}/panel` }).catch(() => {
+                  showToast(t('settings.nativePanelFailed'), 'error');
+                });
+              }}
             >
               <span className="setting-icon">
                 <ShieldCheck size={20} aria-hidden="true" />
@@ -173,6 +223,50 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       <section className="settings-group" aria-labelledby="settings-prefs">
         <h2 id="settings-prefs">{t('settings.preferencias')}</h2>
         <div className="settings-card">
+          {Capacitor.isNativePlatform() && (
+            <label className="setting-row setting-row--stack">
+              <span className="setting-stack-head">
+                <span className="setting-icon"><Globe2 size={20} aria-hidden="true" /></span>
+                <span className="setting-main">
+                  <span className="setting-label">{t('settings.nativeServer')}</span>
+                  <span className="setting-sub">{t(isLocalMvpBuild()
+                    ? 'settings.nativeServerLocalHint' : 'settings.nativeServerHint')}</span>
+                </span>
+              </span>
+              <input
+                type="url"
+                className="setting-input setting-input--block"
+                value={nativeApiBase}
+                data-testid="settings-native-server-url"
+                placeholder={t(isLocalMvpBuild()
+                  ? 'settings.nativeServerLocalPlaceholder' : 'settings.nativeServerPlaceholder')}
+                autoCapitalize="none"
+                autoCorrect="off"
+                enterKeyHint="go"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    event.currentTarget.blur();
+                    void checkServer();
+                  }
+                }}
+                onChange={(event) => {
+                  setNativeApiBaseDraft(event.target.value);
+                  setServerCheck(null);
+                }}
+              />
+            </label>
+          )}
+          {Capacitor.isNativePlatform() && (
+            <div className="setting-server-check">
+              <button type="button" className="btn btn-secondary" data-testid="settings-server-check"
+                disabled={serverChecking} onClick={() => void checkServer()}>
+                {t(serverChecking ? 'settings.nativeServerChecking' : 'settings.nativeServerCheck')}
+              </button>
+              {serverCheck && <p role={serverCheck.ok ? 'status' : 'alert'}
+                className={serverCheck.ok ? 'setting-server-ok' : 'field-error'}>{serverCheck.text}</p>}
+            </div>
+          )}
           <button type="button" className="setting-row setting-row--button" data-testid="settings-language" onClick={onOpenLanguage}>
             <span className="setting-icon">
               <Languages size={20} aria-hidden="true" />

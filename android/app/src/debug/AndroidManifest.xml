@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- El APK de prueba se conecta al servidor Node del PC en la red privada. -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>

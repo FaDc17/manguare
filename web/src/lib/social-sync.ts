@@ -1,12 +1,12 @@
 import type { CommunityListing } from './community';
 import { fetchWithTimeout } from './fetch-timeout';
+import { apiUrl } from './api-url';
 import {
   type Post,
   type SocialState,
   type SyncPatch,
 } from './social';
 
-const API = '/api/social';
 
 function headers(phone: string): HeadersInit {
   return { 'content-type': 'application/json', 'x-manguare-phone': phone };
@@ -18,13 +18,37 @@ function settled(status: number): boolean {
 }
 
 async function call(phone: string, path: string, init: RequestInit = {}): Promise<Response> {
-  return fetchWithTimeout(`${API}${path}`, { ...init, headers: headers(phone) }, 10_000);
+  return fetchWithTimeout(apiUrl(`/api/social${path}`), { ...init, headers: headers(phone) }, 10_000);
 }
 
 export interface SocialSyncResult {
   patches: SyncPatch[];
   /** null si algún envío falló o no se pudo leer el muro. */
   serverPosts: Post[] | null;
+}
+
+/** Lectura pura del mercado para el agente; no envía publicaciones pendientes. */
+export async function readRemoteListings(phone: string, signal?: AbortSignal): Promise<CommunityListing[] | null> {
+  try {
+    const response = await call(phone, '/listings', { cache: 'no-store', signal });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { listings?: CommunityListing[] };
+    return Array.isArray(data.listings) ? data.listings : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Consulta el muro sin enviar acciones pendientes del dispositivo. */
+export async function readRemotePosts(phone: string, signal?: AbortSignal): Promise<Post[] | null> {
+  try {
+    const response = await call(phone, '/posts', { cache: 'no-store', signal });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { posts?: Post[] };
+    return Array.isArray(data.posts) ? data.posts : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Envía lo pendiente (en orden) y luego descarga el muro. Nunca lanza: sin red devuelve lo que alcanzó. */

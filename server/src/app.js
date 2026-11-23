@@ -416,6 +416,7 @@ export function createHandler({
   ackMinutes = DEFAULT_ACK_MINUTES,
   escalationPhone = '',
   geminiApiKey = process.env.GEMINI_API_KEY ?? '',
+  geminiFetch = fetch,
 }) {
   const alertLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 120 });
   const socialLimiter = createRateLimiter({ windowMs: 10 * 60 * 1000, max: 240 });
@@ -448,6 +449,23 @@ export function createHandler({
       } catch {
         sendText(res, 400, 'Ruta inválida');
         return;
+      }
+
+      // El WebView de Capacitor usa un origen local para la API del PC o publicada.
+      // Solo se habilita para sus rutas API y nunca se envían credenciales CORS.
+      if (pathname.startsWith('/api/') && ['https://localhost', 'http://localhost'].includes(req.headers.origin)) {
+        res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Vary', 'Origin');
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204, {
+            ...SECURITY_HEADERS,
+            'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, X-Manguare-Phone',
+            'Access-Control-Max-Age': '600',
+          });
+          res.end();
+          return;
+        }
       }
 
       if (pathname === '/api/health') {
@@ -487,21 +505,28 @@ export function createHandler({
           }
 
           const nowMs = Date.now();
-          const googleResponse = await fetch(
-            'https://generativelanguage.googleapis.com/v1beta/auth_tokens',
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-goog-api-key': geminiApiKey,
+          let googleResponse;
+          try {
+            googleResponse = await geminiFetch(
+              'https://generativelanguage.googleapis.com/v1beta/auth_tokens',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-goog-api-key': geminiApiKey,
+                },
+                body: JSON.stringify({
+                  uses: 1,
+                  expireTime: new Date(nowMs + 30 * 60 * 1000).toISOString(),
+                  newSessionExpireTime: new Date(nowMs + 60 * 1000).toISOString(),
+                }),
+                signal: AbortSignal.timeout(12_000),
               },
-              body: JSON.stringify({
-                uses: 1,
-                expireTime: new Date(nowMs + 30 * 60 * 1000).toISOString(),
-                newSessionExpireTime: new Date(nowMs + 60 * 1000).toISOString(),
-              }),
-            },
-          );
+            );
+          } catch {
+            sendJson(res, 502, { error: 'gemini_token_unavailable' });
+            return;
+          }
 
           const result = await googleResponse.json().catch(() => ({}));
 
