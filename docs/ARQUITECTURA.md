@@ -191,7 +191,7 @@ registrar respuestas rápidas y escalamientos, y visualizar reportes ambientales
 
 ### Persistencia local del teléfono
 
-`db.ts` usa IndexedDB, no `localStorage`, para las colas principales. Además se
+`db.ts` usa SQLite nativo en Android e IndexedDB en la PWA para las colas principales. La migración Android copia los datos previos de IndexedDB; los detalles están en [AZURE_SQLITE.md](AZURE_SQLITE.md). Además se
 usan sesiones y ajustes en almacenamiento local. Esto permite que una alerta
 creada sin señal sobreviva a recargas y cierre de pestaña; la PWA debe haberse
 abierto al menos una vez con conexión para que el service worker pueda precargar

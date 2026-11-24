@@ -5,6 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHandler } from './app.js';
 import { createAuth } from './auth.js';
+import { connectAzureSql } from './azure-sql.js';
+import { AzureStateStorage } from './azure-state.js';
 import { BiodiversityStore } from './biodiversity-store.js';
 import { SocialStore } from './social-store.js';
 import { AlertStore } from './store.js';
@@ -21,10 +23,20 @@ const socialFile =
   process.env.MANGUARE_SOCIAL_FILE ?? path.join(root, 'server', 'data', 'social.json');
 const staticDir = process.env.MANGUARE_STATIC_DIR ?? path.join(root, 'web', 'dist');
 
-const store = new AlertStore(dataFile);
-const biodiversityStore = new BiodiversityStore(biodiversityFile);
-const socialStore = new SocialStore(socialFile);
 const panelPassword = process.env.MANGUARE_PANEL_PASSWORD ?? '';
+const storageMode = process.env.MANGUARE_STORAGE ?? 'json';
+if (!['json', 'azure-sql'].includes(storageMode)) {
+  throw new Error('MANGUARE_STORAGE debe ser json o azure-sql.');
+}
+if (storageMode === 'azure-sql' && !panelPassword) {
+  throw new Error('Configura MANGUARE_PANEL_PASSWORD antes de activar Azure SQL.');
+}
+const azurePool = storageMode === 'azure-sql' ? await connectAzureSql() : null;
+const storage = (name) => azurePool ? new AzureStateStorage(azurePool, name) : null;
+const store = new AlertStore(dataFile, { storage: storage('alerts') });
+const biodiversityStore = new BiodiversityStore(biodiversityFile, { storage: storage('biodiversity') });
+const socialStore = new SocialStore(socialFile, { storage: storage('social') });
+await Promise.all([store.ready, biodiversityStore.ready, socialStore.ready]);
 const sessionHours = Number(process.env.MANGUARE_SESSION_HOURS ?? 12);
 const rawAckMinutes = process.env.MANGUARE_ACK_MINUTES;
 const ackMinutes = rawAckMinutes === undefined || rawAckMinutes === '' ? 10 : Number(rawAckMinutes);
@@ -43,15 +55,18 @@ const auth = createAuth({
 console.log('Gemini API Key cargada:', Boolean(process.env.GEMINI_API_KEY));
 const server = http.createServer(
   createHandler({
-  store,
-  biodiversityStore,
-  socialStore,
-  staticDir,
-  auth,
-  ackMinutes,
-  escalationPhone,
-  geminiApiKey: process.env.GEMINI_API_KEY ?? '',
-}),
+    store,
+    biodiversityStore,
+    socialStore,
+    staticDir,
+    healthCheck: azurePool ? async () => {
+      await azurePool.request().query('SELECT 1 AS ok');
+    } : null,
+    auth,
+    ackMinutes,
+    escalationPhone,
+    geminiApiKey: process.env.GEMINI_API_KEY ?? '',
+  }),
 );
 
 function lanAddresses() {
@@ -72,9 +87,12 @@ server.listen(port, host, () => {
   for (const address of lanAddresses()) {
     console.log(`  Red:    http://${address}:${port}  (misma Wi-Fi / USB)`);
   }
-  console.log(`  Datos:  ${dataFile}`);
-  console.log(`  Biodiversidad: ${biodiversityFile}`);
-  console.log(`  Red social: ${socialFile}`);
+  if (azurePool) console.log('  Datos:  Azure SQL (manguare_app_state)');
+  else {
+    console.log(`  Datos:  ${dataFile}`);
+    console.log(`  Biodiversidad: ${biodiversityFile}`);
+    console.log(`  Red social: ${socialFile}`);
+  }
   console.log(`  Web:    ${staticDir}`);
   console.log(
     auth.enabled
@@ -105,7 +123,10 @@ server.on('error', (error) => {
 for (const signal of ['SIGINT', 'SIGTERM']) {
   process.on(signal, () => {
     console.log('\nCerrando Manguaré…');
-    server.close(() => process.exit(0));
+    server.close(() => {
+      if (azurePool) void azurePool.close().finally(() => process.exit(0));
+      else process.exit(0);
+    });
     setTimeout(() => process.exit(0), 2000).unref();
   });
 }

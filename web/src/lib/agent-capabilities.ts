@@ -55,9 +55,12 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = [
 
 export function listAgentCapabilities(role: SessionRole, native: boolean, online: boolean) {
   return AGENT_CAPABILITIES.map((module) => {
-    const available = (!module.adminOnly || role === 'admin') &&
+    const disabled = module.id === 'biodiversidad' || module.id === 'comunidad' || module.id === 'red';
+    const available = !disabled && (!module.adminOnly || role === 'admin') &&
       (!module.browserPanelOnly || !native) && (!module.requiresNetwork || online);
-    const reason = module.adminOnly && role !== 'admin'
+    const reason = disabled
+      ? 'Acceso inhabilitado por el momento para futuras mejoras'
+      : module.adminOnly && role !== 'admin'
       ? 'Requiere el rol administrador.'
       : module.browserPanelOnly && native
         ? 'El panel usa una sesión web separada en Android.'

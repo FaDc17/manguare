@@ -51,20 +51,21 @@ Señala la app: botón grande de emergencia, indicador de conexión y pendientes
 ### 0:25–0:50 · Crear la emergencia (25 s)
 
 1. Toca **Emergencia**.
-2. Elige **Enfermedad**.
-3. Escribe: `Fiebre alta y dificultad para respirar desde anoche.`
-4. Comunidad: `Nueva Esperanza`.
-5. Muestra la tarjeta **Ubicación lista** y el check de consentimiento.
+2. Confirma **Sí, enviar** para abrir el formulario. Todavía no se crea ninguna alerta.
+3. Toca **Cambiar** y elige **Enfermedad**.
+4. Escribe: `Fiebre alta y dificultad para respirar desde anoche.`
+5. Comunidad: `Nueva Esperanza`.
+6. Muestra la tarjeta **Ubicación lista** y el check de consentimiento.
 
 > "El GPS funciona sin datos. La ubicación solo se comparte si la persona lo
 > autoriza; no se publica la ubicación exacta de la comunidad."
 
-6. Toca **Continuar**.
+7. Señala que la descripción es obligatoria y deja el formulario listo para enviarlo.
 
 ### 0:50–1:20 · Sin conexión (30 s)
 
 1. Activa el modo avión o **Ajustes → Simular sin conexión**.
-2. En la revisión, muestra el aviso de que se guardará en el teléfono.
+2. En el formulario, muestra que el botón cambia a **Guardar alerta**.
 3. Toca **Guardar alerta**.
 
 > "Queda **Pendiente**. No decimos 'enviada': decimos la verdad. La alerta está

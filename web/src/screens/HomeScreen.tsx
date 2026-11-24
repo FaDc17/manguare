@@ -210,7 +210,7 @@ export function HomeScreen({
           <span className="quick-title"><LocalizedText id="common.help" /></span>
           <span className="quick-sub">{t('home.samuBomberosPolicia')}</span>
         </button>
-        <button type="button" className="quick-card" onClick={onCommunity}>
+        <button type="button" className="quick-card" onClick={onCommunity} aria-disabled="true">
           <span className="quick-icon quick-icon--green">
             <Store size={21} aria-hidden="true" />
           </span>
@@ -221,6 +221,7 @@ export function HomeScreen({
           type="button"
           className="quick-card"
           onClick={onOpenAssistant}
+          aria-disabled="true"
         >
           <span className="quick-icon quick-icon--sand">
             <Sparkles size={21} aria-hidden="true" />

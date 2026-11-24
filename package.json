@@ -15,7 +15,12 @@
     "build:beta": "vite build --config web/vite.config.ts --mode beta-visual",
     "android:sync": "node scripts/android.mjs sync",
     "android:apk": "node scripts/android.mjs apk",
+    "azure:check": "node --env-file-if-exists=.env scripts/azure-sql-check.mjs",
+    "azure:preflight": "node --env-file-if-exists=.env scripts/azure-preflight.mjs",
+    "azure:smoke": "node scripts/azure-smoke.mjs",
+    "azure:import-json": "node --env-file-if-exists=.env scripts/azure-import-json.mjs",
     "start": "node --env-file-if-exists=.env server/src/index.js",
+    "start:azure": "node scripts/azure-preflight.mjs && node server/src/index.js",
     "seed": "node server/scripts/seed.js",
     "test": "npm run test:api && npm run test:web",
     "test:api": "node --test server/test/*.test.js",
@@ -25,11 +30,13 @@
     "check": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
+    "@capacitor-community/sqlite": "^8.1.1",
     "@capacitor/android": "^8.6.2",
     "@capacitor/browser": "^8.0.5",
     "@capacitor/core": "^8.6.2",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.74.0",
+    "mssql": "^12.8.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-leaflet": "^5.0.0"

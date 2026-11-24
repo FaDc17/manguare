@@ -34,6 +34,7 @@ export function BottomNav({
         className={`nav-item ${active === 'community' ? 'is-active' : ''}`}
         data-testid="nav-community"
         onClick={() => onChange('community')}
+        aria-disabled="true"
         aria-current={active === 'community' ? 'page' : undefined}
       >
         <Store size={22} aria-hidden="true" />
@@ -44,6 +45,7 @@ export function BottomNav({
         className={`nav-item ${active === 'network' ? 'is-active' : ''}`}
         data-testid="nav-network"
         onClick={() => onChange('network')}
+        aria-disabled="true"
         aria-current={active === 'network' ? 'page' : undefined}
       >
         <Users size={22} aria-hidden="true" />

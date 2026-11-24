@@ -262,6 +262,14 @@
   color: var(--green-700);
 }
 
+.nav-item[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+.nav-item[aria-disabled="true"]:hover {
+  color: var(--muted);
+}
+
 .nav-icon {
   position: relative;
   display: inline-flex;
@@ -728,6 +736,16 @@
   border-color: var(--green-300);
   transform: translateY(-1px);
   box-shadow: var(--shadow-md);
+}
+
+.quick-card[aria-disabled="true"] {
+  opacity: 0.65;
+}
+
+.quick-card[aria-disabled="true"]:hover {
+  border-color: var(--line);
+  transform: none;
+  box-shadow: var(--shadow-sm);
 }
 
 .quick-icon {

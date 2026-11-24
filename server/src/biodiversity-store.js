@@ -2,8 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 export class BiodiversityStore {
-  constructor(file) {
+  constructor(file, { storage = null } = {}) {
     this.file = file;
+    this.storage = storage;
     this.reports = new Map();
     this.ready = this.#load();
     this.writeChain = Promise.resolve();
@@ -11,15 +12,18 @@ export class BiodiversityStore {
 
   async #load() {
     try {
-      const raw = await fs.readFile(this.file, 'utf8');
-      const parsed = JSON.parse(raw);
+      const parsed = this.storage
+        ? await this.storage.load()
+        : JSON.parse(await fs.readFile(this.file, 'utf8'));
+      this.reports.clear();
+      if (!parsed) return;
       if (!Array.isArray(parsed.reports)) throw new Error('Formato de reportes inválido');
       for (const report of parsed.reports) {
         if (report && typeof report.id === 'string') this.reports.set(report.id, report);
       }
     } catch (error) {
       if (error.code === 'ENOENT') return;
-      if (error instanceof SyntaxError) {
+      if (!this.storage && error instanceof SyntaxError) {
         const backup = `${this.file}.corrupt-${Date.now()}`;
         await fs.mkdir(path.dirname(this.file), { recursive: true });
         await fs.rename(this.file, backup).catch(() => {});
@@ -63,11 +67,20 @@ export class BiodiversityStore {
   }
 
   async #persist() {
-    const snapshot = JSON.stringify({ version: 1, reports: [...this.reports.values()] }, null, 2);
+    const state = { version: 1, reports: [...this.reports.values()] };
     const run = this.writeChain.then(async () => {
+      if (this.storage) {
+        try {
+          await this.storage.save(state);
+        } catch (error) {
+          await this.#load();
+          throw error;
+        }
+        return;
+      }
       await fs.mkdir(path.dirname(this.file), { recursive: true });
       const temp = `${this.file}.tmp`;
-      await fs.writeFile(temp, snapshot, 'utf8');
+      await fs.writeFile(temp, JSON.stringify(state, null, 2), 'utf8');
       await fs.rename(temp, this.file);
     });
     this.writeChain = run.catch(() => {});

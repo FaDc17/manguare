@@ -22,7 +22,8 @@ ENV NODE_ENV=production \
     MANGUARE_SOCIAL_FILE=/data/social.json \
     MANGUARE_STATIC_DIR=/app/web/dist
 
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 COPY server ./server
 COPY --from=build /app/web/dist ./web/dist
 

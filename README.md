@@ -63,12 +63,13 @@ Guion completo de 3 minutos: [`docs/DEMO.md`](docs/DEMO.md).
 
 ## Estado actual de la app de población
 
-**Actualizado: 18-11-2026.**
+**Actualizado: 24-11-2026.**
 
 Se mantuvo la PWA existente, su cola offline y el panel administrativo separado.
 En la app de población se agregaron:
 
-- Confirmación rápida de SOS, envío mínimo y detalle adjunto a la misma alerta.
+- Confirmación de SOS seguida de un formulario con descripción obligatoria; al enviarlo,
+  la alerta entra de inmediato en la cola de sincronización y puede editarse hasta que la red la confirme.
 - Listado de Conecta Amazonía con filtros por ubicación, detalle de publicación y
   contactos de la localidad para la demostración.
 - Reporte de biodiversidad con categorías, foto y ubicación; el panel ahora lista
@@ -301,8 +302,8 @@ no muestra alertas ni ubicaciones de emergencia.
 2. En **Ajustes** puedes activar **Simular sin conexión**. Es un interruptor de
    demostración: la alerta se guarda igual y se envía al desactivarlo.
 3. Para una prueba real, usa el modo avión del navegador (DevTools → Network →
-   Offline) o el modo avión del teléfono. La cola vive en IndexedDB y sobrevive
-   a cerrar la app.
+   Offline) o el modo avión del teléfono. La cola vive en SQLite en el APK y en
+   IndexedDB en la PWA; sobrevive a cerrar la app.
 4. Al recuperar la señal, la app reintenta sola con espera progresiva (15 s, 45 s,
    2 min y luego cada 5 min) y también al volver a primer plano o al recuperar
    conexión. El envío es idempotente por `id`: repetir no duplica alertas.
@@ -314,6 +315,9 @@ Para generar un APK Android con Capacitor para el MVP local, ejecuta
 `android/app/build/outputs/apk/debug/app-debug.apk`. El APK se conecta por Wi-Fi
 al servidor Node del PC mediante su IP privada. La guía de configuración está en
 [`docs/ANDROID.md`](docs/ANDROID.md).
+La preparación para Azure App Service está en
+[`docs/AZURE_DEPLOY.md`](docs/AZURE_DEPLOY.md); el almacenamiento local y SQL se documentan en
+[`docs/AZURE_SQLITE.md`](docs/AZURE_SQLITE.md).
 
 La app es una PWA instalable. En Android/Chrome abre el menú → **Instalar app**.
 El service worker exige contexto seguro: funciona en `localhost` o por HTTPS.
@@ -432,11 +436,11 @@ La ubicación solo se guarda si `consentLocation` es `true`.
 ```
 web/                 App React + Vite + TypeScript (PWA)
   src/screens/       Acceso, inicio, nueva alerta, detalle, historial, comunidad, ajustes
-  src/lib/           Cola IndexedDB, reintentos, sincronización, sesión demo, GPS/foto/SMS
+  src/lib/           Cola SQLite/IndexedDB, reintentos, sincronización, sesión demo, GPS/foto/SMS
   src/panel/         Panel web de la red de salud (login incluido)
   src/sw.ts          Service worker (precaché + Background Sync)
   test/              Pruebas de cola offline, acceso demo y plazos
-server/              API Node sin dependencias
+server/              API Node
   src/               Rutas, validación, autenticación, persistencia JSON
   scripts/seed.js    Alertas de demostración
   test/              Pruebas de API, sesión y plazos de acuse

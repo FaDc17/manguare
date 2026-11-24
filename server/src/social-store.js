@@ -40,8 +40,9 @@ function seedPosts(now) {
  * para no contar dos veces un «me gusta», pero NO es autenticación real.
  */
 export class SocialStore {
-  constructor(file, { now = () => new Date().toISOString() } = {}) {
+  constructor(file, { now = () => new Date().toISOString(), storage = null } = {}) {
     this.file = file;
+    this.storage = storage;
     this.now = now;
     this.posts = new Map();
     this.listings = new Map();
@@ -51,8 +52,15 @@ export class SocialStore {
 
   async #load() {
     try {
-      const raw = await fs.readFile(this.file, 'utf8');
-      const parsed = JSON.parse(raw);
+      const parsed = this.storage
+        ? await this.storage.load()
+        : JSON.parse(await fs.readFile(this.file, 'utf8'));
+      this.posts.clear();
+      this.listings.clear();
+      if (!parsed) {
+        for (const post of seedPosts(this.now())) this.posts.set(post.id, post);
+        return;
+      }
       for (const post of parsed.posts ?? []) {
         if (post && typeof post.id === 'string') this.posts.set(post.id, post);
       }
@@ -64,7 +72,7 @@ export class SocialStore {
         for (const post of seedPosts(this.now())) this.posts.set(post.id, post);
         return;
       }
-      if (error instanceof SyntaxError) {
+      if (!this.storage && error instanceof SyntaxError) {
         const backup = `${this.file}.corrupt-${Date.now()}`;
         await fs.mkdir(path.dirname(this.file), { recursive: true });
         await fs.rename(this.file, backup).catch(() => {});
@@ -194,15 +202,20 @@ export class SocialStore {
   }
 
   async #persist() {
-    const snapshot = JSON.stringify(
-      { version: 1, posts: [...this.posts.values()], listings: [...this.listings.values()] },
-      null,
-      2,
-    );
+    const state = { version: 1, posts: [...this.posts.values()], listings: [...this.listings.values()] };
     const run = this.writeChain.then(async () => {
+      if (this.storage) {
+        try {
+          await this.storage.save(state);
+        } catch (error) {
+          await this.#load();
+          throw error;
+        }
+        return;
+      }
       await fs.mkdir(path.dirname(this.file), { recursive: true });
       const temp = `${this.file}.tmp`;
-      await fs.writeFile(temp, snapshot, 'utf8');
+      await fs.writeFile(temp, JSON.stringify(state, null, 2), 'utf8');
       await fs.rename(temp, this.file);
     });
     this.writeChain = run.catch(() => {});

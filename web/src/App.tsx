@@ -1,6 +1,5 @@
 // Organiza las pantallas y vincula el selector de idioma con los avisos y diálogos de la app.
 
-import { message } from './i18n/catalog';
 import { Capacitor } from '@capacitor/core';
 import { useTranslation } from './i18n/LanguageContext';
 import { LANGUAGES, isLanguageComplete, type Language } from './i18n/catalog';
@@ -14,8 +13,8 @@ import { Sheet } from './components/Sheet';
 import { Toast } from './components/Toast';
 import { TopBar } from './components/TopBar';
 import { clearSession, loadSession, saveProfileName, saveSession, type Session } from './lib/session';
-import { EMERGENCY_META, SOS_DEFAULT_NOTE } from './lib/emergency';
-import { BIODIVERSITY_CATEGORIES, EMERGENCY_TYPES, type AlertLocation, type BiodiversityCategory, type ServerAlert } from './lib/types';
+import { EMERGENCY_META } from './lib/emergency';
+import { BIODIVERSITY_CATEGORIES, EMERGENCY_TYPES, type BiodiversityCategory, type ServerAlert } from './lib/types';
 import { AlertDetailScreen } from './screens/AlertDetailScreen';
 import { BiodiversityReportScreen } from './screens/BiodiversityReportScreen';
 import { CommunityScreen } from './screens/CommunityScreen';
@@ -56,6 +55,16 @@ const MapScreen = lazy(() =>
   import('./screens/MapScreen').then((module) => ({ default: module.MapScreen })),
 );
 
+const ACCESS_DISABLED_MESSAGE = 'Acceso inhabilitado por el momento para futuras mejoras';
+const DISABLED_VOICE_TOOLS = new Set([
+  'get_environment_topics', 'get_environment_reports',
+  'get_community_catalog', 'search_listings', 'open_listing', 'search_wall_posts',
+  'get_match_profiles', 'open_listing_form', 'get_listing_form_schema',
+  'get_listing_form_values', 'update_listing_form_fields', 'validate_listing_form',
+  'use_current_location', 'request_listing_publication_confirmation',
+  'publish_listing', 'cancel_listing_publication',
+]);
+
 type Screen =
   | { name: 'home' }
   | { name: 'community' }
@@ -64,17 +73,23 @@ type Screen =
   | { name: 'biodiversity'; category?: BiodiversityCategory }
   | { name: 'history' }
   | { name: 'settings' }
-  | { name: 'new' }
+  | { name: 'new'; sos?: boolean }
   | { name: 'alert'; id: string };
 
 function AppShell() {
   const { t, language, setLanguage } = useTranslation();
-  const [screen, setScreen] = useState<Screen>({ name: 'home' });
+  const [screen, setScreenState] = useState<Screen>({ name: 'home' });
   const [languageOpen, setLanguageOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sosConfirmOpen, setSosConfirmOpen] = useState(false);
-  const [sosSending, setSosSending] = useState(false);
-  const { createAlert, alerts, biodiversityReports, settings, updateSettings, showToast } = useApp();
+  const { alerts, biodiversityReports, settings, updateSettings, showToast } = useApp();
+  const setScreen = (target: Screen) => {
+    if (target.name === 'community' || target.name === 'network' || target.name === 'biodiversity') {
+      showToast(ACCESS_DISABLED_MESSAGE, 'warn');
+      return;
+    }
+    setScreenState(target);
+  };
   const { session, updateName } = useSession();
   const [voiceOpen, setVoiceOpen] = useState(false);
   const screenRef = useRef(screen);
@@ -125,6 +140,9 @@ function AppShell() {
     signal: AbortSignal,
   ) => {
     if (signal.aborted) throw new DOMException('La acción fue cancelada.', 'AbortError');
+    if (target.name === 'community' || target.name === 'network' || target.name === 'biodiversity') {
+      throw new Error(ACCESS_DISABLED_MESSAGE);
+    }
     const previous = screenRef.current;
     setScreen(target);
     try {
@@ -164,6 +182,11 @@ function AppShell() {
   ) => {
     const { signal, lastUserUtterance } = context;
     if (signal.aborted) throw new DOMException('La acción fue cancelada.', 'AbortError');
+    if (DISABLED_VOICE_TOOLS.has(name) ||
+        (name === 'navigate_to_screen' &&
+          (args.screen === 'community' || args.screen === 'network' || args.screen === 'biodiversity'))) {
+      return { success: false, message: ACCESS_DISABLED_MESSAGE };
+    }
 
     if (name === 'get_app_context') {
       return {
@@ -763,6 +786,7 @@ function AppShell() {
             <NewAlertScreen
               onCancel={goHome}
               onCreated={(id) => setScreen({ name: 'alert', id })}
+              sos={screen.sos === true}
             />
           ) : null}
 
@@ -799,16 +823,13 @@ function AppShell() {
         <Sheet
           open={sosConfirmOpen}
           title={t('sos.deseaEnviarUnaAlertaDeEmergencia')}
-          onClose={() => {
-            if (!sosSending) setSosConfirmOpen(false);
-          }}
+          onClose={() => setSosConfirmOpen(false)}
           footer={
             <div className="sos-confirm-actions">
               <button
                 type="button"
                 className="btn btn-secondary btn-lg"
                 data-testid="sos-confirm-cancel"
-                disabled={sosSending}
                 onClick={() => setSosConfirmOpen(false)}
               >
                 {t('common.no')}
@@ -817,10 +838,12 @@ function AppShell() {
                 type="button"
                 className="btn btn-danger btn-lg"
                 data-testid="sos-confirm-send"
-                disabled={sosSending}
-                onClick={() => void sendSosAlert()}
+                onClick={() => {
+                  setSosConfirmOpen(false);
+                  setScreen({ name: 'new', sos: true });
+                }}
               >
-                {sosSending ? t('sos.enviando') : t('sos.siEnviar')}
+                {t('sos.siEnviar')}
               </button>
             </div>
           }
@@ -832,51 +855,6 @@ function AppShell() {
       </div>
     </div>
   );
-
-  async function sendSosAlert() {
-    if (sosSending) return;
-    const recentSos = alerts.find(
-      (item) =>
-        item.isSos &&
-        item.state !== 'canceled' &&
-        Date.now() - Date.parse(item.createdAt) < 2 * 60_000,
-    );
-    if (recentSos) {
-      setSosConfirmOpen(false);
-      setScreen({ name: 'alert', id: recentSos.id });
-      showToast(message('sos.yaHayUnaAlertaSosReciente'), 'warn');
-      return;
-    }
-    setSosSending(true);
-    try {
-      const location = await captureSosLocation();
-      const alert = await createAlert({
-        type: 'otro',
-        isSos: true,
-        note: SOS_DEFAULT_NOTE,
-        community: settings.community,
-        deviceName: settings.deviceName,
-        reportedBy: session.name,
-        reporterPhone: session.phone,
-        location,
-        consentLocation: Boolean(location),
-      });
-      setSosConfirmOpen(false);
-      setScreen({ name: 'alert', id: alert.id });
-      if (!location) {
-        showToast(t('sos.noSeObtuvoElGpsLa'), 'warn');
-      } else if (!isEffectivelyOnline()) {
-        showToast(t('sos.alertaPendienteSeEnviaraAlRecuperar'), 'warn');
-      }
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : t('sos.noSePudoGuardarLaAlerta'),
-        'error',
-      );
-    } finally {
-      setSosSending(false);
-    }
-  }
 }
 
 export function App() {
@@ -927,22 +905,4 @@ export function App() {
       </AppProvider>
     </SessionProvider>
   );
-}
-
-function captureSosLocation(): Promise<AlertLocation | undefined> {
-  if (typeof navigator === 'undefined' || !navigator.geolocation) return Promise.resolve(undefined);
-  return new Promise((resolve) => {
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        resolve({
-          lat: Number(position.coords.latitude.toFixed(6)),
-          lng: Number(position.coords.longitude.toFixed(6)),
-          accuracy: Math.round(position.coords.accuracy),
-          capturedAt: new Date(position.timestamp).toISOString(),
-        });
-      },
-      () => resolve(undefined),
-      { enableHighAccuracy: true, timeout: 5000, maximumAge: 60_000 },
-    );
-  });
 }

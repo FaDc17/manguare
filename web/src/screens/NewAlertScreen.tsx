@@ -44,16 +44,19 @@ const TYPE_AUDIO =
 export function NewAlertScreen({
   onCancel,
   onCreated,
+  sos = false,
 }: {
   onCancel: () => void;
   onCreated: (id: string) => void;
+  sos?: boolean;
 }) {
   const { t } = useTranslation();
-  const { settings, online, createAlert, showToast } = useApp();
+  const { alerts, settings, online, createAlert, showToast } = useApp();
   const { session } = useSession();
-  const [step, setStep] = useState<Step>(1);
-  const [type, setType] = useState<EmergencyType | null>(null);
+  const [step, setStep] = useState<Step>(sos ? 2 : 1);
+  const [type, setType] = useState<EmergencyType | null>(sos ? 'otro' : null);
   const [note, setNote] = useState('');
+  const [noteError, setNoteError] = useState(false);
   const [community, setCommunity] = useState(settings.community);
   const [photo, setPhoto] = useState<string | undefined>();
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -130,12 +133,28 @@ export function NewAlertScreen({
   };
 
   const submit = async () => {
-    if (!type || submitting) return;
+    if (!type || submitting || photoBusy) return;
+    if (sos && !note.trim()) {
+      setNoteError(true);
+      return;
+    }
+    if (sos) {
+      const recentSos = alerts.find((item) =>
+        item.isSos && item.state !== 'canceled' &&
+        Date.now() - Date.parse(item.createdAt) < 2 * 60_000,
+      );
+      if (recentSos) {
+        showToast(t('sos.yaHayUnaAlertaSosReciente'), 'warn');
+        onCreated(recentSos.id);
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const alert = await createAlert({
         type,
-        note,
+        ...(sos ? { isSos: true } : {}),
+        note: sos ? note.trim() : note,
         community,
         deviceName: settings.deviceName,
         reportedBy: session.name,
@@ -161,19 +180,19 @@ export function NewAlertScreen({
           <ArrowLeft size={22} aria-hidden="true" />
         </button>
         <div className="wizard-head-copy">
-          <span className="wizard-step">{t('newAlert.pasoDe3', { step })}</span>
+          <span className="wizard-step">{sos ? t('sos.pasoDe2', { step: step === 1 ? 1 : 2 }) : t('newAlert.pasoDe3', { step })}</span>
           <div
             className="progress"
             role="progressbar"
             aria-valuemin={1}
-            aria-valuemax={3}
-            aria-valuenow={step}
-            aria-label={t('newAlert.pasoDe3', { step })}
+            aria-valuemax={sos ? 2 : 3}
+            aria-valuenow={sos && step === 2 ? 2 : step}
+            aria-label={sos ? t('sos.pasoDe2', { step: step === 1 ? 1 : 2 }) : t('newAlert.pasoDe3', { step })}
           >
-            <span style={{ width: `${(step / 3) * 100}%` }} />
+            <span style={{ width: `${(sos ? (step === 1 ? 1 : 2) / 2 : step / 3) * 100}%` }} />
           </div>
         </div>
-        <span className="wizard-tag">{t('newAlert.nuevaAlerta')}</span>
+        <span className="wizard-tag">{sos ? t('sos.title') : t('newAlert.nuevaAlerta')}</span>
       </header>
 
       {step === 1 ? (
@@ -222,7 +241,8 @@ export function NewAlertScreen({
           className="wizard-body"
           onSubmit={(event) => {
             event.preventDefault();
-            setStep(3);
+            if (sos) void submit();
+            else setStep(3);
           }}
         >
           <div className="step-type">
@@ -239,18 +259,26 @@ export function NewAlertScreen({
           </div>
 
           <h1>{t('newAlert.cuentanosUnPocoMas')}</h1>
-          <p className="lead">{t('newAlert.todoEsOpcionalLaAlertaSe')}</p>
+          <p className="lead">{sos ? t('sos.completaElDetalle') : t('newAlert.todoEsOpcionalLaAlertaSe')}</p>
 
           <label className="field">
             <span className="field-label">{t('newAlert.queObservas')}</span>
             <textarea
+              data-testid="alert-note"
               value={note}
-              onChange={(event) => setNote(event.target.value)}
+              onChange={(event) => {
+                setNote(event.target.value);
+                if (event.target.value.trim()) setNoteError(false);
+              }}
               placeholder={t('newAlert.ejFiebreAltaDesdeAyerNo')}
               rows={3}
               maxLength={1000}
+              aria-required={sos}
+              aria-invalid={noteError}
             />
-            <span className="field-help">{t('newAlert.noEscribasNombresSiNoEs')}</span>
+            <span className="field-help" role={noteError ? 'alert' : undefined}>
+              {noteError ? t('sos.detalleObligatorio') : t('newAlert.noEscribasNombresSiNoEs')}
+            </span>
           </label>
 
           <div className="field">
@@ -363,6 +391,7 @@ export function NewAlertScreen({
             <span className="field-label">{t('newAlert.comunidadOReferencia')}</span>
             <input
               type="text"
+              data-testid="alert-community"
               value={community}
               onChange={(event) => setCommunity(event.target.value)}
               placeholder={t('newAlert.ejNuevaEsperanzaRioParanapura')}
@@ -370,8 +399,16 @@ export function NewAlertScreen({
             />
           </label>
 
-          <button type="submit" className="btn btn-primary btn-lg btn-block" data-testid="continue-button">
-            {t('newAlert.continuar')}{' '}<ChevronRight size={19} aria-hidden="true" />
+          <button
+            type="submit"
+            className={`btn btn-lg btn-block ${sos && online ? 'btn-danger' : 'btn-primary'}`}
+            data-testid={sos ? 'submit-alert' : 'continue-button'}
+            disabled={submitting || photoBusy}
+          >
+            {sos
+              ? submitting ? t('newAlert.guardando') : online ? t('newAlert.enviarAlerta') : t('newAlert.guardarAlerta')
+              : t('newAlert.continuar')}{' '}
+            {sos ? <Send size={19} aria-hidden="true" /> : <ChevronRight size={19} aria-hidden="true" />}
           </button>
           <p className="wizard-note">
             <Camera size={16} aria-hidden="true" />{' '}{t('newAlert.laFotoYLaUbicacionSolo')}

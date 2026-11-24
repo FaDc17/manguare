@@ -423,7 +423,7 @@ async function main() {
       `con la cola vacía no debería consultar el servidor: ${apiRequests} solicitudes`,
     );
 
-    // 7. SOS mínimo, detalle sobre la misma alerta y lectura desde el panel.
+    // 7. El SOS exige detalle antes de enviarse y se puede editar después.
     await app.click('[data-testid="nav-home"]');
     const alertCountBeforeSos = (await store.list()).length;
     await app.click('[data-testid="sos-button"]');
@@ -436,14 +436,22 @@ async function main() {
 
     await app.click('[data-testid="sos-button"]');
     await app.click('[data-testid="sos-confirm-send"]');
+    await app.waitForSelector('[data-testid="alert-note"]', { timeout: 15000 });
+    assert.equal((await store.list()).length, alertCountBeforeSos, 'Confirmar no debe enviar una alerta vacía');
+    await app.click('[data-testid="submit-alert"]');
+    assert.equal((await store.list()).length, alertCountBeforeSos, 'Sin descripción no se debe enviar el SOS');
+    await app.type('[data-testid="alert-note"]', 'Necesitamos apoyo en la ribera.');
+    await app.click('[data-testid="alert-community"]', { clickCount: 3 });
+    await app.type('[data-testid="alert-community"]', 'Río de la comunidad');
+    await app.click('[data-testid="submit-alert"]');
     await app.waitForSelector('[data-testid="sos-detail-open"]', { timeout: 15000 });
     await app.waitForFunction(
       () => document.querySelector('[data-testid="alert-state"]')?.textContent === 'Enviada',
       { timeout: 15000 },
     );
     await app.click('[data-testid="sos-detail-open"]');
-    await app.type('[data-testid="sos-detail-reference"]', 'Río de la comunidad');
-    await app.type('[data-testid="sos-detail-description"]', 'Necesitamos apoyo en la ribera.');
+    await app.click('[data-testid="sos-detail-description"]', { clickCount: 3 });
+    await app.type('[data-testid="sos-detail-description"]', 'Necesitamos apoyo adicional en la ribera.');
     await app.click('[data-testid="sos-detail-save"]');
     await app.waitForFunction(
       () => !document.querySelector('[data-testid="sos-detail-save"]'),
@@ -451,7 +459,7 @@ async function main() {
     );
     const sosAlerts = (await store.list()).filter((alert) => alert.isSos);
     assert.equal(sosAlerts.length, 1, 'El detalle debe actualizar la misma alerta SOS');
-    assert.equal(sosAlerts[0].note, 'Necesitamos apoyo en la ribera.');
+    assert.equal(sosAlerts[0].note, 'Necesitamos apoyo adicional en la ribera.');
     assert.equal(sosAlerts[0].community, 'Río de la comunidad');
     results.sosDetailUpdatedExistingAlert = true;
 

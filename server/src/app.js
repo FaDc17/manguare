@@ -411,6 +411,7 @@ export function createHandler({
   biodiversityStore,
   socialStore,
   staticDir,
+  healthCheck = null,
   now = () => new Date().toISOString(),
   auth = null,
   ackMinutes = DEFAULT_ACK_MINUTES,
@@ -473,6 +474,7 @@ export function createHandler({
           sendJson(res, 405, { error: 'method_not_allowed' });
           return;
         }
+        if (healthCheck) await healthCheck();
         const alerts = await store.list();
         sendJson(res, 200, {
           ok: true,
