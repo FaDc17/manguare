@@ -29,6 +29,7 @@ export default defineConfig({
       manifest: false,
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,webp,webmanifest}'],
+        globIgnores: ['**/db-native-*.js'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
       },
       devOptions: { enabled: false },

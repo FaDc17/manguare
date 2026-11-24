@@ -14,6 +14,7 @@ import {
   updateAlertDetails,
 } from '../src/lib/queue-core';
 import { isAttemptDue, nextAttemptAt, retryDelayMs } from '../src/lib/retry';
+import { syncAll as syncWorker } from '../src/lib/queue-worker';
 import type { AlertRecord, ServerAlert } from '../src/lib/types';
 
 const realFetch = globalThis.fetch;
@@ -153,6 +154,23 @@ test('sin red la alerta queda pendiente con reintento programado y sobrevive a l
   // Un segundo envío no duplica: ya no está pendiente.
   await flushQueue(true);
   assert.equal(posts, 1);
+});
+
+test('el worker sincroniza la cola PWA en IndexedDB con rutas API relativas', async () => {
+  const alert = await createLocalAlert({
+    type: 'otro', note: 'Aviso sin conexión', community: 'Prueba',
+    deviceName: 'Navegador', consentLocation: false,
+  });
+  const server = serverAlert(alert);
+  const paths: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    paths.push(String(input));
+    return new Response(JSON.stringify({ alert: server }), { status: 200 });
+  }) as typeof fetch;
+
+  assert.deepEqual(await syncWorker(true), { sent: 1, failed: 0, updated: 0 });
+  assert.deepEqual(paths, ['/api/alerts', `/api/alerts/${alert.id}`]);
+  assert.equal((await getAlert(alert.id))?.state, 'sent');
 });
 
 test('la confirmación de la red de salud llega por alerta, sin descargar la lista completa', async () => {

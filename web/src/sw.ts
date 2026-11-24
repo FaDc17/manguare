@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { syncAll } from './lib/queue-core';
+import { syncAll } from './lib/queue-worker';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision?: string | null }>;

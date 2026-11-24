@@ -6,7 +6,7 @@ Para publicar el backend existente en `manguare-services`, seguir [AZURE_DEPLOY.
 
 - Android usa SQLite nativo con el esquema recibido en [`database/01_sqlite.sql`](../database/01_sqlite.sql). El tipo, la descripción, la referencia, el estado y los reintentos se leen de `emergencias` y `cola_sincronizacion`. `app_alertas` conserva el registro completo para mantener campos que el esquema no contempla (foto, token de edición, estado cancelado y otros). Los reportes ambientales viven en `app_biodiversidad`.
 - Al abrir por primera vez una versión Android actualizada, se copian las alertas y reportes existentes de IndexedDB a SQLite. La migración marca su final solo después de copiar todo y conserva los datos originales para evitar pérdidas. Si falla, se reintenta en el próximo inicio.
-- La PWA sigue usando IndexedDB: su service worker no puede abrir SQLite nativo.
+- La PWA sigue usando IndexedDB: su service worker no puede abrir SQLite nativo. `sw.ts` entra por `queue-worker.ts`, que usa `db-web.ts` y rutas `/api` relativas; la app entra por `queue-core.ts`, que usa `db.ts` para elegir SQLite nativo en Android o IndexedDB en el navegador. Ambos adaptadores comparten la lógica de `queue-core-shared.ts` sin introducir Capacitor en el worker.
 - La cola existente envía por HTTPS a la API cuando hay conexión y reintenta al recuperarla. El teléfono nunca se conecta directamente a Azure SQL.
 
 ## Azure App Service
