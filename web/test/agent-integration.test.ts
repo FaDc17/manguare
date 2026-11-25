@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AGENT_CAPABILITIES, listAgentCapabilities } from '../src/lib/agent-capabilities.ts';
 import { translate } from '../src/i18n/catalog.ts';
-import { filterMapPlaces, MAP_PLACES, placeDistanceKm } from '../src/lib/map-data.ts';
+import { emergencyMapPlaces, filterMapPlaces, MAP_PLACES, placeDistanceKm } from '../src/lib/map-data.ts';
 import { hasExplicitLanguageIntent, hasExplicitLocationIntent, VOICE_FUNCTION_DECLARATIONS } from '../src/lib/voice-tools.ts';
 
 describe('registro de herramientas del agente', () => {
@@ -39,7 +39,7 @@ describe('registro de herramientas del agente', () => {
 
 describe('fuente compartida del mapa', () => {
   const t = (key: Parameters<typeof translate>[1]) => translate('es', key);
-  const all = { conecta: true, support: true };
+  const all = { emergency: false, conecta: true, support: true };
 
   it('busca hospitales en los mismos marcadores que dibuja el mapa', () => {
     const found = filterMapPlaces(MAP_PLACES, 'hospitales', all, t);
@@ -48,9 +48,38 @@ describe('fuente compartida del mapa', () => {
   });
 
   it('respeta filtros activos y calcula distancia solo con coordenadas recibidas', () => {
-    assert.deepEqual(filterMapPlaces(MAP_PLACES, 'hospital', { conecta: true, support: false }, t), []);
+    assert.deepEqual(filterMapPlaces(MAP_PLACES, 'hospital', {
+      emergency: false, conecta: true, support: false,
+    }, t), []);
     const hospital = MAP_PLACES.find((item) => item.id === 'hospital-santa-maria');
     assert.ok(hospital);
     assert.equal(placeDistanceKm(hospital, hospital.coordinates), 0);
+  });
+
+  it('incluye en el mapa solo emergencias con consentimiento y coordenadas válidas', () => {
+    const alert = {
+      id: 'alerta-1',
+      type: 'accidente' as const,
+      isSos: true,
+      community: 'Nueva Esperanza',
+      consentLocation: true,
+      location: { lat: -4.7, lng: -78.15, accuracy: 5, capturedAt: '2026-01-01T00:00:00Z' },
+      clientCreatedAt: '2026-01-01T00:00:00Z',
+    };
+    const places = emergencyMapPlaces([
+      alert,
+      { ...alert, id: 'sin-consentimiento', consentLocation: false },
+      { ...alert, id: 'coordenadas-invalidas', location: { ...alert.location, lat: 91 } },
+    ], t);
+
+    assert.deepEqual(places.map((place) => place.id), ['emergency:alerta-1']);
+    assert.equal(places[0].kind, 'emergency');
+    assert.equal(places[0].demo, false);
+    assert.equal(places[0].coordinates.lat, -4.7);
+    assert.equal(places[0].name, t('sos.title'));
+    assert.equal(places[0].description, '');
+    assert.deepEqual(filterMapPlaces(places, '', {
+      emergency: true, conecta: false, support: false,
+    }, t), places);
   });
 });

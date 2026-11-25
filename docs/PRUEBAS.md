@@ -200,7 +200,3 @@ pequeño. Registrar modelo, versión de Android, versión de Chrome y resultado.
 **Mapa sin conexión con aviso y lista disponible:**
 
 ![Mapa sin conexión](capturas/mapa-offline.png)
-
-**Panel con alerta SOS y reportes de biodiversidad:**
-
-![Panel con biodiversidad](capturas/panel-biodiversidad.png)

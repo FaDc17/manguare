@@ -8,7 +8,7 @@ import { ConnectionPill } from './ConnectionPill';
 
 export function TopBar({ onLanguage }: { onLanguage: () => void }) {
   const { t, language } = useTranslation();
-  const { online, settings } = useApp();
+  const { online } = useApp();
 
   return (
     <header className="topbar">
@@ -20,7 +20,6 @@ export function TopBar({ onLanguage }: { onLanguage: () => void }) {
         </div>
       </div>
       <div className="topbar-actions">
-        {settings.simulateOffline ? <span className="demo-chip">{t('topBar.demo')}</span> : null}
         <ConnectionPill online={online} />
         <button
           type="button"

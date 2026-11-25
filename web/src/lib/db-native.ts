@@ -1,6 +1,7 @@
 import { CapacitorSQLite, SQLiteConnection, type SQLiteDBConnection } from '@capacitor-community/sqlite';
 import localSchema from '../../../database/01_sqlite.sql?raw';
 import * as legacy from './db-web';
+import { normalizeSqliteScript } from './sqlite-script';
 import type { AlertRecord, BiodiversityReport } from './types';
 
 const DB_NAME = 'manguare';
@@ -33,7 +34,7 @@ async function openNativeDb(): Promise<SQLiteDBConnection> {
   await db.execute('PRAGMA foreign_keys = ON;', false);
 
   const version = rows<{ user_version: number }>(await db.query('PRAGMA user_version;'))[0]?.user_version ?? 0;
-  if (version === 0) await db.execute(localSchema, false);
+  if (version === 0) await db.execute(normalizeSqliteScript(localSchema), false);
   else if (version !== 1) throw new Error(`Esquema SQLite local no compatible: versión ${version}`);
   const tables = rows<{ name: string }>(await db.query(
     "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('emergencias', 'cola_sincronizacion');",

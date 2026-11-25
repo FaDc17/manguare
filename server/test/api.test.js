@@ -93,12 +93,14 @@ test('la API permite el origen exacto de Capacitor sin abrir CORS a otros sitios
     headers: {
       Origin: 'https://localhost',
       'Access-Control-Request-Method': 'POST',
-      'Access-Control-Request-Headers': 'content-type',
+      'Access-Control-Request-Headers': 'content-type, authorization',
     },
   });
   assert.equal(preflight.status, 204);
   assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://localhost');
+  assert.equal(preflight.headers.get('access-control-allow-credentials'), 'true');
   assert.match(preflight.headers.get('access-control-allow-methods') ?? '', /POST/);
+  assert.match(preflight.headers.get('access-control-allow-headers') ?? '', /Authorization/i);
   const native = await fetch(`${base}/api/health`, { headers: { Origin: 'https://localhost' } });
   assert.equal(native.headers.get('access-control-allow-origin'), 'https://localhost');
   const localNative = await fetch(`${base}/api/health`, { headers: { Origin: 'http://localhost' } });
@@ -111,6 +113,12 @@ test('la API permite el origen exacto de Capacitor sin abrir CORS a otros sitios
   assert.equal(localPreflight.headers.get('access-control-allow-origin'), 'http://localhost');
   const other = await fetch(`${base}/api/health`, { headers: { Origin: 'https://otro.example' } });
   assert.equal(other.headers.get('access-control-allow-origin'), null);
+  const rejectedMutation = await fetch(`${base}/api/panel/login`, {
+    method: 'POST',
+    headers: { Origin: 'https://otro.example', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user: 'salud', password: 'no-importa' }),
+  });
+  assert.equal(rejectedMutation.status, 403);
 });
 
 test('el APK recibe un token temporal de Gemini desde el servidor sin exponer la clave', async () => {

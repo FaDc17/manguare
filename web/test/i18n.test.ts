@@ -134,10 +134,16 @@ test('la preferencia conserva los ajustes anteriores y acepta los c√≥digos hist√
   assert.equal(loadSettings().language, 'es');
 
   for (const [legacy, current] of [['aw', 'agr'], ['sh', 'cbt'], ['invalido', 'es']]) {
-    entries.set(key, JSON.stringify({ language: legacy, community: 'Chiriaco', simulateOffline: true }));
+    entries.set(key, JSON.stringify({
+      language: legacy,
+      community: 'Chiriaco',
+      smsNumber: 'configured-current-promoter',
+      simulateOffline: true,
+    }));
     assert.equal(loadSettings().language, current);
     assert.equal(loadSettings().community, 'Chiriaco');
-    assert.equal(loadSettings().simulateOffline, true);
+    assert.equal(loadSettings().smsNumber, 'configured-current-promoter');
+    assert.equal('simulateOffline' in loadSettings(), false);
   }
 
   for (const { id } of LANGUAGES) {

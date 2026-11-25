@@ -9,7 +9,6 @@ export interface Settings {
   healthPost: string;
   healthPhone: string;
   smsNumber: string;
-  simulateOffline: boolean;
 }
 
 const KEY = 'manguare.settings.v1';
@@ -23,7 +22,6 @@ export const DEFAULT_SETTINGS: Settings = {
   healthPost: '',
   healthPhone: '',
   smsNumber: DEFAULT_SMS,
-  simulateOffline: false,
 };
 
 export function loadSettings(): Settings {
@@ -45,10 +43,6 @@ export function loadSettings(): Settings {
         typeof parsed.healthPhone === 'string' ? parsed.healthPhone : DEFAULT_SETTINGS.healthPhone,
       smsNumber:
         typeof parsed.smsNumber === 'string' ? parsed.smsNumber : DEFAULT_SETTINGS.smsNumber,
-      simulateOffline:
-        typeof parsed.simulateOffline === 'boolean'
-          ? parsed.simulateOffline
-          : DEFAULT_SETTINGS.simulateOffline,
     };
   } catch {
     return { ...DEFAULT_SETTINGS };

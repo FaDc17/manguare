@@ -72,8 +72,8 @@ En la app de población se agregaron:
   la alerta entra de inmediato en la cola de sincronización y puede editarse hasta que la red la confirme.
 - Listado de Conecta Amazonía con filtros por ubicación, detalle de publicación y
   contactos de la localidad para la demostración.
-- Reporte de biodiversidad con categorías, foto y ubicación; el panel ahora lista
-  esos reportes y permite marcarlos como leídos.
+- Reporte de biodiversidad con categorías, foto y ubicación, enviado por una API
+  independiente; el panel administrativo se mantiene enfocado en emergencias.
 - Registro local con validaciones, selector de fotos de DNI de demostración y
   aceptación de términos.
 - Mapa con OpenStreetMap, búsqueda y filtros **Conecta** y **Centro de apoyo**.
@@ -125,8 +125,8 @@ npm start
 | --- | --- | --- |
 | 1 | Entrar con usuario `992066275` / PIN `123456` | Inicio con “Hola, Juan” |
 | 2 | Entrar con admin `987654321` / PIN `123456` | Aparece **Panel de la red** |
-| 3 | Crear alerta con **Simular sin conexión** | Queda **Pendiente** |
-| 4 | Desactivar la simulación | Pasa a **Enviada** sin duplicarse |
+| 3 | Activar modo avión (o DevTools → Network → Offline) y crear alerta | Queda **Pendiente** |
+| 4 | Recuperar la conexión | Pasa a **Enviada** sin duplicarse |
 | 5 | En el panel, **Marcar recibida** | El teléfono pasa a **Recibida** |
 | 6 | Enviar respuesta **“Ambulancia o brigada en camino”** | El teléfono muestra la respuesta |
 | 7 | Crear alerta y no confirmarla con `MANGUARE_ACK_MINUTES=1` | Panel la marca **Vencida** y ofrece SMS/llamada |
@@ -262,8 +262,8 @@ La guía completa está en
 
 La app de población guarda los reportes sin conexión y los envía a una API separada
 de las emergencias. Se conservan en `MANGUARE_BIODIVERSITY_FILE` (en Docker, dentro
-del volumen persistente). El panel externo no se modifica ni se integra
-automáticamente: para mostrarlos, su equipo debe consultar estos endpoints:
+del volumen persistente). El panel administrativo de Manguare muestra únicamente
+emergencias; los siguientes endpoints se conservan para integraciones externas:
 
 | Método | Ruta | Uso |
 | --- | --- | --- |
@@ -286,9 +286,10 @@ código del navegador.
 
 La respuesta del listado tiene la forma `{ "reports": [...] }`; cada elemento
 incluye `state` (`sent` o `read`) y `serverReceivedAt`, y, cuando corresponda,
-`readAt` y `readBy`. Marcarlo como leído devuelve `{ "report": {...} }`. El equipo
-del panel externo debe implementar su propia pantalla y acción para usar este
-contrato; esta app no incluye ni modifica ese panel.
+`readAt` y `readBy`. Marcarlo como leído devuelve `{ "report": {...} }`. Una
+integración externa debe implementar su propia pantalla y acción para usar este
+contrato. Los reportes ambientales siguen disponibles en la app móvil y en la API,
+pero no se listan ni administran desde el panel de emergencias.
 
 El registro de población y sus PIN de demostración se guardan solo en ese navegador
 y dispositivo; no crean cuentas compartidas entre dispositivos. Las fotos del DNI
@@ -299,25 +300,40 @@ no muestra alertas ni ubicaciones de emergencia.
 ## Probar el modo sin conexión
 
 1. Abre la app en `http://localhost:8787` (la PWA solo se registra en producción).
-2. En **Ajustes** puedes activar **Simular sin conexión**. Es un interruptor de
-   demostración: la alerta se guarda igual y se envía al desactivarlo.
-3. Para una prueba real, usa el modo avión del navegador (DevTools → Network →
-   Offline) o el modo avión del teléfono. La cola vive en SQLite en el APK y en
-   IndexedDB en la PWA; sobrevive a cerrar la app.
+2. En el navegador usa DevTools → Network → Offline; en Android desactiva la red
+   o activa el modo avión. No hay un interruptor de simulación dentro de la app.
+3. La cola vive en SQLite en el APK y en IndexedDB en la PWA; sobrevive a cerrar
+   la app.
 4. Al recuperar la señal, la app reintenta sola con espera progresiva (15 s, 45 s,
    2 min y luego cada 5 min) y también al volver a primer plano o al recuperar
    conexión. El envío es idempotente por `id`: repetir no duplica alertas.
 
 ### Instalar en el teléfono
 
-Para generar un APK Android con Capacitor para el MVP local, ejecuta
-`npm run android:apk`. El archivo queda en
-`android/app/build/outputs/apk/debug/app-debug.apk`. El APK se conecta por Wi-Fi
-al servidor Node del PC mediante su IP privada. La guía de configuración está en
-[`docs/ANDROID.md`](docs/ANDROID.md).
-La preparación para Azure App Service está en
-[`docs/AZURE_DEPLOY.md`](docs/AZURE_DEPLOY.md); el almacenamiento local y SQL se documentan en
-[`docs/AZURE_SQLITE.md`](docs/AZURE_SQLITE.md).
+Para compilar el APK se necesita Node.js 22+, JDK 21 y Android SDK (API 36).
+Desde la raíz del proyecto:
+
+```bash
+npm install
+npm run android:apk
+```
+
+El APK de depuración queda en
+`android/app/build/outputs/apk/debug/app-debug.apk`. Cópialo al teléfono,
+ábrelo y confirma la instalación; Android puede pedir permiso para instalar
+aplicaciones desde el administrador de archivos utilizado. Al abrir Manguaré,
+la API de Azure ya está preconfigurada y no requiere ingresar una URL. La app
+conserva SQLite y su cola local si no hay conexión, y sincroniza al recuperar
+internet.
+
+Para actualizar una instalación existente, instala el APK sobre la app actual
+si Android lo permite. No desinstales la app para resolver un conflicto de firma
+si necesitas conservar alertas pendientes guardadas en el teléfono. La guía
+completa de Android está en [`docs/ANDROID.md`](docs/ANDROID.md).
+
+Las instrucciones para desplegar el backend y panel están en
+[`docs/AZURE_DEPLOY.md`](docs/AZURE_DEPLOY.md); los detalles de persistencia local
+y Azure SQL, en [`docs/AZURE_SQLITE.md`](docs/AZURE_SQLITE.md).
 
 La app es una PWA instalable. En Android/Chrome abre el menú → **Instalar app**.
 El service worker exige contexto seguro: funciona en `localhost` o por HTTPS.
@@ -373,9 +389,10 @@ en `MANGUARE_ESCALATION_PHONE` (o llamar al 106). La red también puede enviar
 “coordinar traslado” u otra indicación. El teléfono las recibe en la siguiente
 sincronización.
 
-El panel también muestra los **reportes de biodiversidad** enviados desde la app y
-permite marcarlos como leídos. Se guardan aparte de las emergencias, en
-`MANGUARE_BIODIVERSITY_FILE`.
+El panel administrativo muestra únicamente emergencias. Los reportes de
+biodiversidad enviados desde la app se guardan aparte, en
+`MANGUARE_BIODIVERSITY_FILE`, y siguen disponibles mediante la API independiente
+documentada arriba.
 
 Con `MANGUARE_PANEL_PASSWORD` definida, el panel pide login y usa una cookie de
 sesión `HttpOnly`; la confirmación queda auditada con el usuario. Sin esa
@@ -432,6 +449,19 @@ Estados: `pending` → `sent` → `received`. El cliente nunca retrocede un esta
 La ubicación solo se guarda si `consentLocation` es `true`.
 
 ## Estructura
+
+### Documentación del proyecto
+
+- [`docs/ANDROID.md`](docs/ANDROID.md): compilación, instalación y conexión del APK.
+- [`docs/AZURE_DEPLOY.md`](docs/AZURE_DEPLOY.md): publicación de API y panel en Azure.
+- [`docs/AZURE_SQLITE.md`](docs/AZURE_SQLITE.md): SQLite local, cola offline y Azure SQL.
+- [`docs/ARQUITECTURA.md`](docs/ARQUITECTURA.md): componentes y flujos del sistema.
+- [`docs/OPERACION.md`](docs/OPERACION.md): ejecución, seguridad y respaldos.
+- [`docs/PRUEBAS.md`](docs/PRUEBAS.md): comandos y verificación en Android.
+- [`docs/DEMO.md`](docs/DEMO.md): guion de demostración.
+- [`docs/IDIOMAS.md`](docs/IDIOMAS.md): idiomas y cobertura de traducciones.
+- [`docs/AUDITORIA_2026-11-22.md`](docs/AUDITORIA_2026-11-22.md): auditoría histórica fechada.
+- [`HANDOFF.md`](HANDOFF.md): alcance y decisiones originales del proyecto.
 
 ```
 web/                 App React + Vite + TypeScript (PWA)

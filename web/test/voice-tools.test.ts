@@ -7,6 +7,7 @@ import {
   searchCommunityListings,
   summarizeVoiceListing,
   validateVoiceListing,
+  VOICE_FUNCTION_DECLARATIONS,
   voiceCapabilities,
   voiceListingFieldSchema,
   type ListingFormValues,
@@ -58,6 +59,12 @@ describe('flujo de publicación por voz', () => {
 });
 
 describe('lectura de la app por voz', () => {
+  it('no ofrece cambiar el destinatario SMS ni preferencias ocultas', () => {
+    const updateSetting = VOICE_FUNCTION_DECLARATIONS.find((tool) => tool.name === 'update_app_setting');
+    assert.ok(updateSetting);
+    assert.doesNotMatch(JSON.stringify(updateSetting), /smsNumber|healthPhone|healthPost/);
+  });
+
   it('encuentra publicaciones por producto sin distinguir tildes', () => {
     const results = searchCommunityListings(COMMUNITY_LISTINGS, 'platano');
     assert.ok(results.some((item) => item.id === 'yuca-elena'));

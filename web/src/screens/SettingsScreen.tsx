@@ -1,4 +1,4 @@
-// Presenta las preferencias, el idioma seleccionado y la guía de audio.
+// Presenta las preferencias visibles y los datos locales de la cuenta.
 
 import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { useEffect, useState } from 'react';
@@ -11,44 +11,23 @@ import {
   Info,
   Languages,
   LogOut,
-  MapPin,
-  MessageSquareText,
-  Phone,
   RefreshCw,
   ShieldCheck,
   Smartphone,
   Trash2,
   TriangleAlert,
   UserRound,
-  Volume2,
   Wifi,
   WifiOff,
 } from 'lucide-react';
 import { useApp } from '../app/AppContext';
 import { useSession } from '../app/SessionContext';
-import { AudioButton } from '../components/AudioButton';
-import { MIXED_AUDIO_NOTE } from '../lib/audio';
-import { getNativeApiBase, isLocalMvpBuild, setNativeApiBase } from '../lib/api-url';
-import { checkGeminiServer, type GeminiServerCheck } from '../lib/gemini-server';
+import { getNativeApiBase } from '../lib/api-url';
 import { ConnectionPill } from '../components/ConnectionPill';
 import { Sheet } from '../components/Sheet';
 import { formatRelative } from '../lib/format';
 import { formatPhone } from '../lib/session';
-import { isLanguageComplete, LANGUAGES, type MessageKey, type Translate } from '../i18n/catalog';
-
-const SERVER_CHECK_ERRORS: Record<Exclude<GeminiServerCheck, { ok: true }>['code'], MessageKey> = {
-  unreachable: 'settings.nativeServerUnreachable',
-  not_manguare: 'settings.nativeServerNotManguare',
-  gemini_not_configured: 'settings.nativeServerNoGemini',
-  gemini_api_key_format_invalid: 'settings.nativeServerBadGeminiKey',
-  gemini_token_unavailable: 'settings.nativeServerGeminiError',
-  rate_limit_exceeded: 'settings.nativeServerRateLimited',
-  unexpected_response: 'settings.nativeServerUnexpected',
-};
-
-const SETTINGS_AUDIO =
-  'Ajustes de Manguaré. Aquí puedes elegir el idioma, escribir el número de respaldo para mensajes, ' +
-  'cambiar el nombre de tu comunidad y simular que no hay conexión para la demostración.';
+import { isLanguageComplete, LANGUAGES, type Translate } from '../i18n/catalog';
 
 // Compone «1 alerta» o «2 reportes» con las claves del idioma activo.
 function countText(t: Translate, kind: 'alert' | 'report', count: number): string {
@@ -56,14 +35,13 @@ function countText(t: Translate, kind: 'alert' | 'report', count: number): strin
 }
 
 export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void }) {
-  const { t, language: activeLanguage, visualSimulation } = useTranslation();
+  const { t, language: activeLanguage } = useTranslation();
   const {
     alerts,
     biodiversityReports,
     settings,
     updateSettings,
     online,
-    realOnline,
     syncing,
     syncNow,
     clearLocal,
@@ -71,9 +49,6 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
   } = useApp();
   const { session, logout, updateName } = useSession();
   const [profileName, setProfileName] = useState(session.name);
-  const [nativeApiBase, setNativeApiBaseDraft] = useState(getNativeApiBase);
-  const [serverChecking, setServerChecking] = useState(false);
-  const [serverCheck, setServerCheck] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => setProfileName(session.name), [session.name]);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -90,27 +65,6 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       setConfirmClear(false);
     } finally {
       setClearing(false);
-    }
-  };
-
-  const checkServer = async () => {
-    let base: string;
-    try {
-      base = setNativeApiBase(nativeApiBase);
-      if (!base) throw new Error(t('settings.nativeServerRequired'));
-      setNativeApiBaseDraft(base);
-      void syncNow(true);
-    } catch (error) {
-      setServerCheck({ ok: false, text: error instanceof Error ? error.message : t('settings.nativeServerRequired') });
-      return;
-    }
-    setServerChecking(true);
-    setServerCheck(null);
-    try {
-      const result = await checkGeminiServer(base);
-      setServerCheck({ ok: result.ok, text: t(result.ok ? 'settings.nativeServerReady' : SERVER_CHECK_ERRORS[result.code]) });
-    } finally {
-      setServerChecking(false);
     }
   };
 
@@ -223,50 +177,6 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
       <section className="settings-group" aria-labelledby="settings-prefs">
         <h2 id="settings-prefs">{t('settings.preferencias')}</h2>
         <div className="settings-card">
-          {Capacitor.isNativePlatform() && (
-            <label className="setting-row setting-row--stack">
-              <span className="setting-stack-head">
-                <span className="setting-icon"><Globe2 size={20} aria-hidden="true" /></span>
-                <span className="setting-main">
-                  <span className="setting-label">{t('settings.nativeServer')}</span>
-                  <span className="setting-sub">{t(isLocalMvpBuild()
-                    ? 'settings.nativeServerLocalHint' : 'settings.nativeServerHint')}</span>
-                </span>
-              </span>
-              <input
-                type="url"
-                className="setting-input setting-input--block"
-                value={nativeApiBase}
-                data-testid="settings-native-server-url"
-                placeholder={t(isLocalMvpBuild()
-                  ? 'settings.nativeServerLocalPlaceholder' : 'settings.nativeServerPlaceholder')}
-                autoCapitalize="none"
-                autoCorrect="off"
-                enterKeyHint="go"
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    event.currentTarget.blur();
-                    void checkServer();
-                  }
-                }}
-                onChange={(event) => {
-                  setNativeApiBaseDraft(event.target.value);
-                  setServerCheck(null);
-                }}
-              />
-            </label>
-          )}
-          {Capacitor.isNativePlatform() && (
-            <div className="setting-server-check">
-              <button type="button" className="btn btn-secondary" data-testid="settings-server-check"
-                disabled={serverChecking} onClick={() => void checkServer()}>
-                {t(serverChecking ? 'settings.nativeServerChecking' : 'settings.nativeServerCheck')}
-              </button>
-              {serverCheck && <p role={serverCheck.ok ? 'status' : 'alert'}
-                className={serverCheck.ok ? 'setting-server-ok' : 'field-error'}>{serverCheck.text}</p>}
-            </div>
-          )}
           <button type="button" className="setting-row setting-row--button" data-testid="settings-language" onClick={onOpenLanguage}>
             <span className="setting-icon">
               <Languages size={20} aria-hidden="true" />
@@ -319,115 +229,20 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
         </div>
       </section>
 
-      <section className="settings-group" aria-labelledby="settings-sms">
-        <h2 id="settings-sms">{t('settings.contactoYRespaldo')}</h2>
-        <div className="settings-card">
-          <label className="setting-row setting-row--stack">
-            <span className="setting-stack-head">
-              <span className="setting-icon">
-                <MapPin size={20} aria-hidden="true" />
-              </span>
-              <span className="setting-main">
-                <span className="setting-label">{t('settings.puestoDeSalud')}</span>
-                <span className="setting-sub">{t('settings.seMuestraEnNumerosDeAyuda')}</span>
-              </span>
-            </span>
-            <input
-              type="text"
-              className="setting-input setting-input--block"
-              data-testid="settings-healthPost"
-              value={settings.healthPost}
-              placeholder={t('settings.ejPuestoDeSaludNuevaEsperanza')}
-              maxLength={80}
-              onChange={(event) => updateSettings({ healthPost: event.target.value })}
-            />
-          </label>
-
-          <label className="setting-row">
-            <span className="setting-icon">
-              <Phone size={20} aria-hidden="true" />
-            </span>
-            <span className="setting-main">
-              <span className="setting-label">{t('settings.telefonoDelPuesto')}</span>
-              <span className="setting-sub">{t('settings.opcionalSePuedeLlamarSiHay')}</span>
-            </span>
-            <input
-              type="tel"
-              className="setting-input setting-input--tel"
-              data-testid="settings-healthPhone"
-              value={settings.healthPhone}
-              placeholder="+51 999 999 999"
-              onChange={(event) => updateSettings({ healthPhone: event.target.value })}
-            />
-          </label>
-
-          <label className="setting-row">
-            <span className="setting-icon">
-              <MessageSquareText size={20} aria-hidden="true" />
-            </span>
-            <span className="setting-main">
-              <span className="setting-label">{t('settings.numeroDelPromotorOPosta')}</span>
-              <span className="setting-sub">{t('settings.numeroDePruebaParaLaDemostracion')}</span>
-            </span>
-            <input
-              type="tel"
-              className="setting-input setting-input--tel"
-              data-testid="settings-smsNumber"
-              value={settings.smsNumber}
-              placeholder="+51 999 999 999"
-              onChange={(event) => updateSettings({ smsNumber: event.target.value })}
-            />
-          </label>
-        </div>
-        <p className="settings-note">
-          <Info size={15} aria-hidden="true" />{' '}{t('settings.enProduccionEsteNumeroDebeAcordarse')}
-        </p>
-      </section>
-
-      <section className="settings-group" aria-labelledby="settings-demo">
-        <h2 id="settings-demo">{t('settings.conexionYDemostracion')}</h2>
+      <section className="settings-group" aria-labelledby="settings-connection">
+        <h2 id="settings-connection">{t('settings.conexionYDemostracion')}</h2>
         <div className="settings-card">
           <div className="setting-row">
             <span className="setting-icon">
-              {realOnline ? <Wifi size={20} aria-hidden="true" /> : <WifiOff size={20} aria-hidden="true" />}
+              {online ? <Wifi size={20} aria-hidden="true" /> : <WifiOff size={20} aria-hidden="true" />}
             </span>
             <span className="setting-main">
               <span className="setting-label">{t('settings.senalDelDispositivo')}</span>
               <span className="setting-sub">
-                {realOnline ? t('settings.elNavegadorReportaConexion') : t('settings.elNavegadorReportaSinConexion')}
+                {online ? t('settings.elNavegadorReportaConexion') : t('settings.elNavegadorReportaSinConexion')}
               </span>
             </span>
-            <ConnectionPill online={realOnline} />
-          </div>
-
-          <div className="setting-row">
-            <span className="setting-icon">
-              <TriangleAlert size={20} aria-hidden="true" />
-            </span>
-            <span className="setting-main">
-              <span className="setting-label">{t('settings.simularSinConexion')}</span>
-              <span className="setting-sub">
-                {t('settings.paraLaDemoLaAppSe')}
-              </span>
-            </span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={settings.simulateOffline}
-              aria-label={t('settings.simularSinConexion')}
-              className={`switch ${settings.simulateOffline ? 'is-on' : ''}`}
-              onClick={() => {
-                updateSettings({ simulateOffline: !settings.simulateOffline });
-                showToast(
-                  settings.simulateOffline
-                    ? t('settings.conexionSimuladaDesactivadaSeIntentaraSincronizar')
-                    : t('settings.modoDemoLaAppAhoraSe'),
-                  settings.simulateOffline ? 'ok' : 'warn',
-                );
-              }}
-            >
-              <span className="switch-thumb" />
-            </button>
+            <ConnectionPill online={online} />
           </div>
 
           <div className="setting-row">
@@ -455,37 +270,6 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               <RefreshCw size={14} className={syncing ? 'spin' : ''} aria-hidden="true" />
               {syncing ? t('settings.enviando') : t('settings.sincronizar')}
             </button>
-          </div>
-        </div>
-      </section>
-
-      <section className="settings-group" aria-labelledby="settings-audio">
-        <h2 id="settings-audio">{t('settings.audioYLengua')}</h2>
-        <div className="settings-card">
-          <div className="setting-row setting-row--stack">
-            <div className="setting-stack-head">
-              <span className="setting-icon">
-                <Volume2 size={20} aria-hidden="true" />
-              </span>
-              <span className="setting-main">
-                <span className="setting-label">{t('settings.guiaDeAudio')}</span>
-                <span className="setting-sub">{visualSimulation ? MIXED_AUDIO_NOTE : t('settings.audioDeDemostracionEnCastellano')}</span>
-              </span>
-            </div>
-            <AudioButton text={SETTINGS_AUDIO} label={t('settings.escucharGuia')} />
-          </div>
-          <div className="setting-row setting-row--stack">
-            <div className="setting-stack-head">
-              <span className="setting-icon">
-                <Languages size={20} aria-hidden="true" />
-              </span>
-              <span className="setting-main">
-                <span className="setting-label">{t('settings.indigenousLanguages')}</span>
-                <span className="setting-sub">
-                  {t('settings.indigenousAudioNote')}
-                </span>
-              </span>
-            </div>
           </div>
         </div>
       </section>

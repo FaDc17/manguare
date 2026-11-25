@@ -4,7 +4,7 @@
  * - alerta creada sin red y persistida en IndexedDB
  * - sincronización al volver la conexión
  * - panel protegido, confirmación y vuelta del estado al teléfono
- * - cambio de idioma sin red y reproducción del guion de audio de la beta
+ * - cambio de idioma sin red y limpieza de los ajustes del APK
  * - sin alertas pendientes, la app no consulta el servidor cada 20 s
  *
  * Requiere Chromium/Chrome instalado y `npm run build` hecho.
@@ -126,21 +126,6 @@ async function checkLanguages(app) {
   await openSettings();
   await selectLanguage('es', 'cbt');
 
-  if (visualBeta) {
-    await app.evaluate(() => {
-      Object.defineProperty(window, 'speechSynthesis', {
-        configurable: true,
-        value: {
-          cancel() {},
-          getVoices: () => [],
-          speak: (utterance) => { document.body.dataset.guideText = utterance.text; },
-        },
-      });
-      if (!window.SpeechSynthesisUtterance) {
-        window.SpeechSynthesisUtterance = function (text) { this.text = text; };
-      }
-    });
-  }
   await app.click('[data-testid="nav-home"]');
   await app.click('.lang-btn');
   await app.waitForSelector('[data-testid="language-es"][aria-pressed="true"]');
@@ -174,12 +159,6 @@ assert.ok(
 );
   assert.equal(await app.$eval('.quick-title [lang="cni"]', (label) => label.textContent), 'Amitakotantsi');
   assert.equal(await app.$eval('[data-testid="nav-community"] [lang="cni"]', (label) => label.textContent), 'Nampitsi');
-  if (visualBeta) {
-    await app.click('.quick-card--audio');
-    const spoken = await app.evaluate(() => document.body.dataset.guideText);
-    assert.match(spoken, /Amitakotantsi/);
-    assert.match(spoken, /Manguaré guarda tu alerta en el teléfono/);
-  }
   await app.click('[data-testid="sos-button"]');
   const sosDialog = '[role="dialog"][aria-label="¿Desea enviar una alerta de emergencia?"]';
   await app.waitForSelector(sosDialog);
@@ -450,7 +429,8 @@ async function main() {
       { timeout: 15000 },
     );
     await app.click('[data-testid="sos-detail-open"]');
-    await app.click('[data-testid="sos-detail-description"]', { clickCount: 3 });
+    await app.$eval('[data-testid="sos-detail-description"]', (textarea) => textarea.select());
+    await app.keyboard.press('Backspace');
     await app.type('[data-testid="sos-detail-description"]', 'Necesitamos apoyo adicional en la ribera.');
     await app.click('[data-testid="sos-detail-save"]');
     await app.waitForFunction(
@@ -493,7 +473,7 @@ async function main() {
     await app.click('[data-testid="nav-community"]');
     await app.waitForFunction(
       () => document.body.textContent?.includes('Miel pura de la comunidad'),
-      { timeout: 5000 },
+      { timeout: 15000 },
     );
     const communityText = await app.evaluate(() => document.body.innerText);
     assert.ok(communityText.includes('Hospital Santa María'), 'faltan los centros de apoyo');
@@ -537,25 +517,19 @@ async function main() {
       (await app.$eval(reportSelector, (element) => element.textContent)).includes('Enviada'),
     );
     await panel.bringToFront();
-    await panel.waitForSelector(`[data-testid="bio-${report.id}"]`, { timeout: 10000 });
-    await panel.click(`[data-testid="bio-read-${report.id}"]`);
-    await panel.waitForFunction(
-      (id) =>
-        document
-          .querySelector(`[data-testid="bio-${id}"]`)
-          ?.textContent?.includes('Leída'),
-      { timeout: 10000 },
-      report.id,
-    );
+    const panelContent = await panel.evaluate(() => document.body.innerText);
+    assert.ok(!panelContent.includes('Reportes de biodiversidad'));
+    assert.ok(!panelContent.includes(report.title));
+    assert.equal(await panel.$(`[data-testid="bio-${report.id}"]`), null);
     await app.bringToFront();
     await app.click('[data-testid="history-refresh"]');
     await app.waitForFunction(
-      (selector) => document.querySelector(selector)?.textContent?.includes('Leída'),
+      (selector) => document.querySelector(selector)?.textContent?.includes('Enviada'),
       { timeout: 10000 },
       reportSelector,
     );
     results.publicationDetails = true;
-    results.biodiversityAvailableAndRead = true;
+    results.biodiversityAppAvailablePanelExcluded = true;
 
     // 8b. Red Manguaré: muro con likes y publicación, match con chat, asistente y mercado.
     await app.click('[data-testid="nav-network"]');
@@ -1017,7 +991,7 @@ async function main() {
     await checkLanguages(app);
     results.languagesOfflineAndPersisted = true;
 
-    // El APK sin servidor debe orientar a Ajustes antes de pedir micrófono.
+    // El asistente y los ajustes del APK no ofrecen controles del servidor.
     const simulatedAndroid = await app.evaluate(() => {
       window.androidBridge = {};
       return window.Capacitor?.isNativePlatform();
@@ -1026,51 +1000,18 @@ async function main() {
     await app.click('[data-testid="nav-network"]');
     await app.click('[data-testid="net-tab-agent"]');
     await app.click('[data-testid="net-open-voice"]');
-    await app.click('.voice-start');
-    await app.waitForSelector('[data-testid="voice-configure-server"]', { visible: true });
-    assert.ok((await app.$eval('.voice-error', (item) => item.textContent)).includes('URL del servidor'));
-    await app.click('[data-testid="voice-configure-server"]');
-    await app.waitForSelector('[data-testid="settings-native-server-url"]');
-    assert.equal(await app.$eval('[data-testid="app-screen"]', (item) => item.dataset.screen), 'settings');
-    await app.evaluate(() => document.querySelector('.toast button')?.click());
-    await app.type('[data-testid="settings-native-server-url"]', 'http://localhost:8787');
-    await app.evaluate(() => document.activeElement?.blur());
-    await app.tap('[data-testid="settings-server-check"]');
-    await app.waitForFunction(() => document.querySelector('.setting-server-check [role="alert"]')?.textContent?.includes('IP privada'),
-      { timeout: 5000 });
-    assert.equal(await app.evaluate(() => localStorage.getItem('manguare.nativeApiBase')), null);
-    const localMvp = (await app.$eval('[data-testid="settings-native-server-url"]', (item) => item.placeholder))
-      .startsWith('http://');
-    const serverBase = localMvp ? 'http://192.168.1.10:8787' : 'https://manguare-test.example';
-    await app.click('[data-testid="settings-native-server-url"]');
-    await app.keyboard.down('Control');
-    await app.keyboard.press('A');
-    await app.keyboard.up('Control');
-    await app.type('[data-testid="settings-native-server-url"]', serverBase);
-    await app.evaluate(() => document.activeElement?.blur());
-    await app.evaluate((serverBase) => {
-      const nativeFetch = window.fetch.bind(window);
-      window.fetch = (input, init) => {
-        const url = String(input);
-        if (url === `${serverBase}/api/health`) {
-          return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
-        }
-        if (url === `${serverBase}/api/gemini/token`) {
-          return Promise.resolve(new Response(JSON.stringify({
-            token: 'auth_tokens/test', model: 'gemini-3.8-live',
-          }), { status: 200 }));
-        }
-        if (url.startsWith(`${serverBase}/api/`)) {
-          return Promise.resolve(new Response(JSON.stringify({ alerts: [], posts: [], listings: [] }), { status: 200 }));
-        }
-        return nativeFetch(input, init);
-      };
-    }, serverBase);
-    await app.tap('[data-testid="settings-server-check"]');
-    await app.waitForFunction(() => document.querySelector('.setting-server-check [role="status"]')?.textContent?.includes('Servidor y Gemini listos'),
-      { timeout: 10000 });
-    assert.equal(await app.evaluate(() => localStorage.getItem('manguare.nativeApiBase')), serverBase);
-    results.nativeGeminiSetupGuidance = true;
+    assert.equal(await app.$('[data-testid="voice-configure-server"]'), null);
+    await app.click('.voice-close');
+    await app.click('[data-testid="nav-settings"]');
+    await app.waitForSelector('[data-testid="settings-language"]');
+    const settingsText = await app.evaluate(() => document.body.innerText);
+    assert.doesNotMatch(
+      settingsText,
+      /Servidor Manguare|Contacto y respaldo|Comprobar con Gemini|Simular conexión|Guía de audio/,
+    );
+    assert.equal(await app.$('[data-testid="settings-native-server-url"]'), null);
+    assert.equal(await app.$('[data-testid="settings-server-check"]'), null);
+    results.settingsServerAndUnusedFeaturesHidden = true;
 
     console.log('\nE2E OK');
     console.log(JSON.stringify(results, null, 2));

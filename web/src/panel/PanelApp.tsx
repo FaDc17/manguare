@@ -1,8 +1,9 @@
 // Traduce los avisos, filtros y estados visibles del panel de salud.
 
 import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet';
 import {
   Bell,
   BellOff,
@@ -14,10 +15,10 @@ import {
   Image as ImageIcon,
   Inbox,
   KeyRound,
-  Leaf,
   LoaderCircle,
   LogIn,
   LogOut,
+  MapPinned,
   MapPin,
   MessageSquareText,
   RefreshCw,
@@ -31,12 +32,15 @@ import { LanguageSelect } from '../components/LanguageSelect';
 import type { MessageKey } from '../i18n/catalog';
 import { EMERGENCY_META, SOS_DEFAULT_NOTE } from '../lib/emergency';
 import { formatDateTime, formatRelative, formatTime, shortId } from '../lib/format';
-import { biodiversityLabels, responseLabel, translatedResponse } from '../i18n/labels';
+import { responseLabel, translatedResponse } from '../i18n/labels';
+import { emergencyMapPlaces, type MapPlace } from '../lib/map-data';
 import { RESPONSE_OPTIONS } from '../lib/sla';
-import type { ServerAlert, ServerBiodiversityReport } from '../lib/types';
+import type { ServerAlert } from '../lib/types';
 import { StatisticsSection } from './StatisticsSection';
+import 'leaflet/dist/leaflet.css';
 
 type PanelFilter = 'all' | 'pending' | 'overdue' | 'received';
+type PanelView = 'alerts' | 'map';
 
 interface PanelToastState {
   message: MessageKey;
@@ -114,6 +118,64 @@ function PanelStatus({ alert }: { alert: ServerAlert }) {
     <span className="panel-status is-pending">
       <Clock3 size={14} aria-hidden="true" />{' '}{t('panel.porConfirmar')}
     </span>
+  );
+}
+
+function PanelMapBounds({ places }: { places: MapPlace[] }) {
+  const map = useMap();
+  const signature = places.map((place) => `${place.id}:${place.coordinates.lat}:${place.coordinates.lng}`).join('|');
+  useEffect(() => {
+    if (places.length === 1) {
+      const [place] = places;
+      map.flyTo([place.coordinates.lat, place.coordinates.lng], 13, { duration: 0.4 });
+    } else if (places.length > 1) {
+      map.fitBounds(places.map((place) => [place.coordinates.lat, place.coordinates.lng]), {
+        padding: [28, 28],
+        maxZoom: 12,
+      });
+    }
+  }, [map, signature]);
+  return null;
+}
+
+function PanelEmergencyMap({ alerts }: { alerts: ServerAlert[] }) {
+  const { t } = useTranslation();
+  const places = useMemo(() => emergencyMapPlaces(alerts, t), [alerts, t]);
+  return (
+    <div className="panel-emergency-map">
+      <MapContainer
+        className="panel-emergency-map-canvas"
+        center={[-5.0, -77.95]}
+        zoom={7}
+        zoomControl
+        scrollWheelZoom
+        aria-label={t('panel.mapaEmergencias')}
+      >
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
+        <PanelMapBounds places={places} />
+        {places.map((place) => (
+          <CircleMarker
+            key={place.id}
+            center={[place.coordinates.lat, place.coordinates.lng]}
+            radius={9}
+            pathOptions={{ color: '#fff', fillColor: '#b3261e', fillOpacity: 0.95, weight: 3 }}
+          >
+            <Popup>
+              <strong>{place.name}</strong>
+              <br />
+              {t(place.category)}
+              {place.location ? <><br />{place.location}</> : null}
+            </Popup>
+          </CircleMarker>
+        ))}
+      </MapContainer>
+      {places.length === 0 ? (
+        <p className="panel-map-empty" role="status">{t('panel.mapaSinUbicacionesDisponibles')}</p>
+      ) : null}
+    </div>
   );
 }
 
@@ -616,16 +678,15 @@ function PanelLogin({
 export function PanelApp() {
   const { t } = useTranslation();
   const [alerts, setAlerts] = useState<ServerAlert[]>([]);
-  const [bioReports, setBioReports] = useState<ServerBiodiversityReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<MessageKey | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [filter, setFilter] = useState<PanelFilter>('all');
+  const [panelView, setPanelView] = useState<PanelView>('alerts');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [acking, setAcking] = useState<string | null>(null);
   const [responding, setResponding] = useState<string | null>(null);
-  const [bioReading, setBioReading] = useState<string | null>(null);
   const [toast, setToast] = useState<PanelToastState | null>(null);
   const [session, setSession] = useState<PanelSessionState | null>(null);
   const [sessionError, setSessionError] = useState<MessageKey | null>(null);
@@ -673,31 +734,19 @@ export function PanelApp() {
     inFlight.current = true;
     if (indicator) setRefreshing(true);
     try {
-      const [alertResponse, bioResponse] = await Promise.all([
-        fetch('/api/alerts', { cache: 'no-store' }),
-        fetch('/api/biodiversity', { cache: 'no-store' }).catch(() => null),
-      ]);
-      if (alertResponse.status === 401 || bioResponse?.status === 401) {
+      const alertResponse = await fetch('/api/alerts', { cache: 'no-store' });
+      if (alertResponse.status === 401) {
         setSession((current) => ({
           authRequired: true,
           authenticated: false,
           ...(current?.user ? { user: current.user } : {}),
         }));
         setAlerts([]);
-        setBioReports([]);
         return;
       }
       if (!alertResponse.ok) throw new Error(`HTTP ${alertResponse.status}`);
       const data = (await alertResponse.json()) as { alerts?: ServerAlert[] };
       const list = data.alerts ?? [];
-      if (bioResponse?.ok) {
-        const bioData = (await bioResponse.json()) as {
-          reports?: ServerBiodiversityReport[];
-        };
-        setBioReports(bioData.reports ?? []);
-      } else {
-        setBioReports([]);
-      }
       const fresh = list.filter((alert) => !knownIds.current.has(alert.id));
       const overdueIds = new Set(list.filter((alert) => isServerOverdue(alert)).map((alert) => alert.id));
       const newOverdue = [...overdueIds].some((id) => !knownOverdue.current.has(id));
@@ -827,32 +876,6 @@ export function PanelApp() {
       setToast({ message: 'panel.noSePudoEnviarLaRespuesta', tone: 'error' });
     } finally {
       setResponding(null);
-    }
-  };
-
-  const markBioRead = async (id: string) => {
-    setBioReading(id);
-    try {
-      const response = await fetch(`/api/biodiversity/${encodeURIComponent(id)}/read`, {
-        method: 'POST',
-      });
-      if (response.status === 401) {
-        setSession({ authRequired: true, authenticated: false });
-        return;
-      }
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = (await response.json()) as { report?: ServerBiodiversityReport };
-      if (!data.report) throw new Error('Respuesta incompleta');
-      setBioReports((current) =>
-        current.map((report) =>
-          report.id === id ? (data.report as ServerBiodiversityReport) : report,
-        ),
-      );
-      setToast({ message: 'panel.reporteDeBiodiversidadMarcadoComoLeido', tone: 'ok' });
-    } catch {
-      setToast({ message: 'panel.noSePudoMarcarElReporteComo', tone: 'error' });
-    } finally {
-      setBioReading(null);
     }
   };
 
@@ -1057,6 +1080,27 @@ export function PanelApp() {
           </div>
         </section>
 
+        <nav className="panel-view-switch" role="tablist" aria-label={t('panel.alertasDeEmergencia')}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panelView === 'alerts'}
+            className={panelView === 'alerts' ? 'is-active' : ''}
+            onClick={() => setPanelView('alerts')}
+          >
+            <Inbox size={16} aria-hidden="true" /> {t('panel.alertas')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panelView === 'map'}
+            className={panelView === 'map' ? 'is-active' : ''}
+            onClick={() => setPanelView('map')}
+          >
+            <MapPinned size={16} aria-hidden="true" /> {t('panel.mapaEmergencias')}
+          </button>
+        </nav>
+
         {error ? (
           <div className="panel-error" role="alert">
             <TriangleAlert size={20} aria-hidden="true" />
@@ -1070,6 +1114,7 @@ export function PanelApp() {
           </div>
         ) : null}
 
+        {panelView === 'alerts' ? (
         <section className="panel-list-section" aria-label={t('panel.listaDeAlertas')}>
           <div className="panel-list-head">
             <div className="panel-filters" role="tablist" aria-label={t('panel.filtrarAlertas')}>
@@ -1129,92 +1174,30 @@ export function PanelApp() {
             </div>
           )}
         </section>
+        ) : (
+          <section className="panel-map-section" aria-label={t('panel.mapaEmergencias')}>
+            <header className="panel-map-heading">
+              <div>
+                <h2>{t('panel.mapaEmergencias')}</h2>
+                <p>{t('panel.mapaSoloUbicacionesConsentidas')}</p>
+              </div>
+              <span>{session.authRequired && session.authenticated ? emergencyMapPlaces(alerts, t).length : 0}</span>
+            </header>
+            {session.authRequired && session.authenticated ? (
+              loading ? (
+                <div className="panel-map-loading">{t('panel.cargandoAlertas')}</div>
+              ) : (
+                <PanelEmergencyMap alerts={alerts} />
+              )
+            ) : (
+              <p className="panel-map-locked" role="note">{t('panel.mapaRequiereContrasena')}</p>
+            )}
+          </section>
+        )}
 
         {session.authRequired ? (
           <StatisticsSection revision={alerts.map((alert) => `${alert.id}:${alert.acknowledgedAt ?? ''}`).join('|')} />
         ) : null}
-
-        <section className="panel-bio-section" aria-labelledby="panel-bio-title">
-          <div className="panel-list-head">
-            <div>
-              <p className="panel-kicker">{t('panel.alertaAmazonia')}</p>
-              <h2 id="panel-bio-title">{t('panel.reportesDeBiodiversidad')}</h2>
-            </div>
-            <span className="panel-count">
-              {t(bioReports.length === 1 ? 'panel.reporteUno' : 'panel.reporteOtros', { count: bioReports.length })}
-            </span>
-          </div>
-          {bioReports.length > 0 ? (
-            <div className="bio-list">
-              {bioReports.map((report) => (
-                <article
-                  key={report.id}
-                  className={`bio-row ${report.state === 'read' ? 'is-read' : ''}`}
-                  data-testid={`bio-${report.id}`}
-                >
-                  <span className="bio-icon">
-                    <Leaf size={19} aria-hidden="true" />
-                  </span>
-                  <div className="bio-main">
-                    <div className="bio-title-row">
-                      <strong>{report.title}</strong>
-                      <span className={`bio-state ${report.state === 'read' ? 'is-read' : ''}`}>
-                        {report.state === 'read' ? t('panel.leida') : t('panel.nueva')}
-                      </span>
-                    </div>
-                    <p>{report.description}</p>
-                    <p className="bio-meta">
-                      {Object.hasOwn(biodiversityLabels, report.category)
-                        ? t(biodiversityLabels[report.category])
-                        : report.category}{' '}
-                      · {report.community || t('panel.comunidadNoIndicada')} · {report.reportedBy} ·{' '}
-                      {formatRelative(report.serverReceivedAt, t)}
-                      {report.readAt ? ` · ${t('panel.leidaRelativa', { relativeTime: formatRelative(report.readAt, t) })}` : ''}
-                    </p>
-                    {report.photo ? (
-                      <a
-                        className="bio-photo-link"
-                        href={report.photo}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        <img src={report.photo} alt={`Foto del reporte: ${report.title}`} />
-                      </a>
-                    ) : null}
-                  </div>
-                  <div className="bio-actions">
-                    {report.state === 'sent' ? (
-                      <button
-                        type="button"
-                        className="panel-ack"
-                        data-testid={`bio-read-${report.id}`}
-                        onClick={() => void markBioRead(report.id)}
-                        disabled={bioReading === report.id}
-                      >
-                        {bioReading === report.id ? (
-                          <LoaderCircle size={15} className="spin" aria-hidden="true" />
-                        ) : (
-                          <Check size={15} aria-hidden="true" />
-                        )}
-                        {t('panel.marcarLeida')}
-                      </button>
-                    ) : (
-                      <span className="bio-read-label">{t('panel.leida')}</span>
-                    )}
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="panel-empty panel-empty--compact">
-              <span>
-                <Leaf size={26} aria-hidden="true" />
-              </span>
-              <h2>{t('panel.noHayReportesDeBiodiversidad')}</h2>
-              <p>{t('panel.cuandoLaAppEnvieUnReporte')}</p>
-            </div>
-          )}
-        </section>
 
         <footer className="panel-foot">
           {!session.authRequired ? (

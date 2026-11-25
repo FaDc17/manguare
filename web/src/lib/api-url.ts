@@ -2,10 +2,7 @@ import { Capacitor } from '@capacitor/core';
 
 const STORAGE_KEY = 'manguare.nativeApiBase';
 const localMvpBuild = import.meta.env?.VITE_LOCAL_MVP === '1';
-
-export function isLocalMvpBuild(): boolean {
-  return localMvpBuild;
-}
+const compiledApiBase = import.meta.env?.VITE_API_BASE_URL?.replace(/\/+$/, '') ?? '';
 
 function isPrivateIpv4(hostname: string): boolean {
   const parts = hostname.split('.');
@@ -19,7 +16,7 @@ function isPrivateIpv4(hostname: string): boolean {
 
 export function getNativeApiBase(): string {
   if (!Capacitor.isNativePlatform()) return '';
-  return localStorage.getItem(STORAGE_KEY) ?? import.meta.env?.VITE_API_BASE_URL?.replace(/\/+$/, '') ?? '';
+  return compiledApiBase || localStorage.getItem(STORAGE_KEY) || '';
 }
 
 export function normalizeNativeApiBase(value: string, allowLocalHttp = localMvpBuild): string {
@@ -52,10 +49,10 @@ export function setNativeApiBase(value: string): string {
   return trimmed;
 }
 
-/** La PWA conserva rutas relativas; Android usa la URL configurada en Ajustes. */
+/** La PWA conserva rutas relativas; Android usa la URL integrada en el APK. */
 export function apiUrl(path: `/api${string}`): string {
   if (!Capacitor.isNativePlatform()) return path;
   const base = normalizeNativeApiBase(getNativeApiBase());
-  if (!base) throw new Error('Configura la URL del servidor en Ajustes.');
+  if (!base) throw new Error('No está disponible la configuración interna del servidor de Manguaré.');
   return `${base}${path}`;
 }

@@ -92,7 +92,7 @@ export function NewAlertScreen({
               : t('newAlert.laUbicacionTardoDemasiadoIntentaloOtra');
         setGeo({ status: 'error', message });
       },
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 120000 },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 },
     );
   }, [t]);
 
@@ -151,6 +151,8 @@ export function NewAlertScreen({
     }
     setSubmitting(true);
     try {
+      const location = consent && geo.status === 'ok' ? geo.location : undefined;
+      const locationUnavailable = consent && !location;
       const alert = await createAlert({
         type,
         ...(sos ? { isSos: true } : {}),
@@ -159,15 +161,20 @@ export function NewAlertScreen({
         deviceName: settings.deviceName,
         reportedBy: session.name,
         reporterPhone: session.phone,
-        location: consent && geo.status === 'ok' ? geo.location : undefined,
+        location,
         photo,
         consentLocation: consent,
       });
-      if (!online) {
-        showToast(t('newAlert.alertaGuardadaSeEnviaraAlRecuperar'), 'warn');
-      }
+      const savedMessage = online
+        ? t('alertDetail.guardadaEnElTelefono')
+        : t('newAlert.alertaGuardadaSeEnviaraAlRecuperar');
+      const confirmation = locationUnavailable
+        ? `${savedMessage}. ${t('newAlert.sinUbicacionGps')}.`
+        : savedMessage;
+      showToast(confirmation, online && !locationUnavailable ? 'ok' : 'warn');
       onCreated(alert.id);
-    } catch {
+    } catch (error) {
+      console.error('[manguare] No se pudo guardar la alerta localmente:', error);
       showToast(t('newAlert.noSePudoGuardarLaAlerta'), 'error');
       setSubmitting(false);
     }

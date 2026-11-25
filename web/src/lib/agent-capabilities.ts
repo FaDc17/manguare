@@ -7,7 +7,7 @@ export interface AgentCapability {
   dataSource: string;
   readTools: string[];
   actionTools: string[];
-  dataScope: 'device' | 'shared' | 'demo' | 'panel';
+  dataScope: 'device' | 'shared' | 'demo' | 'panel' | 'mixed';
   requiresNetwork?: boolean;
   adminOnly?: boolean;
   browserPanelOnly?: boolean;
@@ -35,10 +35,10 @@ export const AGENT_CAPABILITIES: readonly AgentCapability[] = [
   { id: 'red', screen: 'network', description: 'Muro compartido y perfiles Match de demostración.',
     dataSource: 'almacenamiento local, API social y perfiles de demostración',
     readTools: ['search_wall_posts', 'get_match_profiles'], actionTools: ['navigate_to_screen'], dataScope: 'shared' },
-  { id: 'mapa', screen: 'map', description: 'Marcadores y filtros del mapa; los puntos incluidos son de demostración.',
-    dataSource: 'los mismos marcadores que dibuja MapScreen',
+  { id: 'mapa', screen: 'map', description: 'Marcadores de demostración y emergencias autorizadas para administradores.',
+    dataSource: 'MapScreen; las emergencias requieren sesión de administrador y consentimiento de ubicación',
     readTools: ['get_map_places', 'get_device_location'], actionTools: ['navigate_to_screen', 'open_map_place'],
-    dataScope: 'demo' },
+    dataScope: 'mixed' },
   { id: 'idiomas', screen: 'settings', description: 'Idioma activo y traducciones disponibles.',
     dataSource: 'LanguageContext y catálogos', readTools: ['get_language_options'],
     actionTools: ['set_app_language'], dataScope: 'device' },

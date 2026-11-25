@@ -89,7 +89,6 @@ syncTarget.addEventListener('sync', (event) => {
   if (event.tag !== 'manguare-alerts') return;
   event.waitUntil(
     (async () => {
-      if (await caches.match('/__manguare_simulated_offline__')) return;
       const result = await syncAll(true);
       const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       clients.forEach((client) => client.postMessage({ type: 'manguare:sync-done', result }));

@@ -291,11 +291,11 @@ function AppShell() {
           return { success: false, message: 'Ese marcador no está visible con los filtros actuales.' };
         await waitFor(() => Boolean(document.querySelector('[data-testid="map-selected"]')?.textContent?.includes(place.name)),
           'se mostrara el marcador', signal);
-        return { success: true, place: { id: place.id, name: place.name, demo: true }, verified: true };
+        return { success: true, place: { id: place.id, name: place.name, demo: place.demo }, verified: true };
       }
       const query = typeof args.query === 'string' ? args.query.trim().slice(0, 80) : '';
       const kind = typeof args.kind === 'string' ? args.kind : 'all';
-      if (!['all', 'support', 'conecta'].includes(kind))
+      if (!['all', 'emergency', 'support', 'conecta'].includes(kind))
         return { success: false, message: 'Filtro de mapa no reconocido.' };
       let point: { lat: number; lng: number } | null = null;
       if (args.nearMe === true) {
@@ -316,11 +316,11 @@ function AppShell() {
       const places = (snapshot?.visiblePlaces ?? []).filter((item) => kind === 'all' || item.kind === kind)
         .sort((a, b) => point ? placeDistanceKm(a, point) - placeDistanceKm(b, point) : 0);
       return { success: true, query, filters: snapshot?.filters, count: places.length,
-        dataSource: 'marcadores mostrados en el mapa', demo: true,
+        dataSource: 'marcadores mostrados en el mapa', demo: places.every((item) => item.demo),
         places: places.slice(0, 20).map((item) => ({ id: item.id, name: item.name,
           kind: item.kind, category: t(item.category), description: item.description,
           location: item.location, ...(point ? { distanceKm: Number(placeDistanceKm(item, point).toFixed(1)) } : {}),
-          demo: true })) };
+          demo: item.demo })) };
     }
 
     if (name === 'read_current_screen') {
@@ -442,8 +442,7 @@ function AppShell() {
       await navigateAndVerify({ name: 'settings' }, 'settings', signal);
       if (name === 'get_profile_and_settings') return { success: true,
         profile: { name: session.name, role: session.role, community: session.community ?? '' },
-        settings: { community: settings.community, deviceName: settings.deviceName,
-          healthPost: settings.healthPost, healthPhone: settings.healthPhone, smsNumber: settings.smsNumber } };
+        settings: { community: settings.community, deviceName: settings.deviceName } };
       if (name === 'update_profile_name') {
         const next = typeof args.name === 'string' ? args.name.trim() : '';
         if (!next || next.length > 80) return { success: false, message: 'El nombre debe tener entre 1 y 80 caracteres.' };
@@ -456,14 +455,17 @@ function AppShell() {
       }
       const field = args.field;
       const value = args.value;
-      const allowed = ['community', 'deviceName', 'healthPost', 'healthPhone', 'smsNumber'] as const;
-      if (typeof field !== 'string' || !allowed.some((item) => item === field) || typeof value !== 'string')
+      if (
+        (field !== 'community' && field !== 'deviceName') ||
+        typeof value !== 'string'
+      )
         return { success: false, message: 'Campo o valor no permitido.' };
       if (value.length > 80) return { success: false, message: 'El valor supera los 80 caracteres.' };
       if (field === 'deviceName' && !value.trim()) return { success: false, message: 'El nombre del equipo no puede estar vacío.' };
       const input = document.querySelector(`[data-testid="settings-${field}"]`) as HTMLInputElement | null;
       input?.focus();
-      updateSettings({ [field]: value });
+      if (field === 'community') updateSettings({ community: value });
+      else updateSettings({ deviceName: value });
       await waitFor(() => (document.querySelector(`[data-testid="settings-${field}"]`) as HTMLInputElement | null)?.value === value,
         'se actualizara el ajuste visible', signal);
       return { success: true, field, value, verified: true };
@@ -760,7 +762,8 @@ function AppShell() {
 
           {screen.name === 'map' ? (
             <Suspense fallback={<div className="inline-loading">{t('map.cargandoMapa')}</div>}>
-              <MapScreen onSOS={() => setSosConfirmOpen(true)} onVoiceControllerReady={registerMapVoiceController} />
+              <MapScreen isAdmin={session?.role === 'admin'} onSOS={() => setSosConfirmOpen(true)}
+                onVoiceControllerReady={registerMapVoiceController} />
             </Suspense>
           ) : null}
 
@@ -801,10 +804,6 @@ function AppShell() {
         {voiceOpen && (
           <VoiceAssistant
             onClose={closeVoice}
-            onConfigureServer={() => {
-              closeVoice();
-              setScreen({ name: 'settings' });
-            }}
             onToolCall={handleVoiceToolCall}
           />
         )}

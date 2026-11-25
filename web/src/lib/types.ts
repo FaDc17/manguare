@@ -24,6 +24,22 @@ export interface AlertResponse {
   by?: string;
 }
 
+export interface SyncAttemptDiagnostic {
+  attemptedAt: string;
+  alertId: string;
+  endpoint: string;
+  method: 'POST' | 'PATCH';
+  attempt: number;
+  ok: boolean;
+  requestStarted: boolean;
+  responseReceived: boolean;
+  httpStatus?: number;
+  serverAlertId?: string;
+  stateBefore: AlertState;
+  stateAfter: AlertState;
+  error: string;
+}
+
 export interface AlertRecord {
   id: string;
   type: EmergencyType;
@@ -49,6 +65,7 @@ export interface AlertRecord {
   /** Marca de tiempo del próximo reintento automático (política de espera progresiva). */
   nextAttemptAt?: string;
   lastError?: string;
+  lastSyncAttempt?: SyncAttemptDiagnostic;
   serverReceivedAt?: string;
   acknowledgedAt?: string;
   acknowledgedBy?: string;
@@ -95,6 +112,16 @@ export interface ServerAlert {
   lastEscalationChannel?: string;
   responses?: AlertResponse[];
   events?: Array<{ type: string; at: string; by?: string; code?: string; channel?: string }>;
+}
+
+export interface ServerMapAlert {
+  id: string;
+  type: EmergencyType;
+  isSos?: boolean;
+  community: string;
+  consentLocation: boolean;
+  location?: AlertLocation;
+  clientCreatedAt: string;
 }
 
 export interface SyncResult {

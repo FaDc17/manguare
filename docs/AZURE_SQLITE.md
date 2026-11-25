@@ -11,7 +11,7 @@ Para publicar el backend existente en `manguare-services`, seguir [AZURE_DEPLOY.
 
 ## Azure App Service
 
-La API Node puede ejecutarse en App Service con `npm run start:azure` y el puerto que entregue `PORT` cuando el servicio tenga un runtime Node compatible. Para conectar el APK cuando se publique la API, configura `VITE_API_BASE_URL=https://manguare-services-c9hpebgcduf0gfdr.eastus2-01.azurewebsites.net` al compilarlo, o introdúcela desde Ajustes del teléfono. Para la PWA alojada junto a la API, se mantienen las rutas `/api` relativas. Configura en App Service las variables de `config/azure-app-service.env.example` con los secretos reales en los ajustes del servicio.
+La API Node puede ejecutarse en App Service con `npm run start:azure` y el puerto que entregue `PORT` cuando el servicio tenga un runtime Node compatible. El APK de distribución preconfigura la URL de producción durante `npm run android:apk`; no hace falta introducirla desde Ajustes. Para una compilación de pruebas contra otro servidor, configura `VITE_API_BASE_URL` antes de compilar, como se explica en [ANDROID.md](ANDROID.md). Para la PWA alojada junto a la API, se mantienen las rutas `/api` relativas. Configura en App Service las variables de `config/azure-app-service.env.example` con los secretos reales en los ajustes del servicio.
 
 ## Azure SQL
 

@@ -24,7 +24,6 @@ import {
   QUEUE_CHANGED_EVENT,
   requestBackgroundSync,
   runSync,
-  setWorkerOfflineSimulation,
 } from '../lib/sync';
 import {
   loadSettings,
@@ -52,7 +51,6 @@ interface AppContextValue {
   loading: boolean;
   syncing: boolean;
   online: boolean;
-  realOnline: boolean;
   settings: Settings;
   toast: ToastState | null;
   showToast: (message: string | Message, tone?: ToastTone) => void;
@@ -71,7 +69,7 @@ interface AppContextValue {
   createBiodiversityReport: (draft: BiodiversityReportDraft) => Promise<BiodiversityReport>;
   cancelAlert: (id: string) => Promise<boolean>;
   syncNow: (manual?: boolean) => Promise<void>;
-  updateSettings: (patch: Partial<Omit<Settings, 'language'>>) => void;
+  updateSettings: (patch: Partial<Pick<Settings, 'community' | 'deviceName'>>) => void;
   markSms: (id: string) => Promise<void>;
   clearLocal: () => Promise<void>;
 }
@@ -83,19 +81,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [biodiversityReports, setBiodiversityReports] = useState<BiodiversityReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [realOnline, setRealOnline] = useState(() =>
+  const [online, setOnline] = useState(() =>
     typeof navigator === 'undefined' ? true : navigator.onLine,
   );
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimer = useRef<number | null>(null);
   const syncingRef = useRef(false);
-
-  const online = realOnline && !settings.simulateOffline;
-
-  useEffect(() => {
-    void setWorkerOfflineSimulation(settings.simulateOffline);
-  }, [settings.simulateOffline]);
+  const onlineRef = useRef(online);
 
   const showToast = useCallback((message: string | Message, tone: ToastTone = 'ok') => {
     setToast({ id: Date.now(), message, tone });
@@ -131,7 +124,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const syncNow = useCallback(
     async (manual = false) => {
-      if (syncingRef.current) return;
+      if (syncingRef.current) {
+        if (manual) void runSync(true);
+        return;
+      }
       if (!isEffectivelyOnline()) {
         if (manual) {
           showToast(message('sync.sinConexionLaAlertaSeEnviara'), 'warn');
@@ -170,7 +166,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const createAlert = useCallback(
     async (draft: AlertDraft) => {
       const alert = await createLocalAlert(draft);
-      await refresh();
+      setAlerts((current) =>
+        [alert, ...current.filter((item) => item.id !== alert.id)]
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt)),
+      );
       notifyQueueChanged();
       void requestBackgroundSync();
       if (isEffectivelyOnline()) {
@@ -251,10 +250,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [refresh, showToast],
   );
 
-  const updateSettings = useCallback((patch: Partial<Omit<Settings, 'language'>>) => {
+  const updateSettings = useCallback((patch: Partial<Pick<Settings, 'community' | 'deviceName'>>) => {
     setSettings((current) => {
       // Usa el idioma guardado más reciente al modificar otros ajustes.
-      const next = { ...current, ...patch, language: loadSettings().language };
+      const next = {
+        ...current,
+        community: patch.community ?? current.community,
+        deviceName: patch.deviceName ?? current.deviceName,
+        language: loadSettings().language,
+      };
       saveSettings(next);
       return next;
     });
@@ -302,19 +306,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const update = () => {
+    const update = (forceSync = false) => {
       const next = navigator.onLine;
-      setRealOnline(next);
-      if (next) {
-        // Al volver la señal no esperamos la pausa progresiva.
+      const reconnected = !onlineRef.current && next;
+      onlineRef.current = next;
+      setOnline(next);
+      if (next && (reconnected || forceSync)) {
+        // Android puede suspender el WebView y perder el evento "online".
         void syncNow(true);
       }
     };
-    window.addEventListener('online', update);
-    window.addEventListener('offline', update);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') update(true);
+    };
+    const onOnline = () => update();
+    const onOffline = () => update();
+    const pollConnection = window.setInterval(() => {
+      if (document.visibilityState === 'visible') update();
+    }, 5_000);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
-      window.removeEventListener('online', update);
-      window.removeEventListener('offline', update);
+      window.clearInterval(pollConnection);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [syncNow]);
 
@@ -381,7 +398,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loading,
       syncing,
       online,
-      realOnline,
       settings,
       toast,
       showToast,
@@ -402,7 +418,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loading,
       syncing,
       online,
-      realOnline,
       settings,
       toast,
       showToast,

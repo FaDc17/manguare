@@ -1,25 +1,10 @@
 import { syncAll } from './queue-core';
-import { loadSettings } from './settings';
 
 export const QUEUE_CHANGED_EVENT = 'manguare:queue-changed';
-const SIMULATION_CACHE = 'settings-manguare';
-const SIMULATION_MARKER = '/__manguare_simulated_offline__';
-
-/** CacheStorage es visible tanto para la página como para el service worker. */
-export async function setWorkerOfflineSimulation(enabled: boolean): Promise<void> {
-  if (typeof caches === 'undefined') return;
-  try {
-    const cache = await caches.open(SIMULATION_CACHE);
-    if (enabled) await cache.put(SIMULATION_MARKER, new Response('1'));
-    else await cache.delete(SIMULATION_MARKER);
-  } catch {
-    // El flujo principal consulta la preferencia local incluso si CacheStorage falla.
-  }
-}
 
 export function isEffectivelyOnline(): boolean {
   if (typeof navigator === 'undefined') return true;
-  return navigator.onLine && !loadSettings().simulateOffline;
+  return navigator.onLine;
 }
 
 export function notifyQueueChanged(): void {

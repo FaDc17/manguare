@@ -31,6 +31,7 @@ before(async () => {
     user: 'salud',
     secret: Buffer.from('secreto-de-prueba'),
     ttlMs: 60 * 60 * 1000,
+    secureCookies: true,
   });
   server = http.createServer(createHandler({ store, biodiversityStore, staticDir, auth }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -42,7 +43,7 @@ after(async () => {
   await fs.rm(directory, { recursive: true, force: true });
 });
 
-function alertPayload(id) {
+function alertPayload(id, overrides = {}) {
   return {
     id,
     type: 'enfermedad',
@@ -51,6 +52,7 @@ function alertPayload(id) {
     deviceName: 'Celular de prueba',
     consentLocation: false,
     clientCreatedAt: new Date().toISOString(),
+    ...overrides,
   };
 }
 
@@ -127,7 +129,8 @@ test('rechaza credenciales incorrectas y acepta las correctas con cookie segura'
   const cookie = ok.response.headers.get('set-cookie') ?? '';
   assert.match(cookie, /manguare_session=/);
   assert.match(cookie, /HttpOnly/);
-  assert.match(cookie, /SameSite=Lax/);
+  assert.match(cookie, /SameSite=None/);
+  assert.match(cookie, /Secure/);
 
   const list = await fetch(`${base}/api/alerts`, { headers: { cookie } });
   assert.equal(list.status, 200);
@@ -203,6 +206,77 @@ test('cerrar sesión invalida la cookie', async () => {
 
   const list = await fetch(`${base}/api/alerts`, { headers: { cookie } });
   assert.equal(list.status, 401);
+});
+
+test('el mapa usa un token de solo lectura y solo devuelve ubicaciones consentidas', async () => {
+  const created = await fetch(`${base}/api/alerts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(alertPayload('map-alert-0001', {
+      consentLocation: true,
+      location: { lat: -4.7, lng: -78.15, accuracy: 5, capturedAt: new Date().toISOString() },
+      reporterPhone: '999999999',
+      note: 'Dato privado que no debe llegar al mapa',
+    })),
+  });
+  assert.equal(created.status, 201);
+
+  const unauthorized = await fetch(`${base}/api/panel/map-alerts`);
+  assert.equal(unauthorized.status, 401);
+
+  const panelLogin = await login();
+  const panelCookie = panelLogin.response.headers.get('set-cookie');
+  const sessionMapResponse = await fetch(`${base}/api/panel/map-alerts`, {
+    headers: { cookie: panelCookie, Origin: 'https://localhost' },
+  });
+  assert.equal(sessionMapResponse.status, 200);
+  assert.equal(sessionMapResponse.headers.get('access-control-allow-credentials'), 'true');
+  const sessionMapData = await sessionMapResponse.json();
+  assert.deepEqual(sessionMapData.alerts.map((alert) => alert.id), ['map-alert-0001']);
+  assert.equal(sessionMapData.alerts[0].reporterPhone, undefined);
+  assert.equal(sessionMapData.alerts[0].note, undefined);
+
+  const badLogin = await fetch(`${base}/api/panel/map-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user: 'salud', password: 'incorrecta' }),
+  });
+  assert.equal(badLogin.status, 401);
+
+  const loginResponse = await fetch(`${base}/api/panel/map-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: 'https://localhost' },
+    body: JSON.stringify({ user: 'salud', password: 'clave-de-prueba' }),
+  });
+  assert.equal(loginResponse.status, 200);
+  const { accessToken } = await loginResponse.json();
+  assert.ok(accessToken);
+
+  const mapResponse = await fetch(`${base}/api/panel/map-alerts`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Origin: 'https://localhost' },
+  });
+  assert.equal(mapResponse.status, 200);
+  assert.equal(mapResponse.headers.get('access-control-allow-origin'), 'https://localhost');
+  const { alerts } = await mapResponse.json();
+  assert.deepEqual(alerts.map((alert) => alert.id), ['map-alert-0001']);
+  assert.equal(alerts[0].location.lat, -4.7);
+  assert.equal(alerts[0].reporterPhone, undefined);
+  assert.equal(alerts[0].note, undefined);
+
+  const fullAlertList = await fetch(`${base}/api/alerts`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(fullAlertList.status, 401);
+
+  const logout = await fetch(`${base}/api/panel/map-logout`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(logout.status, 200);
+  const afterLogout = await fetch(`${base}/api/panel/map-alerts`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  assert.equal(afterLogout.status, 401);
 });
 
 test('limita los intentos de login fallidos por IP', async () => {

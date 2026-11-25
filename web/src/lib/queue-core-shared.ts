@@ -5,6 +5,7 @@ import type {
   AlertRecord,
   AlertState,
   ServerAlert,
+  SyncAttemptDiagnostic,
   SyncResult,
 } from './types';
 
@@ -24,6 +25,18 @@ class HttpError extends Error {
   }
 }
 
+class AlertPostError extends Error {
+  constructor(
+    message: string,
+    readonly endpoint: string,
+    readonly requestStarted: boolean,
+    readonly httpStatus?: number,
+    readonly responseReceived = false,
+  ) {
+    super(message);
+  }
+}
+
 export function newAlertId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
@@ -39,6 +52,23 @@ function nowIso(): string {
 
 function trim(value: string, max: number): string {
   return value.trim().slice(0, max);
+}
+
+function errorMessage(error: unknown): string {
+  const text = error instanceof Error
+    ? error.name === 'Error' ? error.message : `${error.name}: ${error.message}`
+    : String(error);
+  return text.replace(/\s+/g, ' ').slice(0, 300);
+}
+
+function safeEndpoint(endpoint: string): string {
+  if (endpoint.startsWith('/')) return endpoint.split(/[?#]/, 1)[0].slice(0, 200);
+  try {
+    const url = new URL(endpoint);
+    return `${url.protocol}//${url.host}${url.pathname}`.slice(0, 200);
+  } catch {
+    return endpoint.split(/[?#]/, 1)[0].slice(0, 200);
+  }
 }
 
 interface QueueStore {
@@ -155,28 +185,71 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
     };
   }
 
-  async function postAlert(alert: AlertRecord): Promise<ServerAlert> {
-    const response = await fetchWithTimeout(apiUrl('/api/alerts'), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(toServerPayload(alert)),
-      cache: 'no-store',
-    }, 15_000);
+  interface PostedAlert {
+    alert: ServerAlert;
+    endpoint: string;
+    httpStatus: number;
+  }
+
+  async function postAlert(alert: AlertRecord): Promise<PostedAlert> {
+    let endpoint = '/api/alerts';
+    try {
+      endpoint = safeEndpoint(apiUrl('/api/alerts'));
+    } catch (error) {
+      throw new AlertPostError(errorMessage(error), endpoint, false);
+    }
+
+    let response: Response;
+    try {
+      response = await fetchWithTimeout(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(toServerPayload(alert)),
+        cache: 'no-store',
+      }, 15_000);
+    } catch (error) {
+      throw new AlertPostError(errorMessage(error), endpoint, true);
+    }
 
     if (!response.ok) {
       let detail = '';
       try {
         const body = (await response.json()) as { error?: string };
-        detail = body.error ?? '';
+        detail = body.error?.slice(0, 200) ?? '';
       } catch {
         // respuesta sin JSON
       }
-      throw new HttpError(response.status, detail);
+      throw new AlertPostError(
+        `HTTP ${response.status}${detail ? ` (${detail})` : ''}`,
+        endpoint,
+        true,
+        response.status,
+        true,
+      );
     }
 
-    const data = (await response.json()) as { alert?: ServerAlert };
-    if (!data.alert) throw new Error('Respuesta del servidor incompleta');
-    return data.alert;
+    let data: { alert?: ServerAlert };
+    try {
+      data = (await response.json()) as { alert?: ServerAlert };
+    } catch (error) {
+      throw new AlertPostError(
+        `Respuesta JSON inválida: ${errorMessage(error)}`,
+        endpoint,
+        true,
+        response.status,
+        true,
+      );
+    }
+    if (!data.alert) {
+      throw new AlertPostError(
+        'Respuesta HTTP recibida sin el campo alert.',
+        endpoint,
+        true,
+        response.status,
+        true,
+      );
+    }
+    return { alert: data.alert, endpoint, httpStatus: response.status };
   }
 
   async function doFlush(force: boolean): Promise<SyncResult> {
@@ -191,10 +264,12 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
 
     for (const alert of pending) {
       const attemptedAt = nowIso();
+      let posted: PostedAlert | undefined;
       try {
         const latest = await getAlert(alert.id);
         if (!latest || latest.state !== 'pending') continue;
-        const server = await postAlert(latest);
+        posted = await postAlert(latest);
+        const server = posted.alert;
         const current = await getAlert(alert.id);
         if (!current) {
           sent += 1;
@@ -219,10 +294,25 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
           lastAttemptAt: attemptedAt,
           lastError: undefined,
           nextAttemptAt: undefined,
+          lastSyncAttempt: {
+            attemptedAt,
+            alertId: latest.id,
+            endpoint: posted.endpoint,
+            method: 'POST',
+            attempt: current.attempts + 1,
+            ok: true,
+            requestStarted: true,
+            responseReceived: true,
+            httpStatus: posted.httpStatus,
+            serverAlertId: server.id,
+            stateBefore: latest.state,
+            stateAfter: merged.state,
+            error: `Respuesta recibida; ID devuelto: ${server.id}.`,
+          },
         });
         sent += 1;
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Error desconocido';
+        const message = errorMessage(error);
         const current = await getAlert(alert.id);
         if (!current || current.state !== 'pending') {
           failed += 1;
@@ -235,6 +325,29 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
           lastAttemptAt: attemptedAt,
           nextAttemptAt: nextAttemptAt(attempts),
           lastError: message,
+          lastSyncAttempt: {
+            attemptedAt,
+            alertId: alert.id,
+            endpoint: error instanceof AlertPostError
+              ? error.endpoint
+              : posted?.endpoint ?? '/api/alerts',
+            method: 'POST',
+            attempt: attempts,
+            ok: false,
+            requestStarted: error instanceof AlertPostError
+              ? error.requestStarted
+              : Boolean(posted),
+            responseReceived: error instanceof AlertPostError
+              ? error.responseReceived
+              : Boolean(posted),
+            httpStatus: error instanceof AlertPostError
+              ? error.httpStatus
+              : posted?.httpStatus,
+            serverAlertId: posted?.alert.id,
+            stateBefore: alert.state,
+            stateAfter: current.state,
+            error: message,
+          } satisfies SyncAttemptDiagnostic,
           updatedAt: nowIso(),
         });
         failed += 1;
@@ -245,6 +358,7 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
   }
 
   let activeFlush: Promise<SyncResult> | null = null;
+  let forceFlushRequested = false;
 
   /**
    * Envía las alertas pendientes. Es idempotente: el id se genera una sola vez y
@@ -254,11 +368,25 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
    * persona pide un intento manual.
    */
   function flushQueue(force = false): Promise<SyncResult> {
-    if (!activeFlush) {
-      activeFlush = doFlush(force).finally(() => {
-        activeFlush = null;
-      });
+    if (activeFlush) {
+      if (force) forceFlushRequested = true;
+      return activeFlush;
     }
+
+    activeFlush = (async () => {
+      let result = await doFlush(force);
+      while (forceFlushRequested) {
+        forceFlushRequested = false;
+        const forcedResult = await doFlush(true);
+        result = {
+          sent: result.sent + forcedResult.sent,
+          failed: result.failed + forcedResult.failed,
+        };
+      }
+      return result;
+    })().finally(() => {
+      activeFlush = null;
+    });
     return activeFlush;
   }
 
@@ -351,8 +479,19 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
     );
     let failed = 0;
     for (const alert of pending) {
+      const attemptedAt = nowIso();
+      const attempt = alert.lastSyncAttempt?.method === 'PATCH'
+        ? alert.lastSyncAttempt.attempt + 1
+        : 1;
+      let endpoint = `/api/alerts/${encodeURIComponent(alert.id)}`;
+      let requestStarted = false;
+      let responseReceived = false;
+      let httpStatus: number | undefined;
+      let serverAlertId: string | undefined;
       try {
-        const response = await fetchWithTimeout(apiUrl(`/api/alerts/${encodeURIComponent(alert.id)}`), {
+        endpoint = safeEndpoint(apiUrl(`/api/alerts/${encodeURIComponent(alert.id)}`));
+        requestStarted = true;
+        const response = await fetchWithTimeout(endpoint, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -365,9 +504,21 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
           }),
           cache: 'no-store',
         }, 15_000);
-        if (!response.ok) throw new HttpError(response.status, '');
+        responseReceived = true;
+        httpStatus = response.status;
+        if (!response.ok) {
+          let detail = '';
+          try {
+            const body = (await response.json()) as { error?: string };
+            detail = body.error?.slice(0, 200) ?? '';
+          } catch {
+            // respuesta sin JSON
+          }
+          throw new HttpError(response.status, detail);
+        }
         const data = (await response.json()) as { alert?: ServerAlert };
         if (!data.alert) throw new Error('Respuesta del servidor incompleta');
+        serverAlertId = data.alert.id;
         const current = await getAlert(alert.id);
         if (!current) continue;
         const editedAgain =
@@ -377,23 +528,55 @@ export function createQueueCore(store: QueueStore, apiUrl: (path: `/api${string}
           current.consentLocation !== alert.consentLocation ||
           JSON.stringify(current.location) !== JSON.stringify(alert.location);
         const merged = mergeServerState(current, data.alert, current.state);
-        await putAlert({ ...merged, detailsPendingSync: editedAgain });
+        await putAlert({
+          ...merged,
+          detailsPendingSync: editedAgain,
+          lastSyncAttempt: {
+            attemptedAt,
+            alertId: alert.id,
+            endpoint,
+            method: 'PATCH',
+            attempt,
+            ok: true,
+            requestStarted,
+            responseReceived,
+            httpStatus,
+            serverAlertId,
+            stateBefore: alert.state,
+            stateAfter: merged.state,
+            error: `Respuesta recibida; ID devuelto: ${data.alert.id}.`,
+          },
+        });
       } catch (error) {
         failed += 1;
-        if (error instanceof HttpError && (error.status === 403 || error.status === 409)) {
-          const current = await getAlert(alert.id);
-          if (!current) continue;
-          await putAlert({
-            ...current,
-            detailsPendingSync: true,
-            lastError:
-              error.status === 409
-                ? 'La red ya confirmó la alerta; no se puede editar.'
-                : 'No se pudo editar la alerta.',
-            updatedAt: nowIso(),
-          });
-        }
-        // Los errores de red se reintentan en el próximo ciclo.
+        const detail = error instanceof HttpError && error.status === 409
+          ? `${errorMessage(error)}: La red ya confirmó la alerta; no se puede editar.`
+          : error instanceof HttpError && error.status === 403
+            ? `${errorMessage(error)}: No se pudo editar la alerta.`
+            : errorMessage(error);
+        const current = await getAlert(alert.id);
+        if (!current) continue;
+        await putAlert({
+          ...current,
+          detailsPendingSync: true,
+          lastError: detail,
+          lastSyncAttempt: {
+            attemptedAt,
+            alertId: alert.id,
+            endpoint,
+            method: 'PATCH',
+            attempt,
+            ok: false,
+            requestStarted,
+            responseReceived,
+            httpStatus,
+            serverAlertId,
+            stateBefore: alert.state,
+            stateAfter: current.state,
+            error: detail,
+          },
+          updatedAt: nowIso(),
+        });
       }
     }
     return failed;

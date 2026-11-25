@@ -174,6 +174,29 @@ function publicAlert(alert) {
   return safe;
 }
 
+function publicMapAlert(alert) {
+  const location = alert.location;
+  if (
+    alert.consentLocation !== true ||
+    !location ||
+    !Number.isFinite(location.lat) ||
+    location.lat < -90 ||
+    location.lat > 90 ||
+    !Number.isFinite(location.lng) ||
+    location.lng < -180 ||
+    location.lng > 180
+  ) return null;
+  return {
+    id: alert.id,
+    type: alert.type,
+    isSos: alert.isSos === true,
+    community: alert.community,
+    consentLocation: true,
+    location,
+    clientCreatedAt: alert.clientCreatedAt,
+  };
+}
+
 function toAlert(body, now, ackMinutes) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     throw new HttpError(400, 'invalid_body');
@@ -452,19 +475,33 @@ export function createHandler({
         return;
       }
 
-      // El WebView de Capacitor usa un origen local para la API del PC o publicada.
-      // Solo se habilita para sus rutas API y nunca se envían credenciales CORS.
+      // El WebView de Capacitor usa un origen local para la API publicada.
       if (pathname.startsWith('/api/') && ['https://localhost', 'http://localhost'].includes(req.headers.origin)) {
         res.setHeader('Access-Control-Allow-Origin', req.headers.origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
         res.setHeader('Vary', 'Origin');
         if (req.method === 'OPTIONS') {
           res.writeHead(204, {
             ...SECURITY_HEADERS,
             'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, X-Manguare-Phone',
+            'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Manguare-Phone',
             'Access-Control-Max-Age': '600',
           });
           res.end();
+          return;
+        }
+      }
+
+      const origin = req.headers.origin;
+      if (pathname.startsWith('/api/') && origin &&
+          !['GET', 'HEAD', 'OPTIONS'].includes(req.method ?? 'GET')) {
+        const forwardedProto = req.headers['x-forwarded-proto'];
+        const protocol = typeof forwardedProto === 'string'
+          ? forwardedProto.split(',')[0].trim()
+          : req.socket.encrypted ? 'https' : 'http';
+        const sameOrigin = req.headers.host ? `${protocol}://${req.headers.host}` : '';
+        if (origin !== sameOrigin && !['https://localhost', 'http://localhost'].includes(origin)) {
+          sendJson(res, 403, { error: 'origin_not_allowed' });
           return;
         }
       }
@@ -670,6 +707,77 @@ export function createHandler({
           { authenticated: false },
           cookie ? { 'Set-Cookie': cookie } : {},
         );
+        return;
+      }
+
+      if (pathname === '/api/panel/map-login') {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        if (!auth?.enabled || typeof auth.createMapToken !== 'function') {
+          sendJson(res, 503, { error: 'panel_auth_not_configured' });
+          return;
+        }
+        const loginKey = `login:${clientIp(req)}`;
+        const limit = loginLimiter(loginKey);
+        if (!limit.allowed) {
+          sendJson(
+            res,
+            429,
+            { error: 'too_many_attempts' },
+            { 'Retry-After': String(limit.retryAfter) },
+          );
+          return;
+        }
+        const body = await readJsonBody(req);
+        const username = body && typeof body.user === 'string' ? body.user.slice(0, 80) : '';
+        const password = body && typeof body.password === 'string' ? body.password.slice(0, 200) : '';
+        const token = auth.createMapToken(username, password);
+        if (!token) {
+          sendJson(res, 401, { error: 'invalid_credentials' });
+          return;
+        }
+        loginLimiter.reset(loginKey);
+        sendJson(res, 200, {
+          authenticated: true,
+          user: token.user,
+          accessToken: token.token,
+          expiresAt: token.expiresAt,
+        });
+        return;
+      }
+
+      if (pathname === '/api/panel/map-alerts') {
+        if (req.method !== 'GET') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        if (!auth?.enabled || typeof auth.mapSession !== 'function') {
+          sendJson(res, 503, { error: 'panel_auth_not_configured' });
+          return;
+        }
+        const panelSession = typeof auth.session === 'function' ? auth.session(req) : null;
+        if (!panelSession && !auth.mapSession(req)) {
+          sendJson(res, 401, { error: 'authentication_required' });
+          return;
+        }
+        const alerts = (await store.list()).map(publicMapAlert).filter(Boolean);
+        sendJson(res, 200, { alerts });
+        return;
+      }
+
+      if (pathname === '/api/panel/map-logout') {
+        if (req.method !== 'POST') {
+          sendJson(res, 405, { error: 'method_not_allowed' });
+          return;
+        }
+        if (!auth?.enabled || typeof auth.revokeMapToken !== 'function') {
+          sendJson(res, 503, { error: 'panel_auth_not_configured' });
+          return;
+        }
+        auth.revokeMapToken(req);
+        sendJson(res, 200, { authenticated: false });
         return;
       }
 

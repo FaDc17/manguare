@@ -7,7 +7,7 @@ import { Clock3, Inbox, Leaf, Plus, RefreshCw, TriangleAlert } from 'lucide-reac
 import { useApp } from '../app/AppContext';
 import { AlertCard } from '../components/AlertCard';
 import { EmptyState } from '../components/EmptyState';
-import { formatRelative } from '../lib/format';
+import { formatDateTime, formatRelative } from '../lib/format';
 import type { AlertState } from '../lib/types';
 
 type Filter = 'all' | 'pending' | 'sent' | 'received';
@@ -120,6 +120,41 @@ export function HistoryScreen({
                     count: alert.attempts,
                   })}
                 </p>
+              ) : null}
+              {alert.lastSyncAttempt && !alert.lastSyncAttempt.ok ? (
+                <div className="sync-diagnostic" data-testid={`sync-diagnostic-${alert.id}`}>
+                  <strong>{t('history.syncDiagnostic.title')}</strong>
+                  <p>{t('history.syncDiagnostic.time', {
+                    time: formatDateTime(alert.lastSyncAttempt.attemptedAt, t),
+                  })}</p>
+                  <p>{t('history.syncDiagnostic.id', { id: alert.lastSyncAttempt.alertId })}</p>
+                  <p>{t('history.syncDiagnostic.request', {
+                    method: alert.lastSyncAttempt.method,
+                    endpoint: alert.lastSyncAttempt.endpoint,
+                  })}</p>
+                  <p>{t('history.syncDiagnostic.attemptState', {
+                    attempt: alert.lastSyncAttempt.attempt,
+                    before: alert.lastSyncAttempt.stateBefore,
+                    after: alert.lastSyncAttempt.stateAfter,
+                  })}</p>
+                  <p>{t('history.syncDiagnostic.http', {
+                    status: alert.lastSyncAttempt.httpStatus ??
+                      t('history.syncDiagnostic.noHttpStatus'),
+                  })}</p>
+                  <p>{t(alert.lastSyncAttempt.responseReceived
+                    ? 'history.syncDiagnostic.responseReceived'
+                    : alert.lastSyncAttempt.requestStarted
+                      ? 'history.syncDiagnostic.deliveryUnknown'
+                      : 'history.syncDiagnostic.requestNotStarted')}</p>
+                  {alert.lastSyncAttempt.serverAlertId ? (
+                    <p>{t('history.syncDiagnostic.serverId', {
+                      id: alert.lastSyncAttempt.serverAlertId,
+                    })}</p>
+                  ) : null}
+                  <p>{t('history.syncDiagnostic.error', {
+                    error: alert.lastSyncAttempt.error,
+                  })}</p>
+                </div>
               ) : null}
             </div>
           ))}

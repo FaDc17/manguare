@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
-import { clearAlerts, getAlert } from '../src/lib/db';
+import { clearAlerts, getAlert, putAlert } from '../src/lib/db';
 import {
   cancelAlert,
   createLocalAlert,
@@ -118,6 +118,21 @@ test('sin red la alerta queda pendiente con reintento programado y sobrevive a l
   assert.equal(stored?.attempts, 1);
   assert.ok(stored?.nextAttemptAt);
   assert.match(stored?.lastError ?? '', /red caída/);
+  assert.deepEqual(stored?.lastSyncAttempt, {
+    attemptedAt: stored?.lastAttemptAt,
+    alertId: alert.id,
+    endpoint: '/api/alerts',
+    method: 'POST',
+    attempt: 1,
+    ok: false,
+    requestStarted: true,
+    responseReceived: false,
+    httpStatus: undefined,
+    serverAlertId: undefined,
+    stateBefore: 'pending',
+    stateAfter: 'pending',
+    error: 'TypeError: red caída',
+  });
 
   // Simula cerrar y abrir la app: la cola se lee desde IndexedDB.
   const reloaded = await listAlertsSorted();
@@ -150,10 +165,125 @@ test('sin red la alerta queda pendiente con reintento programado y sobrevive a l
   const afterSend = await getAlert(alert.id);
   assert.equal(afterSend?.state, 'sent');
   assert.equal(afterSend?.nextAttemptAt, undefined);
+  assert.equal(afterSend?.lastSyncAttempt?.httpStatus, 201);
+  assert.equal(afterSend?.lastSyncAttempt?.ok, true);
+  assert.equal(afterSend?.lastSyncAttempt?.responseReceived, true);
+  assert.equal(afterSend?.lastSyncAttempt?.serverAlertId, alert.id);
+  assert.equal(afterSend?.lastSyncAttempt?.stateAfter, 'sent');
 
   // Un segundo envío no duplica: ya no está pendiente.
   await flushQueue(true);
   assert.equal(posts, 1);
+});
+
+test('guarda el código HTTP y el error del backend en el diagnóstico visible', async () => {
+  const alert = await createLocalAlert({
+    type: 'otro',
+    note: 'Prueba de respuesta HTTP',
+    community: 'Chiriaco',
+    deviceName: 'Celular de prueba',
+    consentLocation: false,
+  });
+  globalThis.fetch = (async () => new Response(
+    JSON.stringify({ error: 'storage_write_failed' }),
+    { status: 503, headers: { 'Content-Type': 'application/json' } },
+  )) as typeof fetch;
+
+  const result = await flushQueue(true);
+  assert.deepEqual(result, { sent: 0, failed: 1 });
+  const stored = await getAlert(alert.id);
+  assert.equal(stored?.state, 'pending');
+  assert.equal(stored?.lastSyncAttempt?.httpStatus, 503);
+  assert.equal(stored?.lastSyncAttempt?.ok, false);
+  assert.equal(stored?.lastSyncAttempt?.requestStarted, true);
+  assert.equal(stored?.lastSyncAttempt?.responseReceived, true);
+  assert.equal(stored?.lastSyncAttempt?.error, 'HTTP 503 (storage_write_failed)');
+});
+
+test('una solicitud forzada durante otro envío reintenta también las alertas en espera', async () => {
+  const active = await createLocalAlert({
+    type: 'otro',
+    note: 'Envío activo',
+    community: 'Chiriaco',
+    deviceName: 'Celular de prueba',
+    consentLocation: false,
+  });
+  const delayed = await createLocalAlert({
+    type: 'otro',
+    note: 'Alerta con reintento programado',
+    community: 'Chiriaco',
+    deviceName: 'Celular de prueba',
+    consentLocation: false,
+  });
+  await putAlert({
+    ...delayed,
+    attempts: 1,
+    nextAttemptAt: new Date(Date.now() + 60_000).toISOString(),
+  });
+
+  let releaseActive!: (response: Response) => void;
+  let signalActiveStarted!: () => void;
+  const activeResponse = new Promise<Response>((resolve) => {
+    releaseActive = resolve;
+  });
+  const activeStarted = new Promise<void>((resolve) => {
+    signalActiveStarted = resolve;
+  });
+  const postedIds: string[] = [];
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as AlertRecord;
+    postedIds.push(body.id);
+    if (body.id === active.id && postedIds.filter((id) => id === active.id).length === 1) {
+      signalActiveStarted();
+      return activeResponse;
+    }
+    const alert = await getAlert(body.id);
+    assert.ok(alert);
+    return new Response(JSON.stringify({ alert: serverAlert(alert) }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  const normalFlush = flushQueue(false);
+  await activeStarted;
+  const forcedFlush = flushQueue(true);
+  releaseActive(new Response(JSON.stringify({ alert: serverAlert(active) }), {
+    status: 201,
+    headers: { 'Content-Type': 'application/json' },
+  }));
+
+  await Promise.all([normalFlush, forcedFlush]);
+  assert.equal(postedIds.filter((id) => id === delayed.id).length, 1);
+  assert.equal((await getAlert(delayed.id))?.state, 'sent');
+});
+
+test('guarda y sincroniza una alerta aunque no se haya obtenido ubicación', async () => {
+  let payload: Record<string, unknown> | undefined;
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    const alert = await getAlert(String(payload.id));
+    assert.ok(alert);
+    return new Response(JSON.stringify({ alert: serverAlert(alert) }), {
+      status: 201,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }) as typeof fetch;
+
+  const alert = await createLocalAlert({
+    type: 'otro',
+    note: 'Sin coordenadas GPS',
+    community: 'Chiriaco',
+    deviceName: 'Celular de prueba',
+    consentLocation: true,
+  });
+  assert.equal((await getAlert(alert.id))?.state, 'pending');
+
+  const result = await flushQueue(true);
+  assert.deepEqual(result, { sent: 1, failed: 0 });
+  assert.ok(payload);
+  assert.equal('location' in payload, false);
+  assert.equal((await getAlert(alert.id))?.state, 'sent');
 });
 
 test('el worker sincroniza la cola PWA en IndexedDB con rutas API relativas', async () => {
@@ -367,6 +497,9 @@ test('un detalle rechazado no aparece como sincronizado', async () => {
   assert.equal(stored?.note, 'Detalle pendiente');
   assert.equal(stored?.detailsPendingSync, true);
   assert.match(stored?.lastError ?? '', /no se puede editar/);
+  assert.equal(stored?.lastSyncAttempt?.method, 'PATCH');
+  assert.equal(stored?.lastSyncAttempt?.httpStatus, 409);
+  assert.equal(stored?.lastSyncAttempt?.responseReceived, true);
 });
 
 test('un cambio remoto solo de ubicación actualiza la alerta local', async () => {

@@ -1,10 +1,11 @@
-// Muestra el saludo, los accesos y la guía de audio según el idioma activo.
+// Muestra el saludo, los accesos y el estado reciente de las alertas.
 
 import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
+import { Capacitor } from '@capacitor/core';
+import { Browser } from '@capacitor/browser';
 import {
   ChevronRight,
   Clock3,
-  Globe2,
   History,
   Info,
   Phone,
@@ -13,7 +14,6 @@ import {
   Sparkles,
   Store,
   TriangleAlert,
-  Volume2,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -21,14 +21,10 @@ import { useApp } from '../app/AppContext';
 import { useSession } from '../app/SessionContext';
 import { AlertCard } from '../components/AlertCard';
 import { EmptyState } from '../components/EmptyState';
-import { canSpeak, guideText, MIXED_AUDIO_NOTE, speakSpanish } from '../lib/audio';
 import { isOverdue } from '../lib/sla';
 import { isLanguageComplete, LANGUAGES } from '../i18n/catalog';
 import { formatPhone } from '../lib/session';
-
-const HOME_AUDIO =
-  'Manguaré guarda tu alerta en el teléfono. Si no hay señal, la envía automáticamente cuando vuelve la conexión. ' +
-  'Puedes ver si está pendiente, enviada o recibida. Si tienes señal, también puedes avisar por mensaje de texto.';
+import { getNativeApiBase } from '../lib/api-url';
 
 export function HomeScreen({
   onSOS,
@@ -55,16 +51,6 @@ export function HomeScreen({
   const overdue = awaiting.some((alert) => isOverdue(alert));
   const recent = alerts.slice(0, 2);
   const language = LANGUAGES.find((item) => item.id === activeLanguage);
-
-  const playGuide = () => {
-    if (!speakSpanish(guideText(HOME_AUDIO, activeLanguage, visualSimulation))) {
-      showToast(t('home.esteDispositivoNoTieneAudioDisponible'), 'warn');
-    } else if (visualSimulation) {
-      showToast(MIXED_AUDIO_NOTE, 'warn');
-    } else if (activeLanguage !== 'es') {
-      showToast(t('home.porAhoraLaGuiaDeAudio'), 'warn');
-    }
-  };
 
   return (
     <div className="screen home">
@@ -230,7 +216,25 @@ export function HomeScreen({
           <span className="quick-sub">{t('home.proximamente')}</span>
         </button>
         {session.role === 'admin' ? (
-          <a className="quick-card" href="/panel" target="_blank" rel="noreferrer">
+          <a
+            className="quick-card"
+            data-testid="home-admin-panel"
+            href={Capacitor.isNativePlatform() && getNativeApiBase() ? `${getNativeApiBase()}/panel` : '/panel'}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(event) => {
+              if (!Capacitor.isNativePlatform()) return;
+              event.preventDefault();
+              const server = getNativeApiBase();
+              if (!server) {
+                showToast(t('settings.nativeServerRequired'), 'error');
+                return;
+              }
+              void Browser.open({ url: `${server}/panel` }).catch(() => {
+                showToast(t('settings.nativePanelFailed'), 'error');
+              });
+            }}
+          >
             <span className="quick-icon quick-icon--clay">
               <ShieldCheck size={21} aria-hidden="true" />
             </span>
@@ -238,26 +242,6 @@ export function HomeScreen({
             <span className="quick-sub">{t('home.alertasYConfirmaciones')}</span>
           </a>
         ) : null}
-        {canSpeak() ? (
-          <button type="button" className="quick-card quick-card--audio" onClick={playGuide}>
-            <span className="quick-icon quick-icon--sand">
-              <Volume2 size={21} aria-hidden="true" />
-            </span>
-            <span className="quick-title">{t('home.comoFunciona')}</span>
-            <span className="quick-sub">{visualSimulation ? 'Escuchar audio de prueba' : t('home.escucharGuiaEnCastellano')}</span>
-            <span className="quick-play" aria-hidden="true">
-              <Volume2 size={14} />
-            </span>
-          </button>
-        ) : (
-          <button type="button" className="quick-card quick-card--audio" onClick={onOpenHelp}>
-            <span className="quick-icon quick-icon--sand">
-              <Globe2 size={21} aria-hidden="true" />
-            </span>
-            <span className="quick-title">{t('home.comoFunciona')}</span>
-            <span className="quick-sub">{t('home.guiaYCanalesDeAyuda')}</span>
-          </button>
-        )}
       </section>
 
       <section className="recent">

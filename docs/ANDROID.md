@@ -1,40 +1,17 @@
-# APK de prueba local con Capacitor
+# APK Android con Capacitor
 
-El APK incluye la interfaz y guarda los datos locales en el teléfono. La API Node
-y la clave de Gemini permanecen en el PC. **El PC y el teléfono deben estar en la
-misma red Wi-Fi** mientras se use Gemini, el panel o la sincronización de alertas.
-No hace falta publicar un servidor para este MVP.
+El APK incluye la interfaz y conserva los datos y la cola offline en SQLite en el
+teléfono. Al compilarlo con `npm run android:apk`, queda preconfigurada la API de
+producción:
+`https://manguare-services-c9hpebgcduf0gfdr.eastus2-01.azurewebsites.net`.
+La URL queda integrada en la compilación, no se muestra en Ajustes y no requiere
+configuración del usuario. El servidor y la clave de Gemini permanecen fuera del
+APK.
 
-## 1. Preparar el servidor en el PC
-
-En la raíz del proyecto, crea un archivo `.env` con esta línea y tu clave real:
-
-```dotenv
-GEMINI_API_KEY=tu_clave_de_Google_AI_Studio
-```
-
-No envíes la clave por chat ni la incluyas en variables `VITE_`. El archivo `.env`
-está ignorado por Git. Si ya existe, añade o actualiza esa línea sin borrar la
-configuración que uses para el panel.
-
-En una terminal, ejecuta:
-
-```powershell
-npm install
-npm start
-```
-
-Deja esa terminal abierta. Debe mostrar `Gemini API Key cargada: true` y una
-dirección `Red: http://192.168.x.x:8787` (la IP exacta de tu PC puede ser otra).
-Desde el navegador **del teléfono**, abre `http://IP-DEL-PC:8787/api/health`;
-debe responder con `"ok":true`. Si Windows pregunta por el firewall de Node.js,
-permite el acceso en redes privadas. Si no carga, comprueba la IP, la misma Wi-Fi,
-el firewall y que el router no tenga aislamiento entre clientes.
-
-## 2. Crear e instalar el APK
+## Crear e instalar el APK
 
 Requisitos de compilación: Node.js 22+, Android SDK con plataforma API 36 y JDK
-21. En otra terminal, desde la raíz del proyecto:
+21. Desde la raíz del proyecto, ejecuta:
 
 ```powershell
 npm run android:apk
@@ -42,35 +19,50 @@ npm run android:apk
 
 El APK se genera en `android/app/build/outputs/apk/debug/app-debug.apk`. Es una
 compilación de prueba firmada con la clave de depuración; se puede copiar al
-teléfono e instalar. La app usa `http://localhost` **solo como origen interno del
-WebView**. La conexión al PC se hace con la IP privada indicada por `npm start`.
+teléfono e instalar. Al abrir la app, la URL de producción se usa automáticamente.
+Para comprobar el servidor desde el navegador del teléfono, abre
+`https://manguare-services-c9hpebgcduf0gfdr.eastus2-01.azurewebsites.net/api/health`;
+debe responder `{"ok":true}`. La función de voz requiere además que Gemini esté
+configurado en el backend.
 
-En el APK, abre **Ajustes → Servidor de Manguaré**, escribe
-`http://IP-DEL-PC:8787` (sin `/api`, sin barra final y sin `localhost`) y pulsa
-**Guardar y comprobar Gemini**. El mensaje **Servidor y Gemini listos** confirma
-que la app pudo consultar la API y obtener un token temporal real. Vuelve al
-agente y pulsa **Iniciar conversación**.
+También se puede comprobar en un teléfono conectado a internet creando una alerta
+de prueba: se guarda primero localmente y debe pasar de pendiente a enviada al
+sincronizar. Sin internet la alerta permanece en SQLite y en la cola, y se reintenta
+cuando vuelve la conexión. El teléfono nunca se conecta directamente a Azure SQL;
+la sincronización se hace a través de la API.
 
-Si aparece **Falta configurar GEMINI_API_KEY**, revisa `.env` y reinicia
-`npm start`. Si no se puede conectar, abre primero `/api/health` desde el
-navegador del teléfono; así se distingue un problema de red de uno de Gemini.
+El filtro **Emergencias** del Mapa aparece para el perfil administrador y requiere
+iniciar sesión con las credenciales del panel de salud. La app usa un token de
+solo lectura, temporal (30 minutos), que no se guarda en SQLite ni en el
+almacenamiento del navegador. El servidor debe tener configurado
+`MANGUARE_PANEL_PASSWORD` y estar actualizado con las rutas del mapa. En la app y
+en el panel solo se muestran coordenadas válidas que la persona autorizó
+compartir; no se muestran notas ni teléfonos en los marcadores.
 
-## Alcance de esta compilación
+Para comprobar la ubicación sin internet en Android, concede el permiso de
+ubicación precisa y mantén activo el GPS (el modo avión puede usarse si no apaga
+los servicios de ubicación). La app intenta obtener una ubicación reciente durante
+unos segundos, pero puedes guardar la emergencia mientras el GPS sigue buscando.
+Si aún no hay coordenadas, la alerta se guarda sin ellas y lo indica en el detalle;
+si el GPS las obtuvo, se guardan junto a la alerta local.
+
+## Conexión local de prueba y seguridad
 
 `npm run android:apk` habilita HTTP de red privada **solo para el APK de prueba**.
-El manifiesto Android permite tráfico HTTP únicamente en la variante `debug`.
-`npm run android:sync` vuelve a compilar con el esquema HTTPS normal para una
-futura versión publicada. El servidor acepta los orígenes internos exactos de
+La base de producción sigue siendo HTTPS. Para probar un servidor local, configura
+`VITE_API_BASE_URL` antes de compilar; el APK local también admite
+`http://IP-PRIVADA:8787` en la misma red. No uses `localhost` como dirección del
+servidor ni publiques un APK compilado con una URL de pruebas.
+`npm run android:sync` no establece una URL de producción por sí mismo y conserva
+el esquema HTTPS normal. El servidor acepta los orígenes internos exactos de
 Capacitor `http://localhost` y `https://localhost` en las rutas `/api/`.
 
 La clave de Gemini nunca se empaqueta en el APK. El servidor solicita un token
 temporal y el teléfono lo usa para Gemini Live. La voz requiere internet desde
-el teléfono y desde el PC, además de la red local entre ambos. La guía oficial
-de tokens temporales está en
+el teléfono y un backend con Gemini configurado. La guía oficial de tokens
+temporales está en
 [Google AI](https://ai.google.dev/gemini-api/docs/live-api/ephemeral-tokens).
 
-Este APK es para una demostración en una red local confiable: las peticiones al
-PC viajan por HTTP. Para distribuir la app fuera de esa red, publica la API con
-HTTPS, configura la URL pública y firma una versión de distribución. Antes de
-usar el APK con personas, verifica en un Android físico los permisos de GPS,
-micrófono y cámara, el envío de alertas y una conversación de voz completa.
+El APK generado es de depuración. Antes de distribuir una versión de producción,
+firma un build de release y verifica en un Android físico los permisos de GPS,
+micrófono y cámara, el envío de alertas y la sincronización al recuperar conexión.

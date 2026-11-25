@@ -1,10 +1,10 @@
 import { communityLabel } from '../i18n/labels';
 import { translate, type MessageKey, type Translate } from '../i18n/catalog';
 import { COMMUNITY_LISTINGS, SUPPORT_CENTERS } from './community';
-import type { AlertLocation } from './types';
+import type { AlertLocation, ServerMapAlert } from './types';
 import { normalizeSearch } from './voice-tools';
 
-export type MapKind = 'conecta' | 'support';
+export type MapKind = 'emergency' | 'conecta' | 'support';
 export type MapFilters = Record<MapKind, boolean>;
 
 export interface MapPlace {
@@ -15,7 +15,7 @@ export interface MapPlace {
   description: string;
   location: string;
   coordinates: { lat: number; lng: number };
-  demo: true;
+  demo: boolean;
 }
 
 export interface MapVoiceController {
@@ -30,7 +30,7 @@ export interface MapVoiceController {
   selectPlace(id: string): boolean;
 }
 
-/** Misma fuente que dibuja los marcadores; por ahora son datos de demostración. */
+/** Misma fuente que dibuja los marcadores de demostración del mapa. */
 export const MAP_PLACES: MapPlace[] = [
   ...COMMUNITY_LISTINGS.filter(
     (listing): listing is typeof listing & { coordinates: { lat: number; lng: number } } =>
@@ -56,6 +56,33 @@ export const MAP_PLACES: MapPlace[] = [
     demo: true as const,
   })),
 ];
+
+export function emergencyMapPlaces(alerts: ServerMapAlert[], t: Translate): MapPlace[] {
+  return alerts.flatMap((alert) => {
+    const location = alert.location;
+    if (
+      alert.consentLocation !== true ||
+      !location ||
+      !Number.isFinite(location.lat) ||
+      location.lat < -90 ||
+      location.lat > 90 ||
+      !Number.isFinite(location.lng) ||
+      location.lng < -180 ||
+      location.lng > 180
+    ) return [];
+    const category = `emergency.${alert.type}` as MessageKey;
+    return [{
+      id: `emergency:${alert.id}`,
+      kind: 'emergency',
+      name: alert.isSos ? t('sos.title') : t(category),
+      category,
+      description: '',
+      location: alert.community,
+      coordinates: { lat: location.lat, lng: location.lng },
+      demo: false,
+    }];
+  });
+}
 
 export function filterMapPlaces(
   places: MapPlace[],

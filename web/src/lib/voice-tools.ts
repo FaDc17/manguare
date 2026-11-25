@@ -168,9 +168,9 @@ export const VOICE_FUNCTION_DECLARATIONS = [
   },
   {
     name: 'get_map_places',
-    description: 'Lee los marcadores visibles del mapa con sus filtros actuales. Puede buscar por nombre o categoría y ordenar por distancia GPS si se solicita. Todos los marcadores actuales son de demostración.',
+    description: 'Lee los marcadores visibles del mapa con sus filtros actuales. Puede buscar por nombre o categoría y ordenar por distancia GPS si se solicita. Las emergencias solo aparecen para administradores autenticados y con consentimiento de ubicación.',
     parameters: { type: 'OBJECT', properties: {
-      query: { type: 'STRING' }, kind: { type: 'STRING', enum: ['all', 'support', 'conecta'] },
+      query: { type: 'STRING' }, kind: { type: 'STRING', enum: ['all', 'emergency', 'support', 'conecta'] },
       nearMe: { type: 'BOOLEAN' },
     } },
   },
@@ -242,7 +242,7 @@ export const VOICE_FUNCTION_DECLARATIONS = [
     name: 'update_app_setting',
     description: 'Edita un campo visible de Ajustes indicado expresamente por el usuario.',
     parameters: { type: 'OBJECT', properties: {
-      field: { type: 'STRING', enum: ['community', 'deviceName', 'healthPost', 'healthPhone', 'smsNumber'] },
+      field: { type: 'STRING', enum: ['community', 'deviceName'] },
       value: { type: 'STRING' },
     }, required: ['field', 'value'] },
   },

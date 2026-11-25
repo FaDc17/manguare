@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 export const SESSION_COOKIE = 'manguare_session';
 const DEFAULT_TTL_MS = 12 * 60 * 60 * 1000;
+const MAP_TOKEN_TTL_MS = 30 * 60 * 1000;
 
 function safeEqual(left, right) {
   const a = Buffer.from(String(left));
@@ -45,6 +46,7 @@ export function createAuth({
   secureCookies = false,
 } = {}) {
   const sessions = new Map();
+  const mapTokens = new Map();
   const sessionTtlMs = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : DEFAULT_TTL_MS;
   const passwordDigest = crypto.createHmac('sha256', secret).update(password).digest();
   const userDigest = crypto.createHmac('sha256', secret).update(user).digest();
@@ -53,6 +55,15 @@ export function createAuth({
     for (const [token, session] of sessions) {
       if (session.expiresAt <= now) sessions.delete(token);
     }
+    for (const [token, session] of mapTokens) {
+      if (session.expiresAt <= now) mapTokens.delete(token);
+    }
+  }
+
+  function bearerToken(req) {
+    const header = req.headers.authorization;
+    const match = typeof header === 'string' ? header.match(/^Bearer ([A-Za-z0-9_-]+)$/) : null;
+    return match?.[1] ?? '';
   }
 
   function cookie(token, maxAgeSeconds) {
@@ -60,7 +71,7 @@ export function createAuth({
       `${SESSION_COOKIE}=${encodeURIComponent(token)}`,
       'Path=/',
       'HttpOnly',
-      'SameSite=Lax',
+      secureCookies ? 'SameSite=None' : 'SameSite=Lax',
       `Max-Age=${maxAgeSeconds}`,
     ];
     if (secureCookies) parts.push('Secure');
@@ -99,6 +110,32 @@ export function createAuth({
         expiresAt,
         cookie: cookie(token, Math.floor(sessionTtlMs / 1000)),
       };
+    },
+
+    createMapToken(username, candidate) {
+      if (!this.verify(username, candidate)) return null;
+      prune();
+      if (mapTokens.size >= 100) {
+        const oldest = mapTokens.keys().next().value;
+        if (oldest) mapTokens.delete(oldest);
+      }
+      const token = crypto.randomBytes(32).toString('base64url');
+      const expiresAt = Date.now() + MAP_TOKEN_TTL_MS;
+      mapTokens.set(token, { user, expiresAt });
+      return { token, user, expiresAt };
+    },
+
+    mapSession(req) {
+      if (!enabled) return null;
+      const token = bearerToken(req);
+      if (!token) return null;
+      prune();
+      return mapTokens.get(token) ?? null;
+    },
+
+    revokeMapToken(req) {
+      const token = bearerToken(req);
+      return token ? mapTokens.delete(token) : false;
     },
 
     logout(req) {

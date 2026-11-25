@@ -32,8 +32,9 @@ Objetivo: mostrar un solo recorrido completo:
    empezar (usuario `salud`). Déjalo ya abierto para no perder tiempo en vivo.
 4. Entra a la app con el acceso de demo y déjala en **Inicio**.
 5. Deja el panel en **Todas** y comprueba que dice **En vivo**.
-6. Plan B: si la red del lugar falla, usa **Ajustes → Simular sin conexión** en
-   la app. No borra alertas y permite mostrar el estado Pendiente igual.
+6. Si la red del lugar falla, puedes mostrar el guardado local: usa DevTools →
+   Network → Offline en el navegador o desactiva temporalmente la red del
+   teléfono. Para completar el recorrido hasta el panel, restablece la conexión.
 
 > Si presentas desde el teléfono por la IP de la LAN, usa HTTPS o mantén la
 > pestaña abierta: el service worker no se registra por HTTP fuera de localhost.
@@ -55,16 +56,20 @@ Señala la app: botón grande de emergencia, indicador de conexión y pendientes
 3. Toca **Cambiar** y elige **Enfermedad**.
 4. Escribe: `Fiebre alta y dificultad para respirar desde anoche.`
 5. Comunidad: `Nueva Esperanza`.
-6. Muestra la tarjeta **Ubicación lista** y el check de consentimiento.
+6. Si el GPS y el permiso están disponibles, muestra **Ubicación lista** y el
+   check de consentimiento. Si no, muestra que la ubicación no está disponible.
 
-> "El GPS funciona sin datos. La ubicación solo se comparte si la persona lo
-> autoriza; no se publica la ubicación exacta de la comunidad."
+> "El GPS puede funcionar sin datos. La ubicación solo se comparte si la persona
+> lo autoriza; si no está disponible, la emergencia igual se guarda sin
+> coordenadas."
 
-7. Señala que la descripción es obligatoria y deja el formulario listo para enviarlo.
+7. Señala que la descripción es obligatoria y que no es necesario esperar una
+   dirección legible para guardar la emergencia.
 
 ### 0:50–1:20 · Sin conexión (30 s)
 
-1. Activa el modo avión o **Ajustes → Simular sin conexión**.
+1. Activa el modo avión en el teléfono o DevTools → Network → Offline en el
+   navegador. La app no tiene un interruptor para simular la conexión.
 2. En el formulario, muestra que el botón cambia a **Guardar alerta**.
 3. Toca **Guardar alerta**.
 
@@ -77,7 +82,7 @@ Señala la app: botón grande de emergencia, indicador de conexión y pendientes
 
 ### 1:20–1:50 · Vuelve la señal (30 s)
 
-1. Desactiva el modo avión o el interruptor de simulación.
+1. Desactiva el modo avión o vuelve a habilitar la red.
 2. Espera unos segundos (o toca **Actualizar estado**).
 
 > "La cola reintenta sola: rápido al principio y luego cada pocos minutos. El
@@ -124,7 +129,7 @@ reportes reales.
 | --- | --- |
 | El panel no muestra la alerta nueva | Pulsa **Actualizar**; revisa que el teléfono diga **Enviada** |
 | El teléfono no vuelve a Enviada | Toca **Actualizar estado**; revisa que el servidor siga arriba |
-| No hay red para la demo | Usa **Simular sin conexión** y luego desactívalo |
+| No hay red para la demo | Muestra el guardado local sin conexión y restablece la red para completar la sincronización |
 | El panel está vacío | `npm run seed` con el servidor encendido |
 | Quieres empezar de cero | Detén el servidor, borra `server/data/alerts.json`, reinicia y `npm run seed` |
 | La PWA no se instala en el teléfono | Usa HTTPS o `localhost`; por IP HTTP no hay service worker |
