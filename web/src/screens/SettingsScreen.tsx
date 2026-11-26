@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Browser } from '@capacitor/browser';
 import {
+  Bell,
   ChevronRight,
   Database,
   Globe2,
@@ -23,6 +24,11 @@ import {
 import { useApp } from '../app/AppContext';
 import { useSession } from '../app/SessionContext';
 import { getNativeApiBase } from '../lib/api-url';
+import {
+  alertNotificationPermission,
+  alertNotificationsEnabled,
+  enableAlertNotifications,
+} from '../lib/alert-notifications';
 import { ConnectionPill } from '../components/ConnectionPill';
 import { Sheet } from '../components/Sheet';
 import { formatRelative } from '../lib/format';
@@ -52,6 +58,13 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
   useEffect(() => setProfileName(session.name), [session.name]);
   const [confirmClear, setConfirmClear] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [notificationsActive, setNotificationsActive] = useState(false);
+  const [enablingNotifications, setEnablingNotifications] = useState(false);
+  useEffect(() => {
+    void alertNotificationPermission().then((granted) => {
+      setNotificationsActive(alertNotificationsEnabled() && granted);
+    });
+  }, []);
   const pending = alerts.filter((alert) => alert.state === 'pending').length;
   const awaiting = alerts.filter(
     (alert) => alert.state === 'sent' && !alert.acknowledgedAt,
@@ -188,6 +201,30 @@ export function SettingsScreen({ onOpenLanguage }: { onOpenLanguage: () => void 
               </span>
             </span>
             <ChevronRight size={18} aria-hidden="true" />
+          </button>
+
+          <button
+            type="button"
+            className="setting-row setting-row--button"
+            data-testid="settings-notifications"
+            disabled={notificationsActive || enablingNotifications}
+            onClick={() => {
+              setEnablingNotifications(true);
+              void enableAlertNotifications(alerts).then((enabled) => {
+                setNotificationsActive(enabled);
+                showToast(t(enabled ? 'settings.notificationsEnabled' : 'settings.notificationsDenied'),
+                  enabled ? 'ok' : 'warn');
+              }).finally(() => setEnablingNotifications(false));
+            }}
+          >
+            <span className="setting-icon"><Bell size={20} aria-hidden="true" /></span>
+            <span className="setting-main">
+              <span className="setting-label">{t('settings.notifications')}</span>
+              <span className="setting-sub">{t('settings.notificationsHint')}</span>
+            </span>
+            <span className="account-role">
+              {t(notificationsActive ? 'settings.notificationsActive' : 'settings.enableNotifications')}
+            </span>
           </button>
 
           <label className="setting-row">

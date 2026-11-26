@@ -84,6 +84,38 @@ export function emergencyMapPlaces(alerts: ServerMapAlert[], t: Translate): MapP
   });
 }
 
+/** Agrupa marcadores que se pisan a la escala visible, sin perder ninguna alerta. */
+export function groupMapPlacesByPixels(
+  places: MapPlace[],
+  project: (coordinates: MapPlace['coordinates']) => { x: number; y: number },
+  radius = 24,
+): MapPlace[][] {
+  const pixels = places.map((place) => project(place.coordinates));
+  const parent = places.map((_, index) => index);
+  const find = (index: number): number => {
+    while (parent[index] !== index) {
+      parent[index] = parent[parent[index]];
+      index = parent[index];
+    }
+    return index;
+  };
+  for (let index = 0; index < places.length; index += 1) {
+    for (let other = index + 1; other < places.length; other += 1) {
+      const distance = Math.hypot(pixels[index].x - pixels[other].x,
+        pixels[index].y - pixels[other].y);
+      if (distance <= radius) parent[find(other)] = find(index);
+    }
+  }
+  const groups = new Map<number, MapPlace[]>();
+  places.forEach((place, index) => {
+    const root = find(index);
+    const group = groups.get(root) ?? [];
+    group.push(place);
+    groups.set(root, group);
+  });
+  return [...groups.values()];
+}
+
 export function filterMapPlaces(
   places: MapPlace[],
   search: string,

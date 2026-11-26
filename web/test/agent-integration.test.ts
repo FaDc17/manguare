@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AGENT_CAPABILITIES, listAgentCapabilities } from '../src/lib/agent-capabilities.ts';
 import { translate } from '../src/i18n/catalog.ts';
-import { emergencyMapPlaces, filterMapPlaces, MAP_PLACES, placeDistanceKm } from '../src/lib/map-data.ts';
+import { emergencyMapPlaces, filterMapPlaces, groupMapPlacesByPixels, MAP_PLACES, placeDistanceKm } from '../src/lib/map-data.ts';
 import { hasExplicitLanguageIntent, hasExplicitLocationIntent, VOICE_FUNCTION_DECLARATIONS } from '../src/lib/voice-tools.ts';
 
 describe('registro de herramientas del agente', () => {
@@ -81,5 +81,30 @@ describe('fuente compartida del mapa', () => {
     assert.deepEqual(filterMapPlaces(places, '', {
       emergency: true, conecta: false, support: false,
     }, t), places);
+  });
+
+  it('conserva todas las emergencias cuando comparten un marcador', () => {
+    const alert = {
+      id: 'alerta-1', type: 'mordedura' as const, community: 'Awajun',
+      consentLocation: true,
+      location: { lat: -12.0, lng: -77.0, accuracy: 5, capturedAt: '2026-01-01T00:00:00Z' },
+      clientCreatedAt: '2026-01-01T00:00:00Z',
+    };
+    const places = emergencyMapPlaces([
+      alert,
+      { ...alert, id: 'alerta-2', type: 'accidente' as const },
+      { ...alert, id: 'alerta-3', location: { ...alert.location, lat: -11.99 } },
+    ], t);
+    const grouped = groupMapPlacesByPixels(places,
+      ({ lat, lng }) => ({ x: lng * 100, y: lat * 100 }));
+    assert.deepEqual(grouped.map((group) => group.map((place) => place.id)), [
+      ['emergency:alerta-1', 'emergency:alerta-2', 'emergency:alerta-3'],
+    ]);
+    const zoomed = groupMapPlacesByPixels(places,
+      ({ lat, lng }) => ({ x: lng * 10000, y: lat * 10000 }));
+    assert.deepEqual(zoomed.map((group) => group.map((place) => place.id)), [
+      ['emergency:alerta-1', 'emergency:alerta-2'],
+      ['emergency:alerta-3'],
+    ]);
   });
 });

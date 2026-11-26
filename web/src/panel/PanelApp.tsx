@@ -3,7 +3,7 @@
 import { LocalizedText, useTranslation } from '../i18n/LanguageContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from 'react-leaflet';
+import { CircleMarker, MapContainer, Popup, TileLayer, Tooltip, useMap } from 'react-leaflet';
 import {
   Bell,
   BellOff,
@@ -33,7 +33,8 @@ import type { MessageKey } from '../i18n/catalog';
 import { EMERGENCY_META, SOS_DEFAULT_NOTE } from '../lib/emergency';
 import { formatDateTime, formatRelative, formatTime, shortId } from '../lib/format';
 import { responseLabel, translatedResponse } from '../i18n/labels';
-import { emergencyMapPlaces, type MapPlace } from '../lib/map-data';
+import { emergencyMapPlaces, groupMapPlacesByPixels, type MapPlace } from '../lib/map-data';
+import { shortSmsDescription } from '../lib/sms';
 import { RESPONSE_OPTIONS } from '../lib/sla';
 import type { ServerAlert } from '../lib/types';
 import { StatisticsSection } from './StatisticsSection';
@@ -89,13 +90,16 @@ function escalationBody(alert: ServerAlert): string {
         new Date(alert.ackDeadlineAt),
       )
     : 'sin plazo';
-  return [
+  const parts = [
     'MANGUARE ESCALAMIENTO',
     meta.label,
     alert.community || 'comunidad no indicada',
     `Ref ${shortId(alert.id)}`,
     `Plazo venció ${deadline}`,
-  ].join(' | ');
+  ];
+  const description = shortSmsDescription(alert.note);
+  if (description) parts.push(`Detalle: ${description}`);
+  return parts.join(' | ');
 }
 
 function PanelStatus({ alert }: { alert: ServerAlert }) {
@@ -138,7 +142,69 @@ function PanelMapBounds({ places }: { places: MapPlace[] }) {
   return null;
 }
 
-function PanelEmergencyMap({ alerts }: { alerts: ServerAlert[] }) {
+function PanelEmergencyMarkers({ places, onOpen }: { places: MapPlace[]; onOpen: (id: string) => void }) {
+  const { t } = useTranslation();
+  const map = useMap();
+  const [zoom, setZoom] = useState(map.getZoom());
+  useEffect(() => {
+    const updateZoom = () => setZoom(map.getZoom());
+    map.on('zoomend', updateZoom);
+    return () => { map.off('zoomend', updateZoom); };
+  }, [map]);
+  const groups = useMemo(() => groupMapPlacesByPixels(places, (coordinates) => {
+    const point = map.project([coordinates.lat, coordinates.lng], zoom);
+    return { x: point.x, y: point.y };
+  }), [map, places, zoom]);
+
+  return groups.map((group) => {
+    const center = {
+      lat: group.reduce((sum, place) => sum + place.coordinates.lat, 0) / group.length,
+      lng: group.reduce((sum, place) => sum + place.coordinates.lng, 0) / group.length,
+    };
+    const first = group[0];
+    return (
+      <CircleMarker
+        key={group.map((place) => place.id).join('|')}
+        center={[center.lat, center.lng]}
+        radius={group.length > 1 ? 12 : 9}
+        pathOptions={{ color: '#fff', fillColor: '#b3261e', fillOpacity: 0.95, weight: 3 }}
+      >
+        {group.length > 1 ? (
+          <Tooltip permanent direction="center" className="panel-map-count">{group.length}</Tooltip>
+        ) : null}
+        <Popup>
+          {group.length === 1 ? (
+            <>
+              <strong>{first.name}</strong>
+              <br />
+              {t(first.category)}
+              {first.location ? <><br />{first.location}</> : null}
+            </>
+          ) : (
+            <div className="panel-map-group-popup">
+              <strong>{t('panel.emergenciasEnEstaZona', { count: group.length })}</strong>
+              <ul>
+                {group.map((place) => {
+                  const id = place.id.slice('emergency:'.length);
+                  return (
+                    <li key={place.id}>
+                      <button type="button" onClick={() => onOpen(id)}>
+                        <span>{place.name}{place.name === t(place.category) ? '' : ` · ${t(place.category)}`}</span>
+                        <small>{place.location ? `${place.location} · ` : ''}{t('panel.ref')}{' '}{shortId(id)}</small>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </Popup>
+      </CircleMarker>
+    );
+  });
+}
+
+function PanelEmergencyMap({ alerts, onOpen }: { alerts: ServerAlert[]; onOpen: (id: string) => void }) {
   const { t } = useTranslation();
   const places = useMemo(() => emergencyMapPlaces(alerts, t), [alerts, t]);
   return (
@@ -156,21 +222,7 @@ function PanelEmergencyMap({ alerts }: { alerts: ServerAlert[] }) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <PanelMapBounds places={places} />
-        {places.map((place) => (
-          <CircleMarker
-            key={place.id}
-            center={[place.coordinates.lat, place.coordinates.lng]}
-            radius={9}
-            pathOptions={{ color: '#fff', fillColor: '#b3261e', fillOpacity: 0.95, weight: 3 }}
-          >
-            <Popup>
-              <strong>{place.name}</strong>
-              <br />
-              {t(place.category)}
-              {place.location ? <><br />{place.location}</> : null}
-            </Popup>
-          </CircleMarker>
-        ))}
+        <PanelEmergencyMarkers places={places} onOpen={onOpen} />
       </MapContainer>
       {places.length === 0 ? (
         <p className="panel-map-empty" role="status">{t('panel.mapaSinUbicacionesDisponibles')}</p>
@@ -1187,7 +1239,7 @@ export function PanelApp() {
               loading ? (
                 <div className="panel-map-loading">{t('panel.cargandoAlertas')}</div>
               ) : (
-                <PanelEmergencyMap alerts={alerts} />
+                <PanelEmergencyMap alerts={alerts} onOpen={setSelectedId} />
               )
             ) : (
               <p className="panel-map-locked" role="note">{t('panel.mapaRequiereContrasena')}</p>

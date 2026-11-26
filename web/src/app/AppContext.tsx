@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { clearAlerts, clearBiodiversityReports, getAllBiodiversityReports } from '../lib/db';
 import { createLocalBiodiversityReport } from '../lib/biodiversity';
+import { processAlertNotifications } from '../lib/alert-notifications';
 import {
   cancelAlert as cancelLocalAlert,
   createLocalAlert,
@@ -115,6 +116,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ]);
       setAlerts(list);
       setBiodiversityReports(reports.sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+      void processAlertNotifications().catch(() => {
+        // Los avisos son opcionales y no deben interrumpir la sincronización.
+      });
     } catch {
       showToast(message('sync.noSePudoLeerElAlmacenamiento'), 'error');
     } finally {

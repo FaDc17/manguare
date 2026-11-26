@@ -122,7 +122,8 @@ async function checkLanguages(app) {
   assert.equal(await app.$eval('.setting-label [lang="cbt"]', (label) => label.textContent), "Ninanu'");
   assert.equal(await app.$eval('[data-testid="nav-community"] [lang="cbt"]', (label) => label.textContent), "Ninanu'");
   await app.click('[data-testid="nav-community"]');
-  await app.waitForFunction(() => document.body.textContent?.includes("Pei'"));
+  assert.equal(await app.$eval('[data-testid="app-screen"]', (element) => element.dataset.screen),
+    'settings');
   await openSettings();
   await selectLanguage('es', 'cbt');
 
@@ -166,15 +167,8 @@ assert.ok(
   await app.waitForSelector(sosDialog, { hidden: true });
 
   await app.click('[data-testid="nav-community"]');
-  await app.waitForFunction(() => document.body.textContent?.includes('Pankotsi'));
-  assert.ok(await app.evaluate(() => !document.body.textContent?.includes('Vista beta · Textos simulados')));
-  if (visualBeta) {
-    assert.equal(await app.$eval('.screen.community h1', (title) => title.textContent), 'Pamosantero Amazonía');
-    assert.ok(await app.evaluate(() => document.body.textContent?.includes('Miel pura de la comunidad')));
-  }
-  await app.click('[data-testid="environment-topic-tala-ilegal"]');
-  assert.equal(await app.$eval('label [lang="cni"]', (label) => label.textContent), 'Osankenaitoki');
-  assert.equal(await app.$eval('[data-testid="biodiversity-category"]', (input) => input.value), 'Tala ilegal');
+  assert.equal(await app.$eval('[data-testid="app-screen"]', (element) => element.dataset.screen),
+    'home');
 
   await app.reload({ waitUntil: 'domcontentloaded' });
   await app.waitForSelector('[data-testid="sos-button"]');
@@ -210,7 +204,9 @@ async function main() {
     user: 'salud',
     secret: Buffer.from('secreto-e2e'),
   });
-  const server = http.createServer(createHandler({ store, biodiversityStore, socialStore, staticDir, auth }));
+  const server = http.createServer(createHandler({
+    store, biodiversityStore, socialStore, staticDir, auth, escalationPhone: '+51999999999',
+  }));
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
 
@@ -242,6 +238,13 @@ async function main() {
     await app.click('[data-testid="demo-user"]');
     await app.click('[data-testid="login-submit"]');
     await app.waitForSelector('[data-testid="sos-button"]', { timeout: 15000 });
+    await app.browserContext().overridePermissions(base, ['notifications']);
+    await app.click('[data-testid="nav-settings"]');
+    await app.click('[data-testid="settings-notifications"]');
+    await app.waitForFunction(() => document.querySelector('[data-testid="settings-notifications"]')
+      ?.textContent?.includes('Activados'));
+    await app.waitForSelector('.toast', { hidden: true, timeout: 6000 });
+    await app.click('[data-testid="nav-home"]');
     results.loginMs = Date.now() - started;
     results.greeting = await app.$eval('[data-testid="home-hello"]', (element) =>
       element.textContent?.replace(/\s+/g, ' ').trim(),
@@ -320,6 +323,11 @@ async function main() {
       { timeout: 30000 },
     );
     results.onlineState = 'Enviada';
+    await app.waitForFunction(async () => {
+      const registration = await navigator.serviceWorker.getRegistration();
+      return (await registration?.getNotifications())?.some((item) => item.title === 'Emergencia enviada');
+    }, { timeout: 10000 });
+    results.sentNotification = true;
 
     // 4. Panel protegido: login, confirmación y auditoría.
     const panel = await browser.newPage();
@@ -365,6 +373,37 @@ async function main() {
     await panel.waitForSelector('.panel-modal', { hidden: true, timeout: 5000 });
     results.panelResponse = true;
 
+    // Dos alertas con el mismo GPS deben aparecer juntas y abrirse por separado.
+    const mapLocation = { lat: -12.0464, lng: -77.0428, accuracy: 10,
+      capturedAt: new Date().toISOString() };
+    const mapAlert = {
+      type: 'mordedura', isSos: false, note: 'Mordedura de serpiente en el brazo',
+      community: 'Awajun', deviceName: 'Teléfono de prueba', consentLocation: true,
+      location: mapLocation, clientCreatedAt: new Date().toISOString(),
+      serverReceivedAt: new Date().toISOString(),
+    };
+    await store.add({ ...mapAlert, id: 'map-alert-1' });
+    await store.add({ ...mapAlert, id: 'map-alert-2', type: 'accidente',
+      note: 'Caída con dolor fuerte', ackDeadlineAt: new Date(Date.now() - 60_000).toISOString() });
+    await panel.reload({ waitUntil: 'domcontentloaded' });
+    await panel.waitForSelector('.panel-view-switch [role="tab"]', { timeout: 10000 });
+    await panel.click('.panel-view-switch [role="tab"]:last-child');
+    await panel.waitForSelector('.panel-map-count', { timeout: 10000 });
+    assert.equal(await panel.$eval('.panel-map-count', (element) => element.textContent), '2');
+    await panel.click('.panel-emergency-map .leaflet-interactive');
+    await panel.waitForSelector('.panel-map-group-popup li', { timeout: 5000 });
+    assert.equal(await panel.$$eval('.panel-map-group-popup li', (items) => items.length), 2);
+    await panel.click('.panel-map-group-popup li:last-child button');
+    await panel.waitForSelector('.panel-modal', { timeout: 5000 });
+    assert.ok(await panel.$eval('.panel-modal', (element) =>
+      element.textContent?.includes('Caída con dolor fuerte')));
+    const escalationSms = await panel.$eval('.panel-escalate a', (element) =>
+      element.getAttribute('href'));
+    assert.ok(decodeURIComponent(escalationSms).includes('Detalle: Caída con dolor fuerte'));
+    await panel.click('.panel-modal .panel-icon-btn');
+    await panel.click('.panel-view-switch [role="tab"]:first-child');
+    results.groupedMapAlertsAndEscalationSms = true;
+
     // 5. El teléfono recibe la confirmación y la respuesta.
     await app.bringToFront();
     await app.waitForFunction(
@@ -385,6 +424,11 @@ async function main() {
     );
     results.appResponse = true;
     results.receivedState = 'Recibida';
+    await app.waitForFunction(async () => {
+      const registration = await navigator.serviceWorker.getRegistration();
+      return (await registration?.getNotifications())?.some((item) => item.title === 'Respuesta de la red de salud');
+    }, { timeout: 10000 });
+    results.responseNotification = true;
 
     // 6. Sin pendientes, no debe consultar cada 20 s (batería/datos).
     // Deja terminar cualquier sincronización en curso antes de medir.
@@ -468,420 +512,17 @@ async function main() {
     });
     results.sosReceivedStateInProfile = true;
 
-    // 8. Publicaciones, detalle y reporte de biodiversidad.
-    await app.bringToFront();
-    await app.click('[data-testid="nav-community"]');
-    await app.waitForFunction(
-      () => document.body.textContent?.includes('Miel pura de la comunidad'),
-      { timeout: 15000 },
-    );
-    const communityText = await app.evaluate(() => document.body.innerText);
-    assert.ok(communityText.includes('Hospital Santa María'), 'faltan los centros de apoyo');
-    assert.ok(communityText.includes('Alerta Amazonía'), 'falta la sección ambiental');
-
-    await app.click('[data-testid="listings-view-all"]');
-    await app.waitForFunction(() => document.body.textContent?.includes('Todas las publicaciones'));
-    await app.click('.community-card-button');
-    await app.waitForFunction(
-      () => document.body.textContent?.includes('Rango de precio') &&
-        document.body.textContent?.includes('Reseñas'),
-    );
-    await app.click('button[aria-label="Volver"]');
-    await app.waitForFunction(() => document.body.textContent?.includes('Todas las publicaciones'));
-    await app.click('button[aria-label="Volver"]');
-    await app.waitForFunction(() => document.body.textContent?.includes('Conecta Amazonía'));
-
-    await app.click('[data-testid="environment-topic-tala-ilegal"]');
-    await app.waitForSelector('[data-testid="biodiversity-category"]');
-    assert.equal(
-      await app.$eval('[data-testid="biodiversity-category"]', (element) => element.value),
-      'Tala ilegal',
-    );
-    await app.type('[data-testid="biodiversity-title"]', 'Tala junto a la quebrada');
-    await app.type(
-      '[data-testid="biodiversity-description"]',
-      'Se observan árboles cortados cerca del camino comunal.',
-    );
-    await app.click('[data-testid="biodiversity-submit"]');
-    await app.waitForFunction(
-      () => document.querySelector('[data-testid="biodiversity-state"]')?.textContent === 'Enviada',
-      { timeout: 15000 },
-    );
-    const report = (await biodiversityStore.list())[0];
-    assert.equal(report.category, 'Tala ilegal');
-    assert.equal(report.title, 'Tala junto a la quebrada');
-    await app.click('[data-testid="nav-history"]');
-    const reportSelector = `[data-testid="biodiversity-report-${report.id}"]`;
-    await app.waitForSelector(reportSelector, { timeout: 10000 });
-    assert.ok(
-      (await app.$eval(reportSelector, (element) => element.textContent)).includes('Enviada'),
-    );
-    await panel.bringToFront();
-    const panelContent = await panel.evaluate(() => document.body.innerText);
-    assert.ok(!panelContent.includes('Reportes de biodiversidad'));
-    assert.ok(!panelContent.includes(report.title));
-    assert.equal(await panel.$(`[data-testid="bio-${report.id}"]`), null);
-    await app.bringToFront();
-    await app.click('[data-testid="history-refresh"]');
-    await app.waitForFunction(
-      (selector) => document.querySelector(selector)?.textContent?.includes('Enviada'),
-      { timeout: 10000 },
-      reportSelector,
-    );
-    results.publicationDetails = true;
-    results.biodiversityAppAvailablePanelExcluded = true;
-
-    // 8b. Red Manguaré: muro con likes y publicación, match con chat, asistente y mercado.
-    await app.click('[data-testid="nav-network"]');
-    await app.waitForSelector('[data-testid="net-post"]', { timeout: 10000 });
-    await app.click('[data-testid="net-like"]');
-    assert.equal(
-      await app.$eval('[data-testid="net-like"]', (element) => element.getAttribute('aria-pressed')),
-      'true',
-    );
-    await app.click('[data-testid="net-compose"]');
-    await app.type('#net-text', 'Cosecha de cacao lista para la feria');
-    await app.click('[data-testid="net-publish"]');
-    await app.waitForFunction(
-      () =>
-        document
-          .querySelector('[data-testid="net-post"]')
-          ?.textContent?.includes('Cosecha de cacao lista para la feria'),
-      { timeout: 10000 },
-    );
-    await app.click('[data-testid="net-tab-match"]');
-    await app.waitForSelector('[data-testid="net-profile"]', { timeout: 10000 });
-    await app.click('[data-testid="net-interest"]');
-    await app.waitForFunction(
-      () => document.body.textContent?.includes('¡Hicieron match!'),
-      { timeout: 10000 },
-    );
-    await app.evaluate(() => {
-      const button = [...document.querySelectorAll('button')].find((item) =>
-        item.textContent?.includes('Enviar mensaje'),
+    // 8. Las secciones pausadas no deben abrirse desde la navegaci?n.
+    const currentScreen = await app.$eval('[data-testid="app-screen"]', (element) =>
+      element.dataset.screen);
+    for (const tab of ['nav-community', 'nav-network']) {
+      await app.click(`[data-testid="${tab}"]`);
+      assert.equal(
+        await app.$eval('[data-testid="app-screen"]', (element) => element.dataset.screen),
+        currentScreen,
       );
-      button?.click();
-    });
-    await app.waitForSelector('[data-testid="net-chat-input"]', { timeout: 10000 });
-    await app.type('[data-testid="net-chat-input"]', 'Hola, ¿tienes miel disponible?');
-    await app.keyboard.press('Enter');
-    await app.waitForFunction(
-      () => document.querySelectorAll('.net-bubble').length >= 2,
-      { timeout: 10000 },
-    );
-    await app.keyboard.press('Escape');
-    await app.click('[data-testid="net-tab-agent"]');
-    await app.type('[data-testid="net-agent-input"]', 'Tengo una emergencia');
-    await app.keyboard.press('Enter');
-    await app.waitForFunction(
-      () => document.querySelector('[data-testid="net-agent-chat"]')?.textContent?.includes('Crear alerta'),
-      { timeout: 10000 },
-    );
-    await app.click('[data-testid="nav-community"]');
-    await app.click('[data-testid="listing-open-publish"]');
-    await app.type('[data-testid="listing-title"]', 'Cacao orgánico de chacra');
-    await app.click('[data-testid="listing-publish"]');
-    await app.waitForFunction(
-      () => document.body.textContent?.includes('Cacao orgánico de chacra'),
-      { timeout: 10000 },
-    );
-    results.networkWallMatchAgentMarket = true;
-
-    // 8c. Gemini Live usa herramientas reales; se simula el transporte para probar
-    // la integración React sin requerir credenciales externas en CI.
-    await app.browserContext().overridePermissions(base, ['microphone', 'geolocation']);
-    await app.setGeolocation({ latitude: -5.15, longitude: -78.29 });
-    await app.evaluate(() => {
-      const nativeFetch = window.fetch.bind(window);
-      window.fetch = (input, init) => {
-        if (String(input).includes('/api/gemini/token')) {
-          return Promise.resolve(new Response(JSON.stringify({
-            token: 'test-ephemeral-token',
-            model: 'gemini-3.8-live',
-          }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-        }
-        return nativeFetch(input, init);
-      };
-
-      class FakeNode {
-        connect() { return this; }
-        disconnect() {}
-      }
-      class FakeAudioContext {
-        state = 'running';
-        sampleRate = 48000;
-        currentTime = 0;
-        destination = new FakeNode();
-        async resume() {}
-        async close() { this.state = 'closed'; }
-        createMediaStreamSource() { return new FakeNode(); }
-        createScriptProcessor() { return Object.assign(new FakeNode(), { onaudioprocess: null }); }
-        createGain() { return Object.assign(new FakeNode(), { gain: { value: 1 } }); }
-        createBuffer(_channels, length) {
-          return { duration: length / 24000, getChannelData: () => new Float32Array(length) };
-        }
-        createBufferSource() {
-          return Object.assign(new FakeNode(), {
-            buffer: null,
-            onended: null,
-            start() {},
-            stop() { this.onended?.(); },
-          });
-        }
-      }
-      Object.defineProperty(window, 'AudioContext', { configurable: true, value: FakeAudioContext });
-      let stoppedTracks = 0;
-      Object.defineProperty(navigator, 'mediaDevices', {
-        configurable: true,
-        value: {
-          getUserMedia: async () => ({
-            getTracks: () => [{ stop: () => { stoppedTracks += 1; } }],
-          }),
-        },
-      });
-
-      class FakeWebSocket {
-        static OPEN = 1;
-        static CONNECTING = 0;
-        readyState = FakeWebSocket.CONNECTING;
-        onopen = null;
-        onmessage = null;
-        onerror = null;
-        onclose = null;
-        constructor() {
-          window.__geminiMock.socket = this;
-          window.setTimeout(() => {
-            this.readyState = FakeWebSocket.OPEN;
-            this.onopen?.({});
-          }, 0);
-        }
-        send(raw) {
-          const message = JSON.parse(raw);
-          if (message.setup) {
-            window.__geminiMock.setup = message.setup;
-            window.setTimeout(() => this.onmessage?.({ data: JSON.stringify({ setupComplete: true }) }), 0);
-          }
-          if (message.toolResponse) {
-            window.__geminiMock.responses.push(...message.toolResponse.functionResponses);
-          }
-        }
-        close() { this.readyState = 3; }
-      }
-      Object.defineProperty(window, 'WebSocket', { configurable: true, value: FakeWebSocket });
-      window.__geminiMock = {
-        socket: null,
-        setup: null,
-        responses: [],
-        stoppedTracks: () => stoppedTracks,
-        emit: (message) => window.__geminiMock.socket?.onmessage?.({ data: JSON.stringify(message) }),
-      };
-    });
-
-    await app.click('[data-testid="nav-network"]');
-    await app.click('[data-testid="net-tab-agent"]');
-    await app.click('[data-testid="net-open-voice"]');
-    await app.click('.voice-start');
-    await app.waitForFunction(
-      () => document.querySelector('.voice-active-status')?.textContent?.includes('Te estoy escuchando'),
-      { timeout: 10000 },
-    );
-    await app.waitForSelector('[data-testid="voice-active-controls"]', { visible: true });
-    const emitVoiceTool = async (id, name, args = {}) => {
-      await app.evaluate(
-        ({ toolId, toolName, toolArgs }) =>
-          window.__geminiMock.emit({
-            toolCall: { functionCalls: [{ id: toolId, name: toolName, args: toolArgs }] },
-          }),
-        { toolId: id, toolName: name, toolArgs: args },
-      );
-      await app.waitForFunction(
-        (toolId) => window.__geminiMock.responses.some((response) => response.id === toolId),
-        { timeout: 10000 },
-        id,
-      );
-      return app.evaluate(
-        (toolId) => window.__geminiMock.responses.find((response) => response.id === toolId).response.result,
-        id,
-      );
-    };
-    const capabilities = await emitVoiceTool('voice-capabilities', 'get_app_capabilities');
-    assert.equal(capabilities.success, true);
-    assert.ok(capabilities.modules.some((module) => module.id === 'mapa' && module.available));
-    const places = await emitVoiceTool('voice-map-hospital', 'get_map_places', { query: 'hospitales' });
-    assert.equal(places.success, true);
-    assert.deepEqual(places.places.map((item) => item.id), ['hospital-santa-maria']);
-    assert.equal(places.demo, true);
-    await app.click('[data-testid="map-filter-support"]');
-    const filteredPlaces = await emitVoiceTool('voice-map-filtered', 'get_map_places', { query: 'hospitales' });
-    assert.equal(filteredPlaces.count, 0);
-    await app.click('[data-testid="map-filter-support"]');
-    const restoredPlaces = await emitVoiceTool('voice-map-restored', 'get_map_places', { query: 'hospitales' });
-    assert.equal(restoredPlaces.count, 1);
-    const openedPlace = await emitVoiceTool('voice-map-open', 'open_map_place', { placeId: 'hospital-santa-maria' });
-    assert.equal(openedPlace.verified, true);
-    const languages = await emitVoiceTool('voice-languages', 'get_language_options');
-    assert.equal(languages.active, 'es');
-    assert.ok(languages.languages.some((option) => option.id === 'agr'));
-    const unsolicitedLanguage = await emitVoiceTool('voice-language-unsolicited', 'set_app_language', { language: 'agr' });
-    assert.equal(unsolicitedLanguage.success, false);
-    const unsolicitedGps = await emitVoiceTool('voice-gps-unsolicited', 'get_device_location');
-    assert.equal(unsolicitedGps.success, false);
-    const invalidLanguage = await emitVoiceTool('voice-language-invalid', 'set_app_language', { language: 'en' });
-    assert.equal(invalidLanguage.success, false);
-    await app.evaluate(() => window.__geminiMock.emit({
-      serverContent: { inputTranscription: { text: 'Cambia el idioma a awajún', finished: true } },
-    }));
-    const changedLanguage = await emitVoiceTool('voice-language-change', 'set_app_language', { language: 'agr' });
-    assert.equal(changedLanguage.success, true);
-    assert.equal(JSON.parse(await app.evaluate(() => localStorage.getItem('manguare.settings.v1'))).language, 'agr');
-    await app.evaluate(() => window.__geminiMock.emit({
-      serverContent: { inputTranscription: { text: 'Cambia el idioma a español', finished: true } },
-    }));
-    assert.equal((await emitVoiceTool('voice-language-restore', 'set_app_language', { language: 'es' })).success, true);
-    await app.evaluate(() => window.__geminiMock.emit({
-      serverContent: { inputTranscription: { text: 'Muéstrame mi ubicación GPS', finished: true } },
-    }));
-    await app.browserContext().overridePermissions(base, ['microphone']);
-    const deniedLocation = await emitVoiceTool('voice-device-gps-denied', 'get_device_location');
-    assert.equal(deniedLocation.success, false);
-    await app.browserContext().overridePermissions(base, ['microphone', 'geolocation']);
-    const deviceLocation = await emitVoiceTool('voice-device-gps', 'get_device_location');
-    assert.equal(deviceLocation.success, true);
-    assert.equal(deviceLocation.latitude, -5.15);
-    const emergencyOptions = await emitVoiceTool('voice-emergency-options', 'get_emergency_options');
-    assert.ok(emergencyOptions.types.some((item) => item.id === 'mordedura'));
-    const environmentTopics = await emitVoiceTool('voice-environment-topics', 'get_environment_topics');
-    assert.ok(environmentTopics.categories.includes('Tala ilegal'));
-    const matchProfiles = await emitVoiceTool('voice-match-profiles', 'get_match_profiles', { role: 'productor' });
-    assert.ok(matchProfiles.profiles.length > 0);
-    assert.equal(matchProfiles.demo, true);
-    const helpContacts = await emitVoiceTool('voice-help-contacts', 'get_help_contacts');
-    assert.ok(helpContacts.contacts.some((item) => item.number === '106'));
-    const wallPosts = await emitVoiceTool('voice-wall-posts', 'search_wall_posts', { query: '' });
-    assert.equal(wallPosts.success, true);
-    assert.equal(wallPosts.source, 'server');
-    const catalog = await emitVoiceTool('voice-community-catalog', 'get_community_catalog');
-    assert.equal(catalog.success, true);
-    assert.equal(catalog.source, 'server');
-    assert.ok(catalog.categories.some((item) => item.id === 'alimentos'));
-    await app.evaluate(() => window.__geminiMock.emit({
-      serverContent: { inputTranscription: { text: 'Quiero vender una mochila', finished: true } },
-    }));
-    const openedListingForm = await emitVoiceTool('voice-open-listing', 'open_listing_form');
-    assert.equal(openedListingForm.success, true);
-    assert.equal(openedListingForm.verified, true);
-    assert.equal(await app.$eval('[data-testid="app-screen"]', (element) => element.dataset.screen), 'community');
-    await app.waitForSelector('[data-testid="listing-title"]', { timeout: 5000 });
-    const activeControls = await app.$eval('[data-testid="voice-active-controls"]', (element) => ({
-      height: element.getBoundingClientRect().height,
-      cancelLabel: element.querySelector('.voice-close')?.getAttribute('aria-label'),
-    }));
-    assert.ok(activeControls.height < 100);
-    assert.equal(activeControls.cancelLabel, 'Cancelar llamada');
-    const formHitTarget = await app.$eval('[data-testid="listing-title"]', (element) => {
-      const bounds = element.getBoundingClientRect();
-      return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2) === element;
-    });
-    assert.equal(formHitTarget, true);
-    const schema = await emitVoiceTool('voice-listing-schema', 'get_listing_form_schema');
-    assert.equal(schema.fields.title.required, true);
-    assert.equal(schema.fields.description.required, true);
-    assert.equal(schema.fields.photo.required, false);
-
-    await emitVoiceTool('voice-update-initial', 'update_listing_form_fields', {
-      title: 'Mochila tejida',
-      category: 'vestimenta',
-      price: 'S/ 50',
-    });
-    await app.waitForFunction(
-      () => document.querySelector('[data-testid="listing-title"]')?.value === 'Mochila tejida',
-    );
-    assert.equal(await app.$eval('[data-testid="listing-price"]', (element) => element.value), 'S/ 50');
-    const incomplete = await emitVoiceTool('voice-validate-incomplete', 'validate_listing_form');
-    assert.equal(incomplete.valid, false);
-    assert.deepEqual(incomplete.missingRequiredFields, ['location', 'description']);
-
-    await app.evaluate(() => window.__geminiMock.emit({
-      serverContent: { inputTranscription: { text: 'Usa mi ubicación GPS para la publicación', finished: true } },
-    }));
-    const gpsResult = await emitVoiceTool('voice-use-gps', 'use_current_location');
-    assert.equal(gpsResult.success, true);
-    assert.ok(gpsResult.coordinates.accuracy >= 0);
-    await app.waitForFunction(
-      () => document.querySelector('[data-testid="listing-location"]')?.value.startsWith('GPS: '),
-    );
-    await emitVoiceTool('voice-update-description', 'update_listing_form_fields', {
-      description: 'Mochila tejida a mano',
-    });
-    const completeForm = await emitVoiceTool('voice-validate-complete', 'validate_listing_form');
-    assert.equal(completeForm.valid, true);
-
-    const publicationConfirmation = await emitVoiceTool(
-      'voice-prepare-publication',
-      'request_listing_publication_confirmation',
-    );
-    assert.equal(publicationConfirmation.success, true);
-    assert.ok(publicationConfirmation.summary.includes('Mochila tejida'));
-    assert.ok(publicationConfirmation.summary.includes('GPS exactas'));
-    await app.evaluate(() => window.__geminiMock.emit({
-      serverContent: { inputTranscription: { text: 'No, cancela', finished: true } },
-    }));
-    const rejectedPublication = await emitVoiceTool('voice-reject-publication', 'publish_listing', {
-      confirmationId: publicationConfirmation.confirmationId,
-    });
-    assert.equal(rejectedPublication.success, false);
-    const savedAfterReject = await app.evaluate(() => JSON.parse(localStorage.getItem('manguare.listings.v1') || '[]'));
-    assert.ok(!savedAfterReject.some((item) => item.title === 'Mochila tejida'));
-
-    await app.evaluate(() => window.__geminiMock.emit({
-      serverContent: { inputTranscription: { text: 'Sí, publica la mochila', finished: true } },
-    }));
-    const published = await emitVoiceTool('voice-confirm-publication', 'publish_listing', {
-      confirmationId: publicationConfirmation.confirmationId,
-    });
-    assert.equal(published.success, true);
-    await app.waitForFunction(
-      () => JSON.parse(localStorage.getItem('manguare.listings.v1') || '[]')
-        .some((item) => item.title === 'Mochila tejida'),
-      { timeout: 5000 },
-    );
-    const savedListing = await app.evaluate(() =>
-      JSON.parse(localStorage.getItem('manguare.listings.v1') || '[]')
-        .find((item) => item.title === 'Mochila tejida'),
-    );
-    assert.deepEqual(savedListing.coordinates, gpsResult.coordinates);
-    assert.equal(savedListing.priceRange, 'S/ 50');
-    assert.equal(savedListing.description, 'Mochila tejida a mano');
-    assert.ok(!savedListing.community.includes('Mi comunidad'));
-    results.voiceListingToolsAndExplicitConfirmation = true;
-
-    await app.click('.voice-close');
-    await app.click('[data-testid="listing-open-publish"]');
-    await app.click('[data-testid="listing-voice-assistant"]');
-    await app.click('.voice-start');
-    await app.waitForFunction(
-      () => document.querySelector('.voice-active-status')?.textContent?.includes('Te estoy escuchando'),
-      { timeout: 10000 },
-    );
-    await app.click('.voice-close');
-    assert.equal(await app.$eval('[data-testid="app-screen"]', (element) => element.dataset.screen), 'community');
-    await app.waitForSelector('[data-testid="listing-title"]', { timeout: 5000 });
-    const stoppedFromCommunity = await app.evaluate(() => window.__geminiMock.stoppedTracks());
-    assert.ok(stoppedFromCommunity >= 1);
-    results.voiceCancelKeepsCommunity = true;
-
-    await app.click('[aria-label="Cerrar"]');
-    await app.click('[data-testid="nav-network"]');
-    await app.click('[data-testid="net-tab-agent"]');
-    await app.click('[data-testid="net-open-voice"]');
-    await app.click('.voice-start');
-    await app.waitForFunction(
-      () => document.querySelector('.voice-active-status')?.textContent?.includes('Te estoy escuchando'),
-      { timeout: 10000 },
-    );
-    await app.click('.voice-close');
-    assert.equal(await app.$eval('[data-testid="app-screen"]', (element) => element.dataset.screen), 'network');
-    results.voiceCancelKeepsOtherScreen = true;
+    }
+    results.disabledSectionsStayClosed = true;
 
     // 9. Mapa: solo Conecta y centros de apoyo; ubica y enfoca resultados.
     await app.click('[data-testid="nav-map"]');
@@ -997,11 +638,13 @@ async function main() {
       return window.Capacitor?.isNativePlatform();
     });
     assert.equal(simulatedAndroid, true);
+    const screenBeforeNetwork = await app.$eval('[data-testid="app-screen"]',
+      (element) => element.dataset.screen);
     await app.click('[data-testid="nav-network"]');
-    await app.click('[data-testid="net-tab-agent"]');
-    await app.click('[data-testid="net-open-voice"]');
-    assert.equal(await app.$('[data-testid="voice-configure-server"]'), null);
-    await app.click('.voice-close');
+    assert.equal(
+      await app.$eval('[data-testid="app-screen"]', (element) => element.dataset.screen),
+      screenBeforeNetwork,
+    );
     await app.click('[data-testid="nav-settings"]');
     await app.waitForSelector('[data-testid="settings-language"]');
     const settingsText = await app.evaluate(() => document.body.innerText);

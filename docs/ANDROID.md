@@ -10,6 +10,14 @@ APK.
 
 ## Crear e instalar el APK
 
+En **Ajustes → Preferencias → Avisos de emergencias**, la persona puede activar
+las notificaciones del teléfono. Manguaré avisa cuando una alerta pendiente llega
+al servidor y cuando la sincronización recibe una nueva respuesta de la red de
+salud. Android 13 o posterior solicita permiso para mostrarlas. Los avisos no
+reemplazan el estado que muestra la app ni confirman que alguien haya atendido
+la emergencia. Si el APK está completamente cerrado, hay que abrirlo para que
+consulte nuevas respuestas; esta versión no usa notificaciones push del servidor.
+
 Requisitos de compilación: Node.js 22+, Android SDK con plataforma API 36 y JDK
 21. Desde la raíz del proyecto, ejecuta:
 
